@@ -1,9 +1,10 @@
 swagger: "2.0"
 info:
-    title: admiral/api/application/v1/application.proto
+    title: admiral/common/v1/actor.proto
     version: version not set
 tags:
     - name: ApplicationAPI
+    - name: AuthenticationAPI
     - name: ClusterAPI
     - name: ComponentAPI
     - name: ConnectionAPI
@@ -19,7 +20,7 @@ consumes:
 produces:
     - application/json
 paths:
-    /v1/agent/revisions/{revision_id}/bundle:
+    /api/v1/agent/revisions/{revision_id}/bundle:
         get:
             summary: |-
                 GetRevisionBundle fetches the rendered artifact bundle for a workload
@@ -30,12 +31,12 @@ paths:
                 kustomize build, or raw manifests) ready for server-side apply. The agent
                 does not need to render anything -- it applies the bundle as-is.
 
-                The cluster is identified by the agent token's binding. Returns
+                The cluster is identified by the service access token's binding. Returns
                 PERMISSION_DENIED if the revision's target cluster does not match the
-                AGT's cluster binding. Returns NOT_FOUND if the revision does not exist
-                or has been cancelled.
+                SAT's cluster binding. Returns NOT_FOUND if the revision does not exist
+                or has been canceled.
 
-                Scope: `cluster:deploy` | Token types: `agt`
+                Scope: `cluster:deploy` | Token types: `sat`
             operationId: ClusterAPI_GetRevisionBundle
             responses:
                 "200":
@@ -54,18 +55,18 @@ paths:
                   type: string
             tags:
                 - ClusterAPI
-    /v1/agent/revisions/{revision_id}/result:
+    /api/v1/agent/revisions/{revision_id}/result:
         post:
             summary: |-
                 ReportRevisionResult reports the outcome of applying a workload revision
                 to the cluster. The server transitions the parent Revision status
                 accordingly (APPLYING → SUCCEEDED or FAILED).
             description: |-
-                The cluster is identified by the agent token's binding. Returns
+                The cluster is identified by the service access token's binding. Returns
                 PERMISSION_DENIED if the revision's target cluster does not match the
-                AGT's cluster binding.
+                SAT's cluster binding.
 
-                Scope: `cluster:deploy` | Token types: `agt`
+                Scope: `cluster:deploy` | Token types: `sat`
             operationId: ClusterAPI_ReportRevisionResult
             responses:
                 "200":
@@ -89,19 +90,19 @@ paths:
                     $ref: '#/definitions/ClusterAPIReportRevisionResultBody'
             tags:
                 - ClusterAPI
-    /v1/agent/status:
+    /api/v1/agent/status:
         post:
             summary: |-
                 ReportClusterStatus receives a combined telemetry snapshot from a K8s agent.
                 The payload includes cluster-level metrics, per-workload status, and
                 Kubernetes events. Admiral splits this into three storage tiers on receipt.
             description: |-
-                The cluster is identified by the agent token -- the server resolves the
-                cluster from the AGT's binding. No cluster_id is required in the request.
+                The cluster is identified by the service access token -- the server resolves the
+                cluster from the SAT's binding. No cluster_id is required in the request.
 
-                This endpoint is agent-facing and restricted to agent tokens.
+                This endpoint is agent-facing and restricted to service access tokens.
 
-                Scope: `cluster:status` | Token types: `agt`
+                Scope: `cluster:status` | Token types: `sat`
             operationId: ClusterAPI_ReportClusterStatus
             responses:
                 "200":
@@ -119,15 +120,15 @@ paths:
                     Admiral splits this into three storage tiers: current snapshot, time-series
                     metrics, and events.
 
-                    The cluster is identified by the agent token's binding -- no cluster_id is
-                    required. The server resolves the cluster from the AGT.
+                    The cluster is identified by the service access token's binding -- no cluster_id is
+                    required. The server resolves the cluster from the SAT.
                   in: body
                   required: true
                   schema:
                     $ref: '#/definitions/v1ReportClusterStatusRequest'
             tags:
                 - ClusterAPI
-    /v1/applications:
+    /api/v1/applications:
         get:
             summary: |-
                 ListApplications returns a paginated list of applications within the
@@ -195,7 +196,7 @@ paths:
                     $ref: '#/definitions/v1CreateApplicationRequest'
             tags:
                 - ApplicationAPI
-    /v1/applications/{application.id}:
+    /api/v1/applications/{application.id}:
         patch:
             summary: |-
                 UpdateApplication updates an application's mutable fields.
@@ -224,7 +225,7 @@ paths:
                     $ref: '#/definitions/ApplicationAPIUpdateApplicationBody'
             tags:
                 - ApplicationAPI
-    /v1/applications/{application_id}:
+    /api/v1/applications/{application_id}:
         get:
             summary: GetApplication retrieves an application by ID.
             description: 'Scope: `app:read`'
@@ -269,7 +270,7 @@ paths:
                   type: string
             tags:
                 - ApplicationAPI
-    /v1/clusters:
+    /api/v1/clusters:
         get:
             summary: ListClusters returns a paginated list of clusters within the caller's tenant.
             description: 'Scope: `cluster:read`'
@@ -317,10 +318,10 @@ paths:
         post:
             summary: |-
                 CreateCluster creates a new cluster record within the caller's tenant and
-                generates an initial Agent Token (AGT) for the K8s agent. The cluster
+                generates an initial Service Access Token (SAT) for the K8s agent. The cluster
                 starts in PENDING status until an agent registers against it.
             description: |-
-                The response includes a `plain_text_token` -- the raw AGT secret shown
+                The response includes a `plain_text_token` -- the raw SAT secret shown
                 exactly once. Deploy this token to the K8s agent (e.g., via Helm values
                 or a Kubernetes Secret). The agent uses it to authenticate with
                 AgentAPI.RegisterAgent on first boot.
@@ -345,7 +346,7 @@ paths:
                     $ref: '#/definitions/v1CreateClusterRequest'
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster.id}:
+    /api/v1/clusters/{cluster.id}:
         patch:
             summary: |-
                 UpdateCluster updates a cluster's mutable fields.
@@ -374,7 +375,7 @@ paths:
                     $ref: '#/definitions/ClusterAPIUpdateClusterBody'
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster_id}:
+    /api/v1/clusters/{cluster_id}:
         get:
             summary: GetCluster retrieves a cluster by ID.
             description: |-
@@ -404,7 +405,7 @@ paths:
         delete:
             summary: |-
                 DeleteCluster permanently deletes a cluster record and revokes all
-                associated agent tokens. This action cannot be undone.
+                associated service access tokens. This action cannot be undone.
             description: 'Scope: `cluster:write`'
             operationId: ClusterAPI_DeleteCluster
             responses:
@@ -420,13 +421,13 @@ paths:
                 - name: cluster_id
                   description: |-
                     The unique identifier of the cluster to delete (UUID).
-                    All associated agent tokens will be revoked.
+                    All associated service access tokens will be revoked.
                   in: path
                   required: true
                   type: string
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster_id}/status:
+    /api/v1/clusters/{cluster_id}/status:
         get:
             summary: |-
                 GetClusterStatus retrieves the current telemetry snapshot for a cluster.
@@ -456,10 +457,10 @@ paths:
                   type: string
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster_id}/tokens:
+    /api/v1/clusters/{cluster_id}/tokens:
         get:
             summary: |-
-                ListClusterTokens returns a paginated list of AGTs bound to the specified
+                ListClusterTokens returns a paginated list of SATs bound to the specified
                 cluster. Token secrets are never included.
             description: 'Scope: `cluster:read`'
             operationId: ClusterAPI_ListClusterTokens
@@ -505,12 +506,12 @@ paths:
                 - ClusterAPI
         post:
             summary: |-
-                CreateClusterToken creates a new Agent Token (AGT) bound to the specified
+                CreateClusterToken creates a new Service Access Token (SAT) bound to the specified
                 cluster. Scopes are auto-assigned and cannot be overridden. The response
                 includes the raw token secret, which is shown exactly once.
             description: |-
-                Use this to create additional AGTs for an existing cluster (e.g., for
-                zero-downtime token rotation). The initial AGT is created automatically
+                Use this to create additional SATs for an existing cluster (e.g., for
+                zero-downtime token rotation). The initial SAT is created automatically
                 by CreateCluster.
 
                 Scope: `cluster:write`
@@ -537,10 +538,10 @@ paths:
                     $ref: '#/definitions/ClusterAPICreateClusterTokenBody'
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster_id}/tokens/{token_id}:
+    /api/v1/clusters/{cluster_id}/tokens/{token_id}:
         get:
             summary: |-
-                GetClusterToken retrieves a single AGT by ID.
+                GetClusterToken retrieves a single SAT by ID.
                 Returns metadata only -- the token secret is never included.
             description: 'Scope: `cluster:read`'
             operationId: ClusterAPI_GetClusterToken
@@ -566,12 +567,12 @@ paths:
                   type: string
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster_id}/tokens/{token_id}/revoke:
+    /api/v1/clusters/{cluster_id}/tokens/{token_id}/revoke:
         post:
             summary: |-
-                RevokeClusterToken permanently revokes an AGT bound to this cluster.
+                RevokeClusterToken permanently revokes an SAT bound to this cluster.
                 The agent will receive a 401 on its next request. If this is the only
-                active AGT for the cluster, the agent will become disconnected.
+                active SAT for the cluster, the agent will become disconnected.
             description: 'Scope: `cluster:write`'
             operationId: ClusterAPI_RevokeClusterToken
             responses:
@@ -601,7 +602,7 @@ paths:
                     $ref: '#/definitions/ClusterAPIRevokeClusterTokenBody'
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster_id}/workloads:
+    /api/v1/clusters/{cluster_id}/workloads:
         get:
             summary: ListWorkloads returns a paginated list of workloads running in a specific cluster.
             description: 'Scope: `cluster:read`'
@@ -648,15 +649,15 @@ paths:
                   type: string
             tags:
                 - ClusterAPI
-    /v1/clusters/{cluster_id}/workloads/status:
+    /api/v1/clusters/{cluster_id}/workloads/status:
         post:
             summary: |-
                 ReportWorkloadStatus receives workload-only telemetry from a K8s agent.
                 Used for incremental workload updates between full cluster status pushes.
             description: |-
-                This endpoint is agent-facing and restricted to agent tokens.
+                This endpoint is agent-facing and restricted to service access tokens.
 
-                Scope: `cluster:status` | Token types: `agt`
+                Scope: `cluster:status` | Token types: `sat`
             operationId: ClusterAPI_ReportWorkloadStatus
             responses:
                 "200":
@@ -680,7 +681,7 @@ paths:
                     $ref: '#/definitions/ClusterAPIReportWorkloadStatusBody'
             tags:
                 - ClusterAPI
-    /v1/components:
+    /api/v1/components:
         get:
             summary: ListComponents returns a paginated list of components.
             description: |-
@@ -759,7 +760,7 @@ paths:
                     $ref: '#/definitions/v1CreateComponentRequest'
             tags:
                 - ComponentAPI
-    /v1/components/{component.id}:
+    /api/v1/components/{component.id}:
         patch:
             summary: |-
                 UpdateComponent updates a component's mutable fields.
@@ -793,7 +794,7 @@ paths:
                     $ref: '#/definitions/ComponentAPIUpdateComponentBody'
             tags:
                 - ComponentAPI
-    /v1/components/{component_id}:
+    /api/v1/components/{component_id}:
         get:
             summary: GetComponent retrieves a component by ID.
             description: 'Scope: `app:read`'
@@ -844,7 +845,7 @@ paths:
                   type: string
             tags:
                 - ComponentAPI
-    /v1/components/{component_id}/overrides:
+    /api/v1/components/{component_id}/overrides:
         get:
             summary: |-
                 ListComponentOverrides returns all environment-level overrides for a
@@ -879,7 +880,7 @@ paths:
                   type: string
             tags:
                 - ComponentAPI
-    /v1/components/{component_id}/overrides/{environment_id}:
+    /api/v1/components/{component_id}/overrides/{environment_id}:
         get:
             summary: |-
                 GetComponentOverride retrieves the environment-level override for a
@@ -977,7 +978,7 @@ paths:
                     $ref: '#/definitions/ComponentAPISetComponentOverrideBody'
             tags:
                 - ComponentAPI
-    /v1/connections:
+    /api/v1/connections:
         get:
             summary: |-
                 ListConnections returns a paginated list of connections within the caller's
@@ -1052,7 +1053,7 @@ paths:
                     $ref: '#/definitions/v1CreateConnectionRequest'
             tags:
                 - ConnectionAPI
-    /v1/connections/{connection.id}:
+    /api/v1/connections/{connection.id}:
         patch:
             summary: |-
                 UpdateConnection updates a connection's mutable fields.
@@ -1086,7 +1087,7 @@ paths:
                     $ref: '#/definitions/ConnectionAPIUpdateConnectionBody'
             tags:
                 - ConnectionAPI
-    /v1/connections/{connection_id}:
+    /api/v1/connections/{connection_id}:
         get:
             summary: GetConnection retrieves a connection by ID.
             description: |-
@@ -1138,7 +1139,7 @@ paths:
                   type: string
             tags:
                 - ConnectionAPI
-    /v1/connections/{connection_id}/test:
+    /api/v1/connections/{connection_id}/test:
         post:
             summary: |-
                 TestConnection validates that the stored credentials can successfully
@@ -1172,7 +1173,7 @@ paths:
                     $ref: '#/definitions/ConnectionAPITestConnectionBody'
             tags:
                 - ConnectionAPI
-    /v1/deployments:
+    /api/v1/deployments:
         get:
             summary: ListDeployments returns a paginated list of deployments.
             description: |-
@@ -1254,7 +1255,7 @@ paths:
                     $ref: '#/definitions/v1CreateDeploymentRequest'
             tags:
                 - DeploymentAPI
-    /v1/deployments/{deployment_id}:
+    /api/v1/deployments/{deployment_id}:
         get:
             summary: |-
                 GetDeployment retrieves a deployment by ID, including its composite
@@ -1278,7 +1279,7 @@ paths:
                   type: string
             tags:
                 - DeploymentAPI
-    /v1/deployments/{deployment_id}/cancel:
+    /api/v1/deployments/{deployment_id}/cancel:
         post:
             summary: |-
                 CancelDeployment cancels an in-progress deployment. Revisions that are
@@ -1308,7 +1309,7 @@ paths:
                     $ref: '#/definitions/DeploymentAPICancelDeploymentBody'
             tags:
                 - DeploymentAPI
-    /v1/deployments/{deployment_id}/revisions:
+    /api/v1/deployments/{deployment_id}/revisions:
         get:
             summary: ListRevisions returns all component revisions for a deployment.
             description: 'Scope: `deploy:read`'
@@ -1341,7 +1342,7 @@ paths:
                   type: string
             tags:
                 - DeploymentAPI
-    /v1/deployments/{deployment_id}/revisions/{revision_id}:
+    /api/v1/deployments/{deployment_id}/revisions/{revision_id}:
         get:
             summary: GetRevision retrieves a single component revision within a deployment.
             description: 'Scope: `deploy:read`'
@@ -1368,7 +1369,7 @@ paths:
                   type: string
             tags:
                 - DeploymentAPI
-    /v1/deployments/{deployment_id}/revisions/{revision_id}/retry:
+    /api/v1/deployments/{deployment_id}/revisions/{revision_id}/retry:
         post:
             summary: |-
                 RetryRevision retries a failed component revision. A new execution
@@ -1403,7 +1404,7 @@ paths:
                     $ref: '#/definitions/DeploymentAPIRetryRevisionBody'
             tags:
                 - DeploymentAPI
-    /v1/environments:
+    /api/v1/environments:
         get:
             summary: |-
                 ListEnvironments returns a paginated list of environments. Use the filter
@@ -1473,7 +1474,7 @@ paths:
                     $ref: '#/definitions/v1CreateEnvironmentRequest'
             tags:
                 - EnvironmentAPI
-    /v1/environments/{environment.id}:
+    /api/v1/environments/{environment.id}:
         patch:
             summary: |-
                 UpdateEnvironment updates an environment's mutable fields.
@@ -1502,7 +1503,7 @@ paths:
                     $ref: '#/definitions/EnvironmentAPIUpdateEnvironmentBody'
             tags:
                 - EnvironmentAPI
-    /v1/environments/{environment_id}:
+    /api/v1/environments/{environment_id}:
         get:
             summary: GetEnvironment retrieves an environment by ID.
             description: 'Scope: `env:read`'
@@ -1550,18 +1551,36 @@ paths:
                   type: string
             tags:
                 - EnvironmentAPI
-    /v1/runner/heartbeat:
+    /api/v1/healthcheck:
+        get:
+            summary: |-
+                Healthcheck verifies that the service is running and healthy.
+                Returns an empty response on success. Use this endpoint for load balancer
+                health checks and monitoring systems.
+            operationId: HealthcheckAPI_Healthcheck
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1HealthcheckResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            tags:
+                - HealthcheckAPI
+    /api/v1/runner/heartbeat:
         post:
             summary: |-
                 Heartbeat reports that the runner is alive and includes current capacity
                 metrics. The server uses heartbeat recency to derive health status.
             description: |-
-                The runner is identified by the agent token -- the server resolves the
-                runner from the AGT's binding. No runner_id is required in the request.
+                The runner is identified by the service access token -- the server resolves the
+                runner from the SAT's binding. No runner_id is required in the request.
 
-                This endpoint is runner-facing and restricted to agent tokens.
+                This endpoint is runner-facing and restricted to service access tokens.
 
-                Scope: `runner:exec` | Token types: `agt`
+                Scope: `runner:exec` | Token types: `sat`
             operationId: RunnerAPI_Heartbeat
             responses:
                 "200":
@@ -1576,25 +1595,25 @@ paths:
                 - name: body
                   description: |-
                     HeartbeatRequest contains the runner's alive signal and current capacity.
-                    The runner is identified by the AGT's binding -- no runner_id is required.
+                    The runner is identified by the SAT's binding -- no runner_id is required.
                   in: body
                   required: true
                   schema:
                     $ref: '#/definitions/v1HeartbeatRequest'
             tags:
                 - RunnerAPI
-    /v1/runner/jobs/claim:
+    /api/v1/runner/jobs/claim:
         post:
             summary: |-
                 ClaimJob polls for the next job assigned to this runner. Returns the job
                 metadata if work is available, or an empty response if no jobs are
                 pending. The runner should call this on a polling interval.
             description: |-
-                The runner is identified by the agent token -- no runner_id is required.
+                The runner is identified by the service access token -- no runner_id is required.
 
-                This endpoint is runner-facing and restricted to agent tokens.
+                This endpoint is runner-facing and restricted to service access tokens.
 
-                Scope: `runner:exec` | Token types: `agt`
+                Scope: `runner:exec` | Token types: `sat`
             operationId: RunnerAPI_ClaimJob
             responses:
                 "200":
@@ -1609,14 +1628,14 @@ paths:
                 - name: body
                   description: |-
                     ClaimJobRequest is sent by the runner to poll for available work.
-                    The runner is identified by the AGT's binding -- no runner_id is required.
+                    The runner is identified by the SAT's binding -- no runner_id is required.
                   in: body
                   required: true
                   schema:
                     $ref: '#/definitions/v1ClaimJobRequest'
             tags:
                 - RunnerAPI
-    /v1/runner/jobs/{job_id}/bundle:
+    /api/v1/runner/jobs/{job_id}/bundle:
         get:
             summary: |-
                 GetJobBundle fetches the rendered artifacts for a claimed job. Separated
@@ -1627,9 +1646,9 @@ paths:
                 operation: rendered .tf files, resolved variables, provider configuration,
                 backend configuration, and the required Terraform version.
 
-                This endpoint is runner-facing and restricted to agent tokens.
+                This endpoint is runner-facing and restricted to service access tokens.
 
-                Scope: `runner:exec` | Token types: `agt`
+                Scope: `runner:exec` | Token types: `sat`
             operationId: RunnerAPI_GetJobBundle
             responses:
                 "200":
@@ -1648,7 +1667,7 @@ paths:
                   type: string
             tags:
                 - RunnerAPI
-    /v1/runner/jobs/{job_id}/result:
+    /api/v1/runner/jobs/{job_id}/result:
         post:
             summary: |-
                 ReportJobResult reports the outcome of a completed job. The runner sends
@@ -1656,9 +1675,9 @@ paths:
                 references. The server transitions the parent Revision status accordingly
                 (e.g., PLANNING→APPLYING, APPLYING→SUCCEEDED/FAILED).
             description: |-
-                This endpoint is runner-facing and restricted to agent tokens.
+                This endpoint is runner-facing and restricted to service access tokens.
 
-                Scope: `runner:exec` | Token types: `agt`
+                Scope: `runner:exec` | Token types: `sat`
             operationId: RunnerAPI_ReportJobResult
             responses:
                 "200":
@@ -1682,20 +1701,20 @@ paths:
                     $ref: '#/definitions/RunnerAPIReportJobResultBody'
             tags:
                 - RunnerAPI
-    /v1/runner/jobs/{job_id}/state:
+    /api/v1/runner/jobs/{job_id}/state:
         get:
             summary: |-
                 GetState fetches the current state for a job's component + environment.
                 Returns empty data if no state exists yet (fresh init -- Terraform
                 handles this gracefully).
             description: |-
-                The server validates that the AGT's runner binding matches the runner
+                The server validates that the SAT's runner binding matches the runner
                 assigned to this job. Returns PERMISSION_DENIED if they do not match.
                 Returns NOT_FOUND if the job does not exist or has been cancelled.
 
                 Maps to Terraform HTTP backend GET on the state address.
 
-                Scope: `state:read` | Token types: `agt`
+                Scope: `state:read` | Token types: `sat`
             operationId: StateAPI_GetState
             responses:
                 "200":
@@ -1723,7 +1742,7 @@ paths:
                 (must match if state already exists). Creates the state record on first
                 push.
             description: |-
-                The server validates that the AGT's runner binding matches the runner
+                The server validates that the SAT's runner binding matches the runner
                 assigned to this job. Returns PERMISSION_DENIED if they do not match.
                 Returns FAILED_PRECONDITION if the serial is not greater than the current
                 serial. Returns INVALID_ARGUMENT if the lineage does not match the
@@ -1731,7 +1750,7 @@ paths:
 
                 Maps to Terraform HTTP backend POST on the state address.
 
-                Scope: `state:write` | Token types: `agt`
+                Scope: `state:write` | Token types: `sat`
             operationId: StateAPI_PushState
             responses:
                 "200":
@@ -1755,13 +1774,13 @@ paths:
                     $ref: '#/definitions/StateAPIPushStateBody'
             tags:
                 - StateAPI
-    /v1/runner/jobs/{job_id}/state/lock:
+    /api/v1/runner/jobs/{job_id}/state/lock:
         post:
             summary: |-
                 LockState acquires an exclusive lock for the job's state. Terraform calls
                 this before plan/apply to prevent concurrent modifications.
             description: |-
-                The server validates that the AGT's runner binding matches the runner
+                The server validates that the SAT's runner binding matches the runner
                 assigned to this job. Returns PERMISSION_DENIED if they do not match.
                 Returns FAILED_PRECONDITION if the state is already locked by a different
                 operation. The lock_id is generated by Terraform and must be passed to
@@ -1769,7 +1788,7 @@ paths:
 
                 Maps to Terraform HTTP backend POST on the lock address.
 
-                Scope: `state:write` | Token types: `agt`
+                Scope: `state:write` | Token types: `sat`
             operationId: StateAPI_LockState
             responses:
                 "200":
@@ -1793,20 +1812,20 @@ paths:
                     $ref: '#/definitions/StateAPILockStateBody'
             tags:
                 - StateAPI
-    /v1/runner/jobs/{job_id}/state/unlock:
+    /api/v1/runner/jobs/{job_id}/state/unlock:
         post:
             summary: |-
                 UnlockState releases the exclusive lock on the job's state. The lock_id
                 must match the one used during LockState.
             description: |-
-                The server validates that the AGT's runner binding matches the runner
+                The server validates that the SAT's runner binding matches the runner
                 assigned to this job. Returns PERMISSION_DENIED if they do not match.
                 Returns FAILED_PRECONDITION if the lock_id does not match the currently
                 held lock. Returns NOT_FOUND if no lock is held.
 
                 Maps to Terraform HTTP backend POST on the unlock address.
 
-                Scope: `state:write` | Token types: `agt`
+                Scope: `state:write` | Token types: `sat`
             operationId: StateAPI_UnlockState
             responses:
                 "200":
@@ -1830,7 +1849,7 @@ paths:
                     $ref: '#/definitions/StateAPIUnlockStateBody'
             tags:
                 - StateAPI
-    /v1/runners:
+    /api/v1/runners:
         get:
             summary: ListRunners returns a paginated list of runners within the caller's tenant.
             description: 'Scope: `runner:read`'
@@ -1879,10 +1898,10 @@ paths:
         post:
             summary: |-
                 CreateRunner creates a new runner record within the caller's tenant and
-                generates an initial Agent Token (AGT). The runner starts in PENDING
+                generates an initial Service Access Token (SAT). The runner starts in PENDING
                 health status until it begins heartbeating.
             description: |-
-                The response includes a `plain_text_token` -- the raw AGT secret shown
+                The response includes a `plain_text_token` -- the raw SAT secret shown
                 exactly once. Deploy this token to the runner binary for authentication.
 
                 Scope: `runner:write`
@@ -1905,7 +1924,7 @@ paths:
                     $ref: '#/definitions/v1CreateRunnerRequest'
             tags:
                 - RunnerAPI
-    /v1/runners/{runner.id}:
+    /api/v1/runners/{runner.id}:
         patch:
             summary: |-
                 UpdateRunner updates a runner's mutable fields.
@@ -1934,7 +1953,7 @@ paths:
                     $ref: '#/definitions/RunnerAPIUpdateRunnerBody'
             tags:
                 - RunnerAPI
-    /v1/runners/{runner_id}:
+    /api/v1/runners/{runner_id}:
         get:
             summary: GetRunner retrieves a runner by ID.
             description: |-
@@ -1963,7 +1982,7 @@ paths:
         delete:
             summary: |-
                 DeleteRunner permanently deletes a runner record and revokes all
-                associated agent tokens. Any jobs assigned to this runner that are
+                associated service access tokens. Any jobs assigned to this runner that are
                 not yet completed will be failed. This action cannot be undone.
             description: 'Scope: `runner:write`'
             operationId: RunnerAPI_DeleteRunner
@@ -1980,13 +1999,13 @@ paths:
                 - name: runner_id
                   description: |-
                     The unique identifier of the runner to delete (UUID).
-                    All associated agent tokens will be revoked.
+                    All associated service access tokens will be revoked.
                   in: path
                   required: true
                   type: string
             tags:
                 - RunnerAPI
-    /v1/runners/{runner_id}/jobs:
+    /api/v1/runners/{runner_id}/jobs:
         get:
             summary: |-
                 ListRunnerJobs returns a paginated list of jobs assigned to a runner.
@@ -2034,7 +2053,7 @@ paths:
                   type: string
             tags:
                 - RunnerAPI
-    /v1/runners/{runner_id}/status:
+    /api/v1/runners/{runner_id}/status:
         get:
             summary: |-
                 GetRunnerStatus retrieves the current telemetry snapshot for a runner.
@@ -2063,10 +2082,10 @@ paths:
                   type: string
             tags:
                 - RunnerAPI
-    /v1/runners/{runner_id}/tokens:
+    /api/v1/runners/{runner_id}/tokens:
         get:
             summary: |-
-                ListRunnerTokens returns a paginated list of AGTs bound to the specified
+                ListRunnerTokens returns a paginated list of SATs bound to the specified
                 runner. Token secrets are never included.
             description: 'Scope: `runner:read`'
             operationId: RunnerAPI_ListRunnerTokens
@@ -2112,12 +2131,12 @@ paths:
                 - RunnerAPI
         post:
             summary: |-
-                CreateRunnerToken creates a new Agent Token (AGT) bound to the specified
+                CreateRunnerToken creates a new Service Access Token (SAT) bound to the specified
                 runner. Scopes are auto-assigned and cannot be overridden. The response
                 includes the raw token secret, which is shown exactly once.
             description: |-
-                Use this to create additional AGTs for an existing runner (e.g., for
-                zero-downtime token rotation). The initial AGT is created automatically
+                Use this to create additional SATs for an existing runner (e.g., for
+                zero-downtime token rotation). The initial SAT is created automatically
                 by CreateRunner.
 
                 Scope: `runner:write`
@@ -2144,10 +2163,10 @@ paths:
                     $ref: '#/definitions/RunnerAPICreateRunnerTokenBody'
             tags:
                 - RunnerAPI
-    /v1/runners/{runner_id}/tokens/{token_id}:
+    /api/v1/runners/{runner_id}/tokens/{token_id}:
         get:
             summary: |-
-                GetRunnerToken retrieves a single AGT by ID.
+                GetRunnerToken retrieves a single SAT by ID.
                 Returns metadata only -- the token secret is never included.
             description: 'Scope: `runner:read`'
             operationId: RunnerAPI_GetRunnerToken
@@ -2173,12 +2192,12 @@ paths:
                   type: string
             tags:
                 - RunnerAPI
-    /v1/runners/{runner_id}/tokens/{token_id}/revoke:
+    /api/v1/runners/{runner_id}/tokens/{token_id}/revoke:
         post:
             summary: |-
-                RevokeRunnerToken permanently revokes an AGT bound to this runner.
+                RevokeRunnerToken permanently revokes an SAT bound to this runner.
                 The runner will receive a 401 on its next request. If this is the only
-                active AGT for the runner, the runner will become disconnected.
+                active SAT for the runner, the runner will become disconnected.
             description: 'Scope: `runner:write`'
             operationId: RunnerAPI_RevokeRunnerToken
             responses:
@@ -2208,7 +2227,7 @@ paths:
                     $ref: '#/definitions/RunnerAPIRevokeRunnerTokenBody'
             tags:
                 - RunnerAPI
-    /v1/sources:
+    /api/v1/sources:
         get:
             summary: |-
                 ListSources returns a paginated list of sources within the caller's tenant.
@@ -2282,7 +2301,7 @@ paths:
                     $ref: '#/definitions/v1CreateSourceRequest'
             tags:
                 - SourceAPI
-    /v1/sources/{source.id}:
+    /api/v1/sources/{source.id}:
         patch:
             summary: |-
                 UpdateSource updates a source's mutable fields.
@@ -2311,7 +2330,7 @@ paths:
                     $ref: '#/definitions/SourceAPIUpdateSourceBody'
             tags:
                 - SourceAPI
-    /v1/sources/{source_id}:
+    /api/v1/sources/{source_id}:
         get:
             summary: GetSource retrieves a source by ID.
             description: 'Scope: `source:read`'
@@ -2359,7 +2378,7 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /v1/sources/{source_id}/inputs:
+    /api/v1/sources/{source_id}/inputs:
         get:
             summary: |-
                 GetSourceInputs fetches the source artifact at a specific version and
@@ -2399,7 +2418,7 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /v1/sources/{source_id}/outputs:
+    /api/v1/sources/{source_id}/outputs:
         get:
             summary: |-
                 GetSourceOutputs fetches the source artifact at a specific version and
@@ -2436,7 +2455,7 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /v1/sources/{source_id}/sync:
+    /api/v1/sources/{source_id}/sync:
         post:
             summary: |-
                 SyncSource triggers a refresh of the source's cached metadata -- version
@@ -2472,7 +2491,7 @@ paths:
                     $ref: '#/definitions/SourceAPISyncSourceBody'
             tags:
                 - SourceAPI
-    /v1/sources/{source_id}/versions:
+    /api/v1/sources/{source_id}/versions:
         get:
             summary: |-
                 ListSourceVersions queries the external system for available versions of
@@ -2516,7 +2535,7 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /v1/states:
+    /api/v1/states:
         get:
             summary: |-
                 ListStates returns a paginated list of state records within the caller's
@@ -2561,7 +2580,7 @@ paths:
                   type: string
             tags:
                 - StateAPI
-    /v1/states/{state_id}:
+    /api/v1/states/{state_id}:
         get:
             summary: |-
                 GetCurrentState retrieves the current state and lock info for a state
@@ -2619,7 +2638,7 @@ paths:
                   type: string
             tags:
                 - StateAPI
-    /v1/states/{state_id}/force-unlock:
+    /api/v1/states/{state_id}/force-unlock:
         post:
             summary: |-
                 ForceUnlockState forcefully releases a stuck lock on a state record.
@@ -2654,7 +2673,7 @@ paths:
                     $ref: '#/definitions/StateAPIForceUnlockStateBody'
             tags:
                 - StateAPI
-    /v1/states/{state_id}/versions:
+    /api/v1/states/{state_id}/versions:
         get:
             summary: |-
                 ListStateVersions returns a paginated history of state versions for a
@@ -2693,7 +2712,7 @@ paths:
                   type: string
             tags:
                 - StateAPI
-    /v1/states/{state_id}/versions/{serial}:
+    /api/v1/states/{state_id}/versions/{serial}:
         get:
             summary: |-
                 GetStateVersion retrieves the full state data at a historical serial
@@ -2727,24 +2746,24 @@ paths:
                   format: int64
             tags:
                 - StateAPI
-    /v1/user:
+    /api/v1/user/me:
         get:
             summary: |-
-                GetUser retrieves the profile of the currently authenticated user.
+                GetMe retrieves the profile of the currently authenticated user.
                 The user is identified by the authentication token provided in the request.
-            operationId: UserAPI_GetUser
+            operationId: UserAPI_GetMe
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1GetUserResponse'
+                        $ref: '#/definitions/v1GetMeResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             tags:
                 - UserAPI
-    /v1/user/tokens:
+    /api/v1/user/tokens:
         get:
             summary: |-
                 ListPersonalAccessTokens returns a paginated list of the authenticated
@@ -2811,7 +2830,7 @@ paths:
                     $ref: '#/definitions/v1CreatePersonalAccessTokenRequest'
             tags:
                 - UserAPI
-    /v1/user/tokens/{token_id}:
+    /api/v1/user/tokens/{token_id}:
         get:
             summary: |-
                 GetPersonalAccessToken retrieves a single PAT by ID.
@@ -2835,7 +2854,36 @@ paths:
                   type: string
             tags:
                 - UserAPI
-    /v1/user/tokens/{token_id}/revoke:
+        patch:
+            summary: |-
+                UpdatePersonalAccessToken updates a PAT's mutable fields (name, scopes).
+                Only active tokens can be updated. The token secret and expiration are
+                immutable after creation.
+            description: 'Scope: `token:write`'
+            operationId: UserAPI_UpdatePersonalAccessToken
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdatePersonalAccessTokenResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: token_id
+                  description: The unique identifier of the token to update (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/UserAPIUpdatePersonalAccessTokenBody'
+            tags:
+                - UserAPI
+    /api/v1/user/tokens/{token_id}/revoke:
         post:
             summary: |-
                 RevokePersonalAccessToken permanently revokes a PAT. The token becomes
@@ -2864,7 +2912,29 @@ paths:
                     $ref: '#/definitions/UserAPIRevokePersonalAccessTokenBody'
             tags:
                 - UserAPI
-    /v1/variables:
+    /api/v1/users/{user_id}:
+        get:
+            summary: GetUser retrieves a user's profile by ID.
+            description: 'Scope: `user:read`'
+            operationId: UserAPI_GetUser
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetUserResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: user_id
+                  description: The unique identifier of the user (UUID).
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - UserAPI
+    /api/v1/variables:
         get:
             summary: ListVariables returns a merged, paginated list of variables.
             description: |-
@@ -2946,7 +3016,7 @@ paths:
                     $ref: '#/definitions/v1CreateVariableRequest'
             tags:
                 - VariableAPI
-    /v1/variables/{variable.id}:
+    /api/v1/variables/{variable.id}:
         patch:
             summary: |-
                 UpdateVariable updates a variable's mutable fields.
@@ -2976,7 +3046,7 @@ paths:
                     $ref: '#/definitions/VariableAPIUpdateVariableBody'
             tags:
                 - VariableAPI
-    /v1/variables/{variable_id}:
+    /api/v1/variables/{variable_id}:
         get:
             summary: GetVariable retrieves a variable by ID.
             description: |-
@@ -3022,6 +3092,71 @@ paths:
                   type: string
             tags:
                 - VariableAPI
+    /auth/callback:
+        get:
+            summary: |-
+                Callback handles the OAuth2 authorization code callback from the IdP.
+                Validates the state nonce, exchanges the code for tokens, creates or
+                updates the user, and establishes a server-side session.
+            operationId: AuthenticationAPI_Callback
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CallbackResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: code
+                  description: The authorization code from the IdP.
+                  in: query
+                  required: false
+                  type: string
+                - name: state
+                  description: The state nonce (signed JWT) from the login request.
+                  in: query
+                  required: false
+                  type: string
+                - name: error
+                  description: OAuth error code (set by IdP on failure).
+                  in: query
+                  required: false
+                  type: string
+                - name: error_description
+                  description: Human-readable error description from the IdP.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - AuthenticationAPI
+    /auth/login:
+        get:
+            summary: |-
+                Login initiates the OAuth2 authorization code flow. Generates a signed
+                state nonce and returns the IdP authorization URL for the client to
+                redirect to.
+            operationId: AuthenticationAPI_Login
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1LoginResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: redirect_url
+                  description: |-
+                    The URL to redirect to after successful authentication. Must be a relative
+                    path (no scheme or host). Baked into the signed state nonce.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - AuthenticationAPI
 definitions:
     ApplicationAPIUpdateApplicationBody:
         type: object
@@ -3029,9 +3164,6 @@ definitions:
             application:
                 type: object
                 properties:
-                    tenant_id:
-                        type: string
-                        description: Tenant this application belongs to (UUID).
                     name:
                         type: string
                         description: |-
@@ -3087,7 +3219,7 @@ definitions:
                 format: date-time
                 description: Optional expiration time. If unset, the token does not expire.
         description: |-
-            CreateClusterTokenRequest contains the parameters for creating a new AGT
+            CreateClusterTokenRequest contains the parameters for creating a new SAT
             bound to a cluster.
     ClusterAPIReportRevisionResultBody:
         type: object
@@ -3114,16 +3246,13 @@ definitions:
         description: ReportWorkloadStatusRequest contains incremental workload telemetry from a K8s agent.
     ClusterAPIRevokeClusterTokenBody:
         type: object
-        description: RevokeClusterTokenRequest identifies a cluster AGT to revoke.
+        description: RevokeClusterTokenRequest identifies a cluster SAT to revoke.
     ClusterAPIUpdateClusterBody:
         type: object
         properties:
             cluster:
                 type: object
                 properties:
-                    tenant_id:
-                        type: string
-                        description: Tenant this cluster belongs to (UUID).
                     name:
                         type: string
                         description: |-
@@ -3344,9 +3473,6 @@ definitions:
             connection:
                 type: object
                 properties:
-                    tenant_id:
-                        type: string
-                        description: Tenant this connection belongs to (UUID).
                     name:
                         type: string
                         description: |-
@@ -3548,7 +3674,7 @@ definitions:
                 format: date-time
                 description: Optional expiration time. If unset, the token does not expire.
         description: |-
-            CreateRunnerTokenRequest contains the parameters for creating a new AGT
+            CreateRunnerTokenRequest contains the parameters for creating a new SAT
             bound to a runner.
     RunnerAPIReportJobResultBody:
         type: object
@@ -3559,16 +3685,13 @@ definitions:
         description: ReportJobResultRequest contains the outcome of a completed job.
     RunnerAPIRevokeRunnerTokenBody:
         type: object
-        description: RevokeRunnerTokenRequest identifies a runner AGT to revoke.
+        description: RevokeRunnerTokenRequest identifies a runner SAT to revoke.
     RunnerAPIUpdateRunnerBody:
         type: object
         properties:
             runner:
                 type: object
                 properties:
-                    tenant_id:
-                        type: string
-                        description: Tenant this runner belongs to (UUID).
                     name:
                         type: string
                         description: |-
@@ -3625,9 +3748,6 @@ definitions:
             source:
                 type: object
                 properties:
-                    tenant_id:
-                        type: string
-                        description: Tenant this source belongs to (UUID).
                     name:
                         type: string
                         description: |-
@@ -3781,15 +3901,32 @@ definitions:
     UserAPIRevokePersonalAccessTokenBody:
         type: object
         description: RevokePersonalAccessTokenRequest identifies a PAT to revoke.
+    UserAPIUpdatePersonalAccessTokenBody:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    New name for the token. Must follow the same naming rules as creation.
+                    Omit to leave the name unchanged.
+            scopes:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    New scopes for the token. Replaces all existing scopes.
+                    The server enforces that issued scopes are a subset of the caller's own
+                    scopes -- a token cannot grant more access than the user holds.
+                    Omit to leave scopes unchanged.
+        description: |-
+            UpdatePersonalAccessTokenRequest contains the fields to update on a PAT.
+            Only provided fields are updated; omitted fields remain unchanged.
     VariableAPIUpdateVariableBody:
         type: object
         properties:
             variable:
                 type: object
                 properties:
-                    tenant_id:
-                        type: string
-                        description: Tenant this variable belongs to (UUID).
                     key:
                         type: string
                         description: |-
@@ -4032,9 +4169,6 @@ definitions:
             id:
                 type: string
                 description: Unique identifier for the token (UUID).
-            tenant_id:
-                type: string
-                description: Tenant this token belongs to (UUID).
             name:
                 type: string
                 description: |-
@@ -4050,7 +4184,7 @@ definitions:
                     type: string
                 description: |-
                     The scopes granted to this token. For PATs, these are user-selected.
-                    For AGTs, these are auto-assigned based on the resource type.
+                    For SATs, these are auto-assigned based on the resource type.
             status:
                 $ref: '#/definitions/v1AccessTokenStatus'
                 description: Current lifecycle status of the token.
@@ -4064,7 +4198,7 @@ definitions:
                 $ref: '#/definitions/v1ActorRef'
                 description: |-
                     The user who created this token. For PATs, this is the token owner.
-                    For AGTs, this is the administrator who issued the token.
+                    For SATs, this is the administrator who issued the token.
             expires_at:
                 type: string
                 format: date-time
@@ -4082,14 +4216,14 @@ definitions:
                 format: date-time
                 description: When the token was revoked. Only set when status is REVOKED.
         description: |-
-            AccessToken contains token metadata common to all token types (PAT, AGT).
+            AccessToken contains token metadata common to all token types (PAT, SAT).
             The raw token secret is never included in this message — it is only returned
             once at creation time via the `plain_text_token` field in Create responses.
 
             Token CRUD is managed by each parent resource's API:
               - PATs:         UserAPI    (/v1/user/tokens)
-              - Cluster AGTs: ClusterAPI (/v1/clusters/{id}/tokens)
-              - Runner AGTs:  RunnerAPI  (/v1/runners/{id}/tokens)
+              - Cluster SATs: ClusterAPI (/v1/clusters/{id}/tokens)
+              - Runner SATs:  RunnerAPI  (/v1/runners/{id}/tokens)
     v1AccessTokenStatus:
         type: string
         enum:
@@ -4127,7 +4261,7 @@ definitions:
         properties:
             id:
                 type: string
-                description: UUID of the user or agent token.
+                description: UUID of the user or service access token.
             display_name:
                 type: string
                 description: Human-readable name (e.g., "John Smith", "cluster-prod-agent").
@@ -4144,9 +4278,6 @@ definitions:
             id:
                 type: string
                 description: Unique identifier for the application (UUID).
-            tenant_id:
-                type: string
-                description: Tenant this application belongs to (UUID).
             name:
                 type: string
                 description: |-
@@ -4268,8 +4399,13 @@ definitions:
 
              - BINDING_TYPE_UNSPECIFIED: Default value. Must not be used.
              - BINDING_TYPE_USER: Token is bound to a user (PATs).
-             - BINDING_TYPE_CLUSTER: Token is bound to a cluster (AGTs).
-             - BINDING_TYPE_RUNNER: Token is bound to a runner (AGTs).
+             - BINDING_TYPE_CLUSTER: Token is bound to a cluster (SATs).
+             - BINDING_TYPE_RUNNER: Token is bound to a runner (SATs).
+    v1CallbackResponse:
+        type: object
+        description: |-
+            CallbackResponse is empty on success. The server sets a session cookie
+            and redirects the browser to the original redirect_url.
     v1CancelDeploymentResponse:
         type: object
         properties:
@@ -4281,7 +4417,7 @@ definitions:
         type: object
         description: |-
             ClaimJobRequest is sent by the runner to poll for available work.
-            The runner is identified by the AGT's binding -- no runner_id is required.
+            The runner is identified by the SAT's binding -- no runner_id is required.
     v1ClaimJobResponse:
         type: object
         properties:
@@ -4297,9 +4433,6 @@ definitions:
             id:
                 type: string
                 description: Unique identifier for the cluster (UUID).
-            tenant_id:
-                type: string
-                description: Tenant this cluster belongs to (UUID).
             name:
                 type: string
                 description: |-
@@ -4706,9 +4839,6 @@ definitions:
             id:
                 type: string
                 description: Unique identifier for the connection (UUID).
-            tenant_id:
-                type: string
-                description: Tenant this connection belongs to (UUID).
             name:
                 type: string
                 description: |-
@@ -4935,7 +5065,7 @@ definitions:
             plain_text_token:
                 type: string
                 description: |-
-                    The raw Agent Token secret (e.g., "adm_agt_pL2mN5oQ8rS1..."). This value
+                    The raw Agent Token secret (e.g., "adms_pL2mN5oQ8rS1..."). This value
                     is shown exactly once and cannot be retrieved again. Deploy this token to
                     the K8s agent for authentication.
 
@@ -4943,19 +5073,19 @@ definitions:
                     CreateClusterToken (POST /v1/clusters/{cluster_id}/tokens).
         description: |-
             CreateClusterResponse contains the newly created cluster and its initial
-            Agent Token (AGT).
+            Service Access Token (SAT).
     v1CreateClusterTokenResponse:
         type: object
         properties:
             access_token:
                 $ref: '#/definitions/v1AccessToken'
-                description: The created token metadata. Scopes are auto-assigned for cluster AGTs.
+                description: The created token metadata. Scopes are auto-assigned for cluster SATs.
             plain_text_token:
                 type: string
                 description: |-
-                    The raw token secret (e.g., "adm_agt_pL2mN5oQ8rS1..."). This value is
+                    The raw token secret (e.g., "adms_pL2mN5oQ8rS1..."). This value is
                     shown exactly once and cannot be retrieved again. Store it securely.
-        description: CreateClusterTokenResponse contains the newly created AGT.
+        description: CreateClusterTokenResponse contains the newly created SAT.
     v1CreateComponentRequest:
         type: object
         properties:
@@ -5188,7 +5318,7 @@ definitions:
             plain_text_token:
                 type: string
                 description: |-
-                    The raw Agent Token secret (e.g., "adm_agt_pL2mN5oQ8rS1..."). This value
+                    The raw Agent Token secret (e.g., "adms_pL2mN5oQ8rS1..."). This value
                     is shown exactly once and cannot be retrieved again. Deploy this token to
                     the runner binary for authentication.
 
@@ -5196,19 +5326,19 @@ definitions:
                     CreateRunnerToken (POST /v1/runners/{runner_id}/tokens).
         description: |-
             CreateRunnerResponse contains the newly created runner and its initial
-            Agent Token (AGT).
+            Service Access Token (SAT).
     v1CreateRunnerTokenResponse:
         type: object
         properties:
             access_token:
                 $ref: '#/definitions/v1AccessToken'
-                description: The created token metadata. Scopes are auto-assigned for runner AGTs.
+                description: The created token metadata. Scopes are auto-assigned for runner SATs.
             plain_text_token:
                 type: string
                 description: |-
-                    The raw token secret (e.g., "adm_agt_pL2mN5oQ8rS1..."). This value is
+                    The raw token secret (e.g., "adms_pL2mN5oQ8rS1..."). This value is
                     shown exactly once and cannot be retrieved again. Store it securely.
-        description: CreateRunnerTokenResponse contains the newly created AGT.
+        description: CreateRunnerTokenResponse contains the newly created SAT.
     v1CreateSourceRequest:
         type: object
         properties:
@@ -5582,7 +5712,7 @@ definitions:
             access_token:
                 $ref: '#/definitions/v1AccessToken'
                 description: The token metadata. The token secret is never included.
-        description: GetClusterTokenResponse contains the requested cluster AGT metadata.
+        description: GetClusterTokenResponse contains the requested cluster SAT metadata.
     v1GetComponentOverrideResponse:
         type: object
         properties:
@@ -5634,6 +5764,13 @@ definitions:
                 $ref: '#/definitions/v1JobBundle'
                 description: The artifact bundle with everything needed to execute the TF operation.
         description: GetJobBundleResponse contains the rendered artifacts for execution.
+    v1GetMeResponse:
+        type: object
+        properties:
+            user:
+                $ref: '#/definitions/v1User'
+                description: The user profile.
+        description: GetMeResponse contains the authenticated user's profile.
     v1GetPersonalAccessTokenResponse:
         type: object
         properties:
@@ -5687,7 +5824,7 @@ definitions:
             access_token:
                 $ref: '#/definitions/v1AccessToken'
                 description: The token metadata. The token secret is never included.
-        description: GetRunnerTokenResponse contains the requested runner AGT metadata.
+        description: GetRunnerTokenResponse contains the requested runner SAT metadata.
     v1GetSourceInputsResponse:
         type: object
         properties:
@@ -5763,7 +5900,7 @@ definitions:
             user:
                 $ref: '#/definitions/v1User'
                 description: The user profile.
-        description: GetUserResponse contains the authenticated user's profile.
+        description: GetUserResponse contains the requested user's profile.
     v1GetVariableResponse:
         type: object
         properties:
@@ -5822,13 +5959,13 @@ definitions:
                 type: string
                 description: |-
                     Random UUID generated at process startup to distinguish multiple runner
-                    instances sharing the same AGT. The server uses this to track heartbeats
+                    instances sharing the same SAT. The server uses this to track heartbeats
                     per instance and aggregate capacity metrics across all instances of the
                     same runner. A new instance_id is generated each time the runner process
                     starts -- it is not persisted across restarts.
         description: |-
             HeartbeatRequest contains the runner's alive signal and current capacity.
-            The runner is identified by the AGT's binding -- no runner_id is required.
+            The runner is identified by the SAT's binding -- no runner_id is required.
     v1HeartbeatResponse:
         type: object
         properties:
@@ -6020,7 +6157,7 @@ definitions:
             - JOB_STATUS_RUNNING
             - JOB_STATUS_SUCCEEDED
             - JOB_STATUS_FAILED
-            - JOB_STATUS_CANCELLED
+            - JOB_STATUS_CANCELED
         default: JOB_STATUS_UNSPECIFIED
         description: |-
             JobStatus represents the lifecycle state of a runner job.
@@ -6031,7 +6168,7 @@ definitions:
              - JOB_STATUS_RUNNING: Job has been claimed by the runner and is actively executing.
              - JOB_STATUS_SUCCEEDED: Job completed successfully.
              - JOB_STATUS_FAILED: Job failed. See JobResult.error_message for details.
-             - JOB_STATUS_CANCELLED: Job was cancelled (e.g., parent deployment was cancelled).
+             - JOB_STATUS_CANCELED: Job was canceled (e.g., parent deployment was canceled).
     v1JobType:
         type: string
         enum:
@@ -6100,7 +6237,7 @@ definitions:
             next_page_token:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
-        description: ListClusterTokensResponse contains a page of cluster AGT metadata.
+        description: ListClusterTokensResponse contains a page of cluster SAT metadata.
     v1ListClustersResponse:
         type: object
         properties:
@@ -6232,7 +6369,7 @@ definitions:
             next_page_token:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
-        description: ListRunnerTokensResponse contains a page of runner AGT metadata.
+        description: ListRunnerTokensResponse contains a page of runner SAT metadata.
     v1ListRunnersResponse:
         type: object
         properties:
@@ -6329,6 +6466,13 @@ definitions:
     v1LockStateResponse:
         type: object
         description: LockStateResponse confirms the lock was acquired.
+    v1LoginResponse:
+        type: object
+        properties:
+            auth_url:
+                type: string
+                description: The IdP authorization URL. The client should redirect the browser here.
+        description: LoginResponse contains the IdP authorization URL for the client to redirect to.
     v1ManifestGitConfig:
         type: object
         properties:
@@ -6389,8 +6533,8 @@ definitions:
             Admiral splits this into three storage tiers: current snapshot, time-series
             metrics, and events.
 
-            The cluster is identified by the agent token's binding -- no cluster_id is
-            required. The server resolves the cluster from the AGT.
+            The cluster is identified by the service access token's binding -- no cluster_id is
+            required. The server resolves the cluster from the SAT.
     v1ReportClusterStatusResponse:
         type: object
         properties:
@@ -6673,7 +6817,7 @@ definitions:
             access_token:
                 $ref: '#/definitions/v1AccessToken'
                 description: The token metadata with updated status.
-        description: RevokeClusterTokenResponse contains the revoked cluster AGT metadata.
+        description: RevokeClusterTokenResponse contains the revoked cluster SAT metadata.
     v1RevokePersonalAccessTokenResponse:
         type: object
         properties:
@@ -6687,16 +6831,13 @@ definitions:
             access_token:
                 $ref: '#/definitions/v1AccessToken'
                 description: The token metadata with updated status.
-        description: RevokeRunnerTokenResponse contains the revoked runner AGT metadata.
+        description: RevokeRunnerTokenResponse contains the revoked runner SAT metadata.
     v1Runner:
         type: object
         properties:
             id:
                 type: string
                 description: Unique identifier for the runner (UUID).
-            tenant_id:
-                type: string
-                description: Tenant this runner belongs to (UUID).
             name:
                 type: string
                 description: |-
@@ -6844,9 +6985,6 @@ definitions:
             id:
                 type: string
                 description: Unique identifier for the source (UUID).
-            tenant_id:
-                type: string
-                description: Tenant this source belongs to (UUID).
             name:
                 type: string
                 description: |-
@@ -7294,7 +7432,7 @@ definitions:
         enum:
             - TOKEN_TYPE_UNSPECIFIED
             - TOKEN_TYPE_PAT
-            - TOKEN_TYPE_AGT
+            - TOKEN_TYPE_SAT
         default: TOKEN_TYPE_UNSPECIFIED
         description: |-
             TokenType identifies the category of an access token issued by Admiral's token system.
@@ -7304,7 +7442,7 @@ definitions:
 
              - TOKEN_TYPE_UNSPECIFIED: Default value. Must not be used.
              - TOKEN_TYPE_PAT: Personal Access Token, bound to a user.
-             - TOKEN_TYPE_AGT: Agent Token, bound to a cluster or runner.
+             - TOKEN_TYPE_SAT: Service Access Token, bound to a cluster or runner.
     v1UnlockStateResponse:
         type: object
         description: UnlockStateResponse confirms the lock was released.
@@ -7343,6 +7481,13 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The updated environment.
         description: UpdateEnvironmentResponse contains the updated environment.
+    v1UpdatePersonalAccessTokenResponse:
+        type: object
+        properties:
+            access_token:
+                $ref: '#/definitions/v1AccessToken'
+                description: The updated token metadata.
+        description: UpdatePersonalAccessTokenResponse contains the updated PAT metadata.
     v1UpdateRunnerResponse:
         type: object
         properties:
@@ -7370,12 +7515,12 @@ definitions:
             id:
                 type: string
                 description: Unique identifier for the user (UUID).
-            tenant_id:
-                type: string
-                description: The tenant this user belongs to (UUID).
             email:
                 type: string
                 description: User's email address.
+            email_verified:
+                type: boolean
+                description: Whether the email has been verified by the IdP.
             display_name:
                 type: string
                 description: User's display name for UI purposes.
@@ -7396,16 +7541,13 @@ definitions:
                 type: string
                 format: date-time
                 description: When the user was last updated.
-        description: User represents the authenticated user's profile information.
+        description: User represents a user's profile information.
     v1Variable:
         type: object
         properties:
             id:
                 type: string
                 description: Unique identifier for the variable (UUID).
-            tenant_id:
-                type: string
-                description: Tenant this variable belongs to (UUID).
             key:
                 type: string
                 description: |-
