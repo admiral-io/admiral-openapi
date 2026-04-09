@@ -1793,7 +1793,8 @@ paths:
                      Filterable fields:
                        - `application_id` -- filter by parent application (UUID).
                        - `name` -- filter by environment name.
-                       - `runtime_type` -- filter by runtime type (KUBERNETES).
+                       - `workload_type` -- filter by workload target type (KUBERNETES).
+                       - `infrastructure_type` -- filter by infrastructure target type (TERRAFORM).
                        - `labels.key` -- filter by label key.
 
                      Example: `field['application_id'] = '<uuid>' AND field['name'] = 'prod'`
@@ -1811,7 +1812,8 @@ paths:
                          Filterable fields:
                            - `application_id` -- filter by parent application (UUID).
                            - `name` -- filter by environment name.
-                           - `runtime_type` -- filter by runtime type (KUBERNETES).
+                           - `workload_type` -- filter by workload target type (KUBERNETES).
+                           - `infrastructure_type` -- filter by infrastructure target type (TERRAFORM).
                            - `labels.key` -- filter by label key.
 
                          Example: `field['application_id'] = '<uuid>' AND field['name'] = 'prod'`
@@ -1891,8 +1893,11 @@ paths:
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. If unset, all mutable fields are updated.
-                                         Supported fields: `name`, `description`, `runtime_type`, `kubernetes`,
-                                         `labels`, `infrastructure`.
+                                         Supported fields: `name`, `description`, `workload_targets`,
+                                         `infrastructure_targets`, `labels`.
+
+                                         When updating target lists, the entire list is replaced -- there is no
+                                         partial merge of individual targets within the list.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateEnvironmentRequest
                             required:
@@ -7453,56 +7458,51 @@ components:
             description: TerraformPlanSummary provides resource change counts from a Terraform plan.
         admiral.environment.v1.CreateEnvironmentRequest:
             type: object
-            allOf:
-                - properties:
-                    application_id:
+            properties:
+                application_id:
+                    type: string
+                    title: application_id
+                    format: uuid
+                    description: The application to create this environment for (UUID).
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier (e.g., "prod", "staging-us-east").
+                         Must be unique within the application. Lowercase alphanumeric and hyphens only.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: Optional longer-form description of the environment's purpose.
+                workload_targets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.environment.v1.WorkloadTarget'
+                    title: workload_targets
+                    description: |-
+                        Workload runtime targets. Optional -- can be added later via
+                         UpdateEnvironment. At most one target per WorkloadType.
+                infrastructure_targets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.environment.v1.InfrastructureTarget'
+                    title: infrastructure_targets
+                    description: |-
+                        Infrastructure runtime targets. Optional -- can be added later via
+                         UpdateEnvironment. At most one target per InfrastructureType.
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
                         type: string
-                        title: application_id
-                        format: uuid
-                        description: The application to create this environment for (UUID).
-                    name:
-                        type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "prod", "staging-us-east").
-                             Must be unique within the application. Lowercase alphanumeric and hyphens only.
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: Optional longer-form description of the environment's purpose.
-                    runtime_type:
-                        title: runtime_type
-                        description: |-
-                            The kind of runtime this environment targets. Optional -- can be assigned
-                             later via UpdateEnvironment.
-                        $ref: '#/components/schemas/admiral.environment.v1.RuntimeType'
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: Arbitrary key-value labels for organizing and filtering environments.
-                    infrastructure:
-                        title: infrastructure
-                        description: Infrastructure execution settings (runner assignment).
-                        $ref: '#/components/schemas/admiral.environment.v1.InfrastructureConfig'
-                - oneOf:
-                    - type: object
-                      properties:
-                        kubernetes:
-                            title: kubernetes
-                            description: Kubernetes-specific settings (cluster, namespace).
-                            $ref: '#/components/schemas/admiral.environment.v1.KubernetesConfig'
-                      title: kubernetes
-                      required:
-                        - kubernetes
+                        title: value
+                        maxLength: 256
+                    description: Arbitrary key-value labels for organizing and filtering environments.
             title: CreateEnvironmentRequest
             additionalProperties: false
             description: CreateEnvironmentRequest contains the parameters for creating a new environment.
@@ -7545,106 +7545,122 @@ components:
             description: DeleteEnvironmentResponse is empty on success.
         admiral.environment.v1.Environment:
             type: object
-            allOf:
-                - properties:
-                    id:
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the environment (UUID).
+                application_id:
+                    type: string
+                    title: application_id
+                    format: uuid
+                    description: The application this environment belongs to (UUID).
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier (e.g., "prod", "staging-us-east").
+                         Unique within the application. Lowercase alphanumeric and hyphens only,
+                         must start with a letter and end with an alphanumeric character (1-63 chars).
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: |-
+                        Optional longer-form description of the environment's purpose
+                         (e.g., "US East production serving live traffic" or
+                         "Shared staging for QA validation before prod promotion").
+                workload_targets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.environment.v1.WorkloadTarget'
+                    title: workload_targets
+                    description: |-
+                        Workload runtime targets. Each entry binds this environment to a workload
+                         runtime (e.g., Kubernetes cluster). At most one target per WorkloadType
+                         is allowed -- the server rejects duplicates.
+
+                         Components with workload sources (Helm, Kustomize, manifests) are routed
+                         to the matching target at deployment time. If no matching target exists,
+                         the deployment fails with a clear error.
+                infrastructure_targets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.environment.v1.InfrastructureTarget'
+                    title: infrastructure_targets
+                    description: |-
+                        Infrastructure runtime targets. Each entry binds this environment to an
+                         infrastructure provisioning tool (e.g., Terraform runner). At most one
+                         target per InfrastructureType is allowed -- the server rejects duplicates.
+
+                         Components with infrastructure sources (Terraform modules) are routed to
+                         the matching target at deployment time. If no matching target exists,
+                         the deployment fails with a clear error.
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
                         type: string
-                        title: id
-                        format: uuid
-                        description: Unique identifier for the environment (UUID).
-                    application_id:
-                        type: string
-                        title: application_id
-                        format: uuid
-                        description: The application this environment belongs to (UUID).
-                    name:
-                        type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "prod", "staging-us-east").
-                             Unique within the application. Lowercase alphanumeric and hyphens only,
-                             must start with a letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: |-
-                            Optional longer-form description of the environment's purpose
-                             (e.g., "US East production serving live traffic" or
-                             "Shared staging for QA validation before prod promotion").
-                    runtime_type:
-                        title: runtime_type
-                        description: |-
-                            The kind of runtime this environment targets. Optional -- can be assigned
-                             after creation.
-                        $ref: '#/components/schemas/admiral.environment.v1.RuntimeType'
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering environments
-                             (e.g., `{"region": "us-east-1", "tier": "production"}`).
-                    infrastructure:
-                        title: infrastructure
-                        description: |-
-                            Infrastructure execution settings (runner assignment). If unset,
-                             infrastructure components in this environment cannot be deployed.
-                        $ref: '#/components/schemas/admiral.environment.v1.InfrastructureConfig'
-                    has_pending_changes:
-                        type: boolean
-                        title: has_pending_changes
-                        description: |-
-                            Whether the environment has configuration changes that have not yet been
-                             deployed. Server-derived by comparing current resolved config (variables,
-                             component settings, overrides, source versions) against the last
-                             successful deployment's snapshot. False if no successful deployment
-                             exists yet (a fresh environment with no deployments returns false --
-                             use `last_deployed_at` to distinguish "clean" from "never deployed").
-                    last_deployed_at:
-                        title: last_deployed_at
-                        description: |-
-                            When the last successful deployment to this environment completed.
-                             Absent if no successful deployment has occurred yet.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    created_by:
-                        title: created_by
-                        description: The user or agent who created this environment (server-populated from token).
-                        $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    updated_by:
-                        title: updated_by
-                        description: The user or agent who last updated this environment (server-populated from token).
-                        $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    created_at:
-                        title: created_at
-                        description: When the environment was created.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    updated_at:
-                        title: updated_at
-                        description: When the environment was last updated.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                - oneOf:
-                    - type: object
-                      properties:
-                        kubernetes:
-                            title: kubernetes
-                            description: Kubernetes-specific settings (cluster, namespace).
-                            $ref: '#/components/schemas/admiral.environment.v1.KubernetesConfig'
-                      title: kubernetes
-                      required:
-                        - kubernetes
+                        title: value
+                        maxLength: 256
+                    description: |-
+                        Arbitrary key-value labels for organizing and filtering environments
+                         (e.g., `{"region": "us-east-1", "tier": "production"}`).
+                has_pending_changes:
+                    type: boolean
+                    title: has_pending_changes
+                    description: |-
+                        Whether the environment has configuration changes that have not yet been
+                         deployed. Server-derived by comparing current resolved config (variables,
+                         component settings, overrides, source versions) against the last
+                         successful deployment's snapshot. False if no successful deployment
+                         exists yet (a fresh environment with no deployments returns false --
+                         use `last_deployed_at` to distinguish "clean" from "never deployed").
+                last_deployed_at:
+                    title: last_deployed_at
+                    description: |-
+                        When the last successful deployment to this environment completed.
+                         Absent if no successful deployment has occurred yet.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                created_by:
+                    title: created_by
+                    description: The user or agent who created this environment (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                updated_by:
+                    title: updated_by
+                    description: The user or agent who last updated this environment (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                created_at:
+                    title: created_at
+                    description: When the environment was created.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                updated_at:
+                    title: updated_at
+                    description: When the environment was last updated.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Environment
             additionalProperties: false
             description: |-
                 Environment represents a named deployment target for an application. Each
-                 environment binds an application to a runtime where its workloads are deployed.
+                 environment binds an application to its workload and infrastructure runtimes.
+
+                 An environment carries two independent sets of runtime bindings:
+                   - **Workload targets**: where application workloads are deployed
+                     (e.g., a Kubernetes cluster and namespace).
+                   - **Infrastructure targets**: how infrastructure is provisioned
+                     (e.g., Terraform executed by a runner).
+
+                 Either or both can be configured depending on the application's components.
+                 An application with only Helm charts needs a workload target; one with only
+                 Terraform modules needs an infrastructure target; most applications need both.
+
+                 At most one target per type is allowed per environment. The deployment engine
+                 routes each component to the matching target based on its source type.
             example:
                 id: "e5f6a7b8-9012-3cde-f456-789012345678"
                 application_id: "a1b2c3d4-5678-9abc-def0-1234567890ab"
@@ -7697,21 +7713,35 @@ components:
             title: GetEnvironmentResponse
             additionalProperties: false
             description: GetEnvironmentResponse contains the environment record.
-        admiral.environment.v1.InfrastructureConfig:
+        admiral.environment.v1.InfrastructureTarget:
             type: object
-            properties:
-                runner_id:
-                    type: string
-                    title: runner_id
-                    format: uuid
-                    description: |-
-                        The runner that executes infrastructure operations for this environment (UUID).
-                         If unset, infrastructure components in this environment cannot be deployed.
-            title: InfrastructureConfig
+            oneOf:
+                - type: object
+                  properties:
+                    terraform:
+                        title: terraform
+                        description: Terraform/OpenTofu runner assignment (references a Runner entity).
+                        $ref: '#/components/schemas/admiral.environment.v1.TerraformConfig'
+                  title: terraform
+                  required:
+                    - terraform
+            title: InfrastructureTarget
             additionalProperties: false
             description: |-
-                InfrastructureConfig contains settings for infrastructure operations
-                 (Terraform plan/apply) within this environment.
+                InfrastructureTarget binds an environment to an infrastructure provisioning
+                 runtime. Each target carries type-specific configuration that references a
+                 managed entity (e.g., a Runner for Terraform, a Connection for CloudFormation).
+
+                 At most one target per InfrastructureType is allowed per environment.
+        admiral.environment.v1.InfrastructureType:
+            type: string
+            title: InfrastructureType
+            enum:
+                - INFRASTRUCTURE_TYPE_UNSPECIFIED
+                - INFRASTRUCTURE_TYPE_TERRAFORM
+            description: |-
+                InfrastructureType identifies the kind of infrastructure provisioning tool
+                 a target uses.
         admiral.environment.v1.KubernetesConfig:
             type: object
             properties:
@@ -7719,7 +7749,7 @@ components:
                     type: string
                     title: cluster_id
                     format: uuid
-                    description: The cluster this environment deploys to (UUID).
+                    description: The registered cluster this environment deploys to (UUID).
                 namespace:
                     type:
                         - string
@@ -7730,7 +7760,9 @@ components:
                          Defaults to the environment name if not specified at deploy time.
             title: KubernetesConfig
             additionalProperties: false
-            description: KubernetesConfig contains Kubernetes-specific settings for an environment.
+            description: |-
+                KubernetesConfig contains Kubernetes-specific settings for an environment.
+                 References a Cluster entity (agent-based) managed via ClusterAPI.
         admiral.environment.v1.ListEnvironmentsRequest:
             type: object
             properties:
@@ -7748,7 +7780,8 @@ components:
                          Filterable fields:
                            - `application_id` -- filter by parent application (UUID).
                            - `name` -- filter by environment name.
-                           - `runtime_type` -- filter by runtime type (KUBERNETES).
+                           - `workload_type` -- filter by workload target type (KUBERNETES).
+                           - `infrastructure_type` -- filter by infrastructure target type (TERRAFORM).
                            - `labels.key` -- filter by label key.
 
                          Example: `field['application_id'] = '<uuid>' AND field['name'] = 'prod'`
@@ -7782,13 +7815,20 @@ components:
             title: ListEnvironmentsResponse
             additionalProperties: false
             description: ListEnvironmentsResponse contains a page of environments.
-        admiral.environment.v1.RuntimeType:
-            type: string
-            title: RuntimeType
-            enum:
-                - RUNTIME_TYPE_UNSPECIFIED
-                - RUNTIME_TYPE_KUBERNETES
-            description: RuntimeType identifies the kind of runtime an environment targets.
+        admiral.environment.v1.TerraformConfig:
+            type: object
+            properties:
+                runner_id:
+                    type: string
+                    title: runner_id
+                    format: uuid
+                    description: The runner that executes Terraform operations for this environment (UUID).
+            title: TerraformConfig
+            additionalProperties: false
+            description: |-
+                TerraformConfig contains settings for Terraform/OpenTofu infrastructure
+                 operations within this environment. References a Runner entity (agent-based)
+                 managed via RunnerAPI.
         admiral.environment.v1.UpdateEnvironmentRequest:
             type: object
             properties:
@@ -7802,8 +7842,11 @@ components:
                     title: update_mask
                     description: |-
                         The set of fields to update. If unset, all mutable fields are updated.
-                         Supported fields: `name`, `description`, `runtime_type`, `kubernetes`,
-                         `labels`, `infrastructure`.
+                         Supported fields: `name`, `description`, `workload_targets`,
+                         `infrastructure_targets`, `labels`.
+
+                         When updating target lists, the entire list is replaced -- there is no
+                         partial merge of individual targets within the list.
                     $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateEnvironmentRequest
             required:
@@ -7820,6 +7863,33 @@ components:
             title: UpdateEnvironmentResponse
             additionalProperties: false
             description: UpdateEnvironmentResponse contains the updated environment.
+        admiral.environment.v1.WorkloadTarget:
+            type: object
+            oneOf:
+                - type: object
+                  properties:
+                    kubernetes:
+                        title: kubernetes
+                        description: Kubernetes cluster and namespace (references a Cluster entity).
+                        $ref: '#/components/schemas/admiral.environment.v1.KubernetesConfig'
+                  title: kubernetes
+                  required:
+                    - kubernetes
+            title: WorkloadTarget
+            additionalProperties: false
+            description: |-
+                WorkloadTarget binds an environment to a workload runtime. Each target
+                 carries type-specific configuration that references a managed entity
+                 (e.g., a Cluster for Kubernetes, a Connection for Cloud Run).
+
+                 At most one target per WorkloadType is allowed per environment.
+        admiral.environment.v1.WorkloadType:
+            type: string
+            title: WorkloadType
+            enum:
+                - WORKLOAD_TYPE_UNSPECIFIED
+                - WORKLOAD_TYPE_KUBERNETES
+            description: WorkloadType identifies the kind of workload runtime a target uses.
         admiral.healthcheck.v1.HealthcheckResponse:
             type: object
             title: HealthcheckResponse

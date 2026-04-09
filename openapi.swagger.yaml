@@ -1407,7 +1407,7 @@ paths:
         get:
             summary: |-
                 ListEnvironments returns a paginated list of environments. Use the filter
-                to scope by application, runtime type, or labels.
+                to scope by application, target type, or labels.
             description: 'Scope: `env:read`'
             operationId: EnvironmentAPI_ListEnvironments
             responses:
@@ -1431,7 +1431,8 @@ paths:
                     Filterable fields:
                       - `application_id` -- filter by parent application (UUID).
                       - `name` -- filter by environment name.
-                      - `runtime_type` -- filter by runtime type (KUBERNETES).
+                      - `workload_type` -- filter by workload target type (KUBERNETES).
+                      - `infrastructure_type` -- filter by infrastructure target type (TERRAFORM).
                       - `labels.key` -- filter by label key.
 
                     Example: `field['application_id'] = '<uuid>' AND field['name'] = 'prod'`
@@ -3535,14 +3536,32 @@ definitions:
                             Optional longer-form description of the environment's purpose
                             (e.g., "US East production serving live traffic" or
                             "Shared staging for QA validation before prod promotion").
-                    runtime_type:
-                        $ref: '#/definitions/v1RuntimeType'
+                    workload_targets:
+                        type: array
+                        items:
+                            type: object
+                            $ref: '#/definitions/v1WorkloadTarget'
                         description: |-
-                            The kind of runtime this environment targets. Optional -- can be assigned
-                            after creation.
-                    kubernetes:
-                        $ref: '#/definitions/v1KubernetesConfig'
-                        description: Kubernetes-specific settings (cluster, namespace).
+                            Workload runtime targets. Each entry binds this environment to a workload
+                            runtime (e.g., Kubernetes cluster). At most one target per WorkloadType
+                            is allowed -- the server rejects duplicates.
+
+                            Components with workload sources (Helm, Kustomize, manifests) are routed
+                            to the matching target at deployment time. If no matching target exists,
+                            the deployment fails with a clear error.
+                    infrastructure_targets:
+                        type: array
+                        items:
+                            type: object
+                            $ref: '#/definitions/v1InfrastructureTarget'
+                        description: |-
+                            Infrastructure runtime targets. Each entry binds this environment to an
+                            infrastructure provisioning tool (e.g., Terraform runner). At most one
+                            target per InfrastructureType is allowed -- the server rejects duplicates.
+
+                            Components with infrastructure sources (Terraform modules) are routed to
+                            the matching target at deployment time. If no matching target exists,
+                            the deployment fails with a clear error.
                     labels:
                         type: object
                         additionalProperties:
@@ -3550,11 +3569,6 @@ definitions:
                         description: |-
                             Arbitrary key-value labels for organizing and filtering environments
                             (e.g., `{"region": "us-east-1", "tier": "production"}`).
-                    infrastructure:
-                        $ref: '#/definitions/v1InfrastructureConfig'
-                        description: |-
-                            Infrastructure execution settings (runner assignment). If unset,
-                            infrastructure components in this environment cannot be deployed.
                     has_pending_changes:
                         type: boolean
                         description: |-
@@ -3591,8 +3605,11 @@ definitions:
                 type: string
                 description: |-
                     The set of fields to update. If unset, all mutable fields are updated.
-                    Supported fields: `name`, `description`, `runtime_type`, `kubernetes`,
-                    `labels`, `infrastructure`.
+                    Supported fields: `name`, `description`, `workload_targets`,
+                    `infrastructure_targets`, `labels`.
+
+                    When updating target lists, the entire list is replaced -- there is no
+                    partial merge of individual targets within the list.
         description: UpdateEnvironmentRequest contains the environment fields to update.
     RunnerAPICreateRunnerTokenBody:
         type: object
@@ -5161,22 +5178,27 @@ definitions:
             description:
                 type: string
                 description: Optional longer-form description of the environment's purpose.
-            runtime_type:
-                $ref: '#/definitions/v1RuntimeType'
+            workload_targets:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1WorkloadTarget'
                 description: |-
-                    The kind of runtime this environment targets. Optional -- can be assigned
-                    later via UpdateEnvironment.
-            kubernetes:
-                $ref: '#/definitions/v1KubernetesConfig'
-                description: Kubernetes-specific settings (cluster, namespace).
+                    Workload runtime targets. Optional -- can be added later via
+                    UpdateEnvironment. At most one target per WorkloadType.
+            infrastructure_targets:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1InfrastructureTarget'
+                description: |-
+                    Infrastructure runtime targets. Optional -- can be added later via
+                    UpdateEnvironment. At most one target per InfrastructureType.
             labels:
                 type: object
                 additionalProperties:
                     type: string
                 description: Arbitrary key-value labels for organizing and filtering environments.
-            infrastructure:
-                $ref: '#/definitions/v1InfrastructureConfig'
-                description: Infrastructure execution settings (runner assignment).
         description: CreateEnvironmentRequest contains the parameters for creating a new environment.
     v1CreateEnvironmentResponse:
         type: object
@@ -5518,14 +5540,32 @@ definitions:
                     Optional longer-form description of the environment's purpose
                     (e.g., "US East production serving live traffic" or
                     "Shared staging for QA validation before prod promotion").
-            runtime_type:
-                $ref: '#/definitions/v1RuntimeType'
+            workload_targets:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1WorkloadTarget'
                 description: |-
-                    The kind of runtime this environment targets. Optional -- can be assigned
-                    after creation.
-            kubernetes:
-                $ref: '#/definitions/v1KubernetesConfig'
-                description: Kubernetes-specific settings (cluster, namespace).
+                    Workload runtime targets. Each entry binds this environment to a workload
+                    runtime (e.g., Kubernetes cluster). At most one target per WorkloadType
+                    is allowed -- the server rejects duplicates.
+
+                    Components with workload sources (Helm, Kustomize, manifests) are routed
+                    to the matching target at deployment time. If no matching target exists,
+                    the deployment fails with a clear error.
+            infrastructure_targets:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1InfrastructureTarget'
+                description: |-
+                    Infrastructure runtime targets. Each entry binds this environment to an
+                    infrastructure provisioning tool (e.g., Terraform runner). At most one
+                    target per InfrastructureType is allowed -- the server rejects duplicates.
+
+                    Components with infrastructure sources (Terraform modules) are routed to
+                    the matching target at deployment time. If no matching target exists,
+                    the deployment fails with a clear error.
             labels:
                 type: object
                 additionalProperties:
@@ -5533,11 +5573,6 @@ definitions:
                 description: |-
                     Arbitrary key-value labels for organizing and filtering environments
                     (e.g., `{"region": "us-east-1", "tier": "production"}`).
-            infrastructure:
-                $ref: '#/definitions/v1InfrastructureConfig'
-                description: |-
-                    Infrastructure execution settings (runner assignment). If unset,
-                    infrastructure components in this environment cannot be deployed.
             has_pending_changes:
                 type: boolean
                 description: |-
@@ -5569,7 +5604,20 @@ definitions:
                 description: When the environment was last updated.
         description: |-
             Environment represents a named deployment target for an application. Each
-            environment binds an application to a runtime where its workloads are deployed.
+            environment binds an application to its workload and infrastructure runtimes.
+
+            An environment carries two independent sets of runtime bindings:
+              - **Workload targets**: where application workloads are deployed
+                (e.g., a Kubernetes cluster and namespace).
+              - **Infrastructure targets**: how infrastructure is provisioned
+                (e.g., Terraform executed by a runner).
+
+            Either or both can be configured depending on the application's components.
+            An application with only Helm charts needs a workload target; one with only
+            Terraform modules needs an infrastructure target; most applications need both.
+
+            At most one target per type is allowed per environment. The deployment engine
+            routes each component to the matching target based on its source type.
     v1ForceUnlockStateResponse:
         type: object
         description: ForceUnlockStateResponse confirms the lock was forcefully released.
@@ -5958,17 +6006,18 @@ definitions:
         description: |-
             HelmRepositoryConfig provides additional parameters for Helm charts from
             classic HTTP/S chart repositories.
-    v1InfrastructureConfig:
+    v1InfrastructureTarget:
         type: object
         properties:
-            runner_id:
-                type: string
-                description: |-
-                    The runner that executes infrastructure operations for this environment (UUID).
-                    If unset, infrastructure components in this environment cannot be deployed.
+            terraform:
+                $ref: '#/definitions/v1TerraformConfig'
+                description: Terraform/OpenTofu runner assignment (references a Runner entity).
         description: |-
-            InfrastructureConfig contains settings for infrastructure operations
-            (Terraform plan/apply) within this environment.
+            InfrastructureTarget binds an environment to an infrastructure provisioning
+            runtime. Each target carries type-specific configuration that references a
+            managed entity (e.g., a Runner for Terraform, a Connection for CloudFormation).
+
+            At most one target per InfrastructureType is allowed per environment.
     v1Job:
         type: object
         properties:
@@ -6125,13 +6174,15 @@ definitions:
         properties:
             cluster_id:
                 type: string
-                description: The cluster this environment deploys to (UUID).
+                description: The registered cluster this environment deploys to (UUID).
             namespace:
                 type: string
                 description: |-
                     The Kubernetes namespace for this environment's workloads.
                     Defaults to the environment name if not specified at deploy time.
-        description: KubernetesConfig contains Kubernetes-specific settings for an environment.
+        description: |-
+            KubernetesConfig contains Kubernetes-specific settings for an environment.
+            References a Cluster entity (agent-based) managed via ClusterAPI.
     v1KustomizeGitConfig:
         type: object
         properties:
@@ -6895,17 +6946,6 @@ definitions:
             Server-derived fields (health_status) are NOT included here -- they live
             on the Runner record and are returned alongside this message in
             GetRunnerStatusResponse.
-    v1RuntimeType:
-        type: string
-        enum:
-            - RUNTIME_TYPE_UNSPECIFIED
-            - RUNTIME_TYPE_KUBERNETES
-        default: RUNTIME_TYPE_UNSPECIFIED
-        description: |-
-            RuntimeType identifies the kind of runtime an environment targets.
-
-             - RUNTIME_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - RUNTIME_TYPE_KUBERNETES: Kubernetes cluster managed via Admiral's K8s agent.
     v1SetComponentOverrideResponse:
         type: object
         properties:
@@ -7299,6 +7339,16 @@ definitions:
                 $ref: '#/definitions/v1Source'
                 description: The source with refreshed metadata.
         description: SyncSourceResponse confirms the sync was triggered.
+    v1TerraformConfig:
+        type: object
+        properties:
+            runner_id:
+                type: string
+                description: The runner that executes Terraform operations for this environment (UUID).
+        description: |-
+            TerraformConfig contains settings for Terraform/OpenTofu infrastructure
+            operations within this environment. References a Runner entity (agent-based)
+            managed via RunnerAPI.
     v1TerraformGitConfig:
         type: object
         properties:
@@ -7763,6 +7813,18 @@ definitions:
         description: |-
             WorkloadStatus is the agent-reported status for a single workload within
             a telemetry push payload.
+    v1WorkloadTarget:
+        type: object
+        properties:
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesConfig'
+                description: Kubernetes cluster and namespace (references a Cluster entity).
+        description: |-
+            WorkloadTarget binds an environment to a workload runtime. Each target
+            carries type-specific configuration that references a managed entity
+            (e.g., a Cluster for Kubernetes, a Connection for Cloud Run).
+
+            At most one target per WorkloadType is allowed per environment.
 servers:
     - url: "{baseUrl}"
       description: Admiral API server
