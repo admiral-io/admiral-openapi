@@ -4,7 +4,6 @@ info:
     version: version not set
 tags:
     - name: ApplicationAPI
-    - name: AuthenticationAPI
     - name: ClusterAPI
     - name: ComponentAPI
     - name: ConnectionAPI
@@ -3092,71 +3091,6 @@ paths:
                   type: string
             tags:
                 - VariableAPI
-    /auth/callback:
-        get:
-            summary: |-
-                Callback handles the OAuth2 authorization code callback from the IdP.
-                Validates the state nonce, exchanges the code for tokens, creates or
-                updates the user, and establishes a server-side session.
-            operationId: AuthenticationAPI_Callback
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1CallbackResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: code
-                  description: The authorization code from the IdP.
-                  in: query
-                  required: false
-                  type: string
-                - name: state
-                  description: The state nonce (signed JWT) from the login request.
-                  in: query
-                  required: false
-                  type: string
-                - name: error
-                  description: OAuth error code (set by IdP on failure).
-                  in: query
-                  required: false
-                  type: string
-                - name: error_description
-                  description: Human-readable error description from the IdP.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - AuthenticationAPI
-    /auth/login:
-        get:
-            summary: |-
-                Login initiates the OAuth2 authorization code flow. Generates a signed
-                state nonce and returns the IdP authorization URL for the client to
-                redirect to.
-            operationId: AuthenticationAPI_Login
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1LoginResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: redirect_url
-                  description: |-
-                    The URL to redirect to after successful authentication. Must be a relative
-                    path (no scheme or host). Baked into the signed state nonce.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - AuthenticationAPI
 definitions:
     ApplicationAPIUpdateApplicationBody:
         type: object
@@ -7829,3 +7763,50 @@ definitions:
         description: |-
             WorkloadStatus is the agent-reported status for a single workload within
             a telemetry push payload.
+servers:
+    - url: "{baseUrl}"
+      description: Admiral API server
+      variables:
+        baseUrl:
+            default: https://admiral.example.com
+            description: The base URL of your Admiral instance.
+components:
+    securitySchemes:
+        bearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: PAT
+            description: >-
+                Personal Access Token (PAT) or Service Access Token (SAT). Pass the token in the Authorization header: `Bearer adm_pat_...`
+security:
+    - bearerAuth: []
+x-tagGroups:
+    - name: Applications
+      tags:
+        - Applications
+        - Environments
+        - Components
+        - Variables
+    - name: Deployments
+      tags:
+        - Deployments
+        - State
+    - name: Infrastructure
+      tags:
+        - Clusters
+        - Cluster Tokens
+        - Cluster Workloads
+        - Runners
+        - Runner Tokens
+        - Runner Jobs
+        - Sources
+        - Connections
+    - name: Identity & Access
+      tags:
+        - User
+        - Personal Access Tokens
+    - name: Agent & Runner Protocols
+      tags:
+        - Cluster Agent
+        - Runner Execution
+        - State Backend

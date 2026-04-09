@@ -6,7 +6,7 @@ paths:
     /api/v1/agent/revisions/{revision_id}/bundle:
         get:
             tags:
-                - Clusters
+                - Cluster Agent
             summary: Retrieve a revision bundle
             description: |-
                 The bundle contains pre-rendered Kubernetes manifests (from Helm template,
@@ -40,7 +40,7 @@ paths:
     /api/v1/agent/revisions/{revision_id}/result:
         post:
             tags:
-                - Clusters
+                - Cluster Agent
             summary: Report revision result
             description: |-
                 The cluster is identified by the service access token's binding. Returns
@@ -92,7 +92,7 @@ paths:
     /api/v1/agent/status:
         post:
             tags:
-                - Clusters
+                - Cluster Agent
             summary: Report cluster status
             description: |-
                 The cluster is identified by the service access token -- the server resolves the
@@ -516,7 +516,7 @@ paths:
     /api/v1/clusters/{cluster_id}/tokens:
         get:
             tags:
-                - Clusters
+                - Cluster Tokens
             summary: List cluster tokens
             description: 'Scope: `cluster:read`'
             operationId: ClusterAPI_ListClusterTokens
@@ -578,7 +578,7 @@ paths:
                                 $ref: '#/components/schemas/admiral.cluster.v1.ListClusterTokensResponse'
         post:
             tags:
-                - Clusters
+                - Cluster Tokens
             summary: Create a cluster token
             description: |-
                 Use this to create additional SATs for an existing cluster (e.g., for
@@ -638,7 +638,7 @@ paths:
     /api/v1/clusters/{cluster_id}/tokens/{token_id}:
         get:
             tags:
-                - Clusters
+                - Cluster Tokens
             summary: Retrieve a cluster token
             description: 'Scope: `cluster:read`'
             operationId: ClusterAPI_GetClusterToken
@@ -671,7 +671,7 @@ paths:
     /api/v1/clusters/{cluster_id}/tokens/{token_id}/revoke:
         post:
             tags:
-                - Clusters
+                - Cluster Tokens
             summary: Revoke a cluster token
             description: 'Scope: `cluster:write`'
             operationId: ClusterAPI_RevokeClusterToken
@@ -724,7 +724,7 @@ paths:
     /api/v1/clusters/{cluster_id}/workloads:
         get:
             tags:
-                - Clusters
+                - Cluster Workloads
             summary: List workloads
             description: 'Scope: `cluster:read`'
             operationId: ClusterAPI_ListWorkloads
@@ -791,7 +791,7 @@ paths:
     /api/v1/clusters/{cluster_id}/workloads/status:
         post:
             tags:
-                - Clusters
+                - Cluster Agent
             summary: Report workload status
             description: |-
                 This endpoint is agent-facing and restricted to service access tokens.
@@ -1974,7 +1974,7 @@ paths:
     /api/v1/runner/heartbeat:
         post:
             tags:
-                - Runners
+                - Runner Execution
             summary: Send runner heartbeat
             description: |-
                 The runner is identified by the service access token -- the server resolves the
@@ -2000,7 +2000,7 @@ paths:
     /api/v1/runner/jobs/claim:
         post:
             tags:
-                - Runners
+                - Runner Execution
             summary: Claim a job
             description: |-
                 The runner is identified by the service access token -- no runner_id is required.
@@ -2025,7 +2025,7 @@ paths:
     /api/v1/runner/jobs/{job_id}/bundle:
         get:
             tags:
-                - Runners
+                - Runner Execution
             summary: Retrieve a job bundle
             description: |-
                 The bundle contains everything the runner needs to execute the Terraform
@@ -2056,7 +2056,7 @@ paths:
     /api/v1/runner/jobs/{job_id}/result:
         post:
             tags:
-                - Runners
+                - Runner Execution
             summary: Report job result
             description: |-
                 This endpoint is runner-facing and restricted to service access tokens.
@@ -2104,7 +2104,7 @@ paths:
     /api/v1/runner/jobs/{job_id}/state:
         get:
             tags:
-                - State
+                - State Backend
             summary: Retrieve state for a job
             description: |-
                 The server validates that the SAT's runner binding matches the runner
@@ -2138,7 +2138,7 @@ paths:
                                 $ref: '#/components/schemas/admiral.state.v1.GetStateResponse'
         post:
             tags:
-                - State
+                - State Backend
             summary: Push state for a job
             description: |-
                 The server validates that the SAT's runner binding matches the runner
@@ -2212,7 +2212,7 @@ paths:
     /api/v1/runner/jobs/{job_id}/state/lock:
         post:
             tags:
-                - State
+                - State Backend
             summary: Lock state for a job
             description: |-
                 The server validates that the SAT's runner binding matches the runner
@@ -2277,7 +2277,7 @@ paths:
     /api/v1/runner/jobs/{job_id}/state/unlock:
         post:
             tags:
-                - State
+                - State Backend
             summary: Unlock state for a job
             description: |-
                 The server validates that the SAT's runner binding matches the runner
@@ -2521,7 +2521,7 @@ paths:
     /api/v1/runners/{runner_id}/jobs:
         get:
             tags:
-                - Runners
+                - Runner Jobs
             summary: List runner jobs
             description: 'Scope: `runner:read`'
             operationId: RunnerAPI_ListRunnerJobs
@@ -2615,7 +2615,7 @@ paths:
     /api/v1/runners/{runner_id}/tokens:
         get:
             tags:
-                - Runners
+                - Runner Tokens
             summary: List runner tokens
             description: 'Scope: `runner:read`'
             operationId: RunnerAPI_ListRunnerTokens
@@ -2677,7 +2677,7 @@ paths:
                                 $ref: '#/components/schemas/admiral.runner.v1.ListRunnerTokensResponse'
         post:
             tags:
-                - Runners
+                - Runner Tokens
             summary: Create a runner token
             description: |-
                 Use this to create additional SATs for an existing runner (e.g., for
@@ -2737,7 +2737,7 @@ paths:
     /api/v1/runners/{runner_id}/tokens/{token_id}:
         get:
             tags:
-                - Runners
+                - Runner Tokens
             summary: Retrieve a runner token
             description: 'Scope: `runner:read`'
             operationId: RunnerAPI_GetRunnerToken
@@ -2770,7 +2770,7 @@ paths:
     /api/v1/runners/{runner_id}/tokens/{token_id}/revoke:
         post:
             tags:
-                - Runners
+                - Runner Tokens
             summary: Revoke a runner token
             description: 'Scope: `runner:write`'
             operationId: RunnerAPI_RevokeRunnerToken
@@ -3459,7 +3459,7 @@ paths:
     /api/v1/user/tokens:
         get:
             tags:
-                - User
+                - Personal Access Tokens
             summary: List personal access tokens
             description: 'Scope: `token:read`'
             operationId: UserAPI_ListPersonalAccessTokens
@@ -3512,7 +3512,7 @@ paths:
                                 $ref: '#/components/schemas/admiral.user.v1.ListPersonalAccessTokensResponse'
         post:
             tags:
-                - User
+                - Personal Access Tokens
             summary: Create a personal access token
             description: 'Scope: `token:write`'
             operationId: UserAPI_CreatePersonalAccessToken
@@ -3532,7 +3532,7 @@ paths:
     /api/v1/user/tokens/{token_id}:
         get:
             tags:
-                - User
+                - Personal Access Tokens
             summary: Retrieve a personal access token
             description: 'Scope: `token:read`'
             operationId: UserAPI_GetPersonalAccessToken
@@ -3555,7 +3555,7 @@ paths:
                                 $ref: '#/components/schemas/admiral.user.v1.GetPersonalAccessTokenResponse'
         patch:
             tags:
-                - User
+                - Personal Access Tokens
             summary: Update a personal access token
             description: 'Scope: `token:write`'
             operationId: UserAPI_UpdatePersonalAccessToken
@@ -3620,7 +3620,7 @@ paths:
     /api/v1/user/tokens/{token_id}/revoke:
         post:
             tags:
-                - User
+                - Personal Access Tokens
             summary: Revoke a personal access token
             description: 'Scope: `token:write`'
             operationId: UserAPI_RevokePersonalAccessToken
@@ -3870,81 +3870,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.variable.v1.DeleteVariableResponse'
-    /auth/callback:
-        get:
-            tags:
-                - Authentication
-            summary: OAuth2 callback
-            description: |-
-                Callback handles the OAuth2 authorization code callback from the IdP.
-                 Validates the state nonce, exchanges the code for tokens, creates or
-                 updates the user, and establishes a server-side session.
-            operationId: AuthenticationAPI_Callback
-            parameters:
-                - name: code
-                  in: query
-                  description: The authorization code from the IdP.
-                  schema:
-                    type: string
-                    title: code
-                    description: The authorization code from the IdP.
-                - name: state
-                  in: query
-                  description: The state nonce (signed JWT) from the login request.
-                  schema:
-                    type: string
-                    title: state
-                    description: The state nonce (signed JWT) from the login request.
-                - name: error
-                  in: query
-                  description: OAuth error code (set by IdP on failure).
-                  schema:
-                    type: string
-                    title: error
-                    description: OAuth error code (set by IdP on failure).
-                - name: error_description
-                  in: query
-                  description: Human-readable error description from the IdP.
-                  schema:
-                    type: string
-                    title: error_description
-                    description: Human-readable error description from the IdP.
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.authentication.v1.CallbackResponse'
-    /auth/login:
-        get:
-            tags:
-                - Authentication
-            summary: Initiate OAuth2 login
-            description: |-
-                Login initiates the OAuth2 authorization code flow. Generates a signed
-                 state nonce and returns the IdP authorization URL for the client to
-                 redirect to.
-            operationId: AuthenticationAPI_Login
-            parameters:
-                - name: redirect_url
-                  in: query
-                  description: |-
-                    The URL to redirect to after successful authentication. Must be a relative
-                     path (no scheme or host). Baked into the signed state nonce.
-                  schema:
-                    type: string
-                    title: redirect_url
-                    description: |-
-                        The URL to redirect to after successful authentication. Must be a relative
-                         path (no scheme or host). Baked into the signed state nonce.
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.authentication.v1.LoginResponse'
 components:
     schemas:
         admiral.application.v1.Application:
@@ -4195,57 +4120,6 @@ components:
             title: UpdateApplicationResponse
             additionalProperties: false
             description: UpdateApplicationResponse contains the updated application.
-        admiral.authentication.v1.CallbackRequest:
-            type: object
-            properties:
-                code:
-                    type: string
-                    title: code
-                    description: The authorization code from the IdP.
-                state:
-                    type: string
-                    title: state
-                    description: The state nonce (signed JWT) from the login request.
-                error:
-                    type: string
-                    title: error
-                    description: OAuth error code (set by IdP on failure).
-                error_description:
-                    type: string
-                    title: error_description
-                    description: Human-readable error description from the IdP.
-            title: CallbackRequest
-            additionalProperties: false
-            description: CallbackRequest contains the OAuth2 callback parameters from the IdP.
-        admiral.authentication.v1.CallbackResponse:
-            type: object
-            title: CallbackResponse
-            additionalProperties: false
-            description: |-
-                CallbackResponse is empty on success. The server sets a session cookie
-                 and redirects the browser to the original redirect_url.
-        admiral.authentication.v1.LoginRequest:
-            type: object
-            properties:
-                redirect_url:
-                    type: string
-                    title: redirect_url
-                    description: |-
-                        The URL to redirect to after successful authentication. Must be a relative
-                         path (no scheme or host). Baked into the signed state nonce.
-            title: LoginRequest
-            additionalProperties: false
-            description: LoginRequest contains parameters for initiating the OAuth2 flow.
-        admiral.authentication.v1.LoginResponse:
-            type: object
-            properties:
-                auth_url:
-                    type: string
-                    title: auth_url
-                    description: The IdP authorization URL. The client should redirect the browser here.
-            title: LoginResponse
-            additionalProperties: false
-            description: LoginResponse contains the IdP authorization URL for the client to redirect to.
         admiral.cluster.v1.Cluster:
             type: object
             properties:
@@ -11211,12 +11085,25 @@ components:
                  the Joda Time's [`ISODateTimeFormat.dateTime()`](
                  http://joda-time.sourceforge.net/apidocs/org/joda/time/format/ISODateTimeFormat.html#dateTime()
                  ) to obtain a formatter capable of generating timestamps in this format.
-security: []
+    securitySchemes:
+        bearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: PAT
+            description: >-
+                Personal Access Token (PAT) or Service Access Token (SAT). Pass the token in the Authorization header: `Bearer adm_pat_...`
+security: [{bearerAuth: []}]
 tags:
     - name: Applications
       description: Manage application lifecycle and configuration.
     - name: Clusters
       description: Manage Kubernetes clusters, service access tokens, and workload telemetry.
+    - name: Cluster Tokens
+      description: Manage service access tokens for cluster agents.
+    - name: Cluster Workloads
+      description: View workloads running on registered clusters.
+    - name: Cluster Agent
+      description: Agent-facing endpoints for cluster telemetry and revision delivery. Requires a cluster SAT.
     - name: Components
       description: Manage application components and environment overrides.
     - name: Connections
@@ -11227,11 +11114,58 @@ tags:
       description: Manage deployment target environments.
     - name: Runners
       description: Manage infrastructure runners, tokens, and job execution.
+    - name: Runner Tokens
+      description: Manage service access tokens for runners.
+    - name: Runner Jobs
+      description: View jobs assigned to runners.
+    - name: Runner Execution
+      description: Runner-facing endpoints for heartbeat and job execution. Requires a runner SAT.
     - name: Sources
       description: Manage source definitions for external artifacts.
     - name: State
-      description: Manage Terraform state for infrastructure components.
+      description: Manage Terraform state records, version history, and locks.
+    - name: State Backend
+      description: Terraform HTTP state backend used by runners during job execution. Requires a runner SAT.
     - name: User
-      description: Retrieve user profile and manage personal access tokens.
+      description: Retrieve user profiles.
+    - name: Personal Access Tokens
+      description: Manage personal access tokens for API authentication.
     - name: Variables
       description: Manage configuration variables across scopes.
+servers:
+    - url: "{baseUrl}"
+      description: Admiral API server
+      variables:
+        baseUrl:
+            default: https://admiral.example.com
+            description: The base URL of your Admiral instance.
+x-tagGroups:
+    - name: Applications
+      tags:
+        - Applications
+        - Environments
+        - Components
+        - Variables
+    - name: Deployments
+      tags:
+        - Deployments
+        - State
+    - name: Infrastructure
+      tags:
+        - Clusters
+        - Cluster Tokens
+        - Cluster Workloads
+        - Runners
+        - Runner Tokens
+        - Runner Jobs
+        - Sources
+        - Connections
+    - name: Identity & Access
+      tags:
+        - User
+        - Personal Access Tokens
+    - name: Agent & Runner Protocols
+      tags:
+        - Cluster Agent
+        - Runner Execution
+        - State Backend
