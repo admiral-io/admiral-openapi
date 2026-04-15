@@ -3289,52 +3289,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.source.v1.GetSourceOutputsResponse'
-    /api/v1/sources/{source_id}/sync:
-        post:
-            tags:
-                - Sources
-            summary: Sync a source
-            description: |-
-                Use this after updating the referenced credential, or to
-                 force a refresh when you know the upstream has changed.
-
-                 This operation queries the external system in real time and may take
-                 several seconds.
-
-                 Scope: `source:write`
-            operationId: SourceAPI_SyncSource
-            parameters:
-                - name: source_id
-                  in: path
-                  description: Unique identifier of the source to sync (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: Unique identifier of the source to sync (UUID).
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                source_id:
-                                    type: string
-                                    title: source_id
-                                    format: uuid
-                                    description: Unique identifier of the source to sync (UUID).
-                            title: SyncSourceRequest
-                            additionalProperties: false
-                            description: SyncSourceRequest triggers a metadata refresh for a source.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.source.v1.SyncSourceResponse'
     /api/v1/sources/{source_id}/test:
         post:
             tags:
@@ -9771,14 +9725,6 @@ components:
                         title: created_by
                         description: The user or agent who created this source (server-populated from token).
                         $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    last_synced_at:
-                        title: last_synced_at
-                        description: |-
-                            When the source metadata was last synced from the external system
-                             (registry, Git, Helm repo). Updated by SyncSource and by automatic
-                             background refresh when discovery RPCs encounter stale cached data.
-                             Absent if no sync has occurred yet.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
                     last_test_status:
                         oneOf:
                             - $ref: '#/components/schemas/admiral.source.v1.SourceTestStatus'
@@ -9988,27 +9934,6 @@ components:
             description: |-
                 SourceVersion represents an available version of a source artifact, as
                  reported by the external system (registry, repository, Git tags).
-        admiral.source.v1.SyncSourceRequest:
-            type: object
-            properties:
-                source_id:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: Unique identifier of the source to sync (UUID).
-            title: SyncSourceRequest
-            additionalProperties: false
-            description: SyncSourceRequest triggers a metadata refresh for a source.
-        admiral.source.v1.SyncSourceResponse:
-            type: object
-            properties:
-                source:
-                    title: source
-                    description: The source with refreshed metadata.
-                    $ref: '#/components/schemas/admiral.source.v1.Source'
-            title: SyncSourceResponse
-            additionalProperties: false
-            description: SyncSourceResponse confirms the sync was triggered.
         admiral.source.v1.TerraformConfig:
             type: object
             properties:

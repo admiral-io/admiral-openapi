@@ -2611,42 +2611,6 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /api/v1/sources/{source_id}/sync:
-        post:
-            summary: |-
-                SyncSource triggers a refresh of the source's cached metadata -- version
-                list, discovered inputs/outputs, and connectivity status.
-            description: |-
-                Use this after updating the referenced credential, or to
-                force a refresh when you know the upstream has changed.
-
-                This operation queries the external system in real time and may take
-                several seconds.
-
-                Scope: `source:write`
-            operationId: SourceAPI_SyncSource
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1SyncSourceResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source_id
-                  description: Unique identifier of the source to sync (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/SourceAPISyncSourceBody'
-            tags:
-                - SourceAPI
     /api/v1/sources/{source_id}/test:
         post:
             summary: |-
@@ -3925,9 +3889,6 @@ definitions:
                     The set of fields to update. If unset, all mutable fields are updated.
                     Supported fields: `name`, `description`, `labels`.
         description: UpdateRunnerRequest contains the runner fields to update.
-    SourceAPISyncSourceBody:
-        type: object
-        description: SyncSourceRequest triggers a metadata refresh for a source.
     SourceAPITestSourceBody:
         type: object
         description: TestSourceRequest identifies a source to test.
@@ -3989,14 +3950,6 @@ definitions:
                     created_by:
                         $ref: '#/definitions/v1ActorRef'
                         description: The user or agent who created this source (server-populated from token).
-                    last_synced_at:
-                        type: string
-                        format: date-time
-                        description: |-
-                            When the source metadata was last synced from the external system
-                            (registry, Git, Helm repo). Updated by SyncSource and by automatic
-                            background refresh when discovery RPCs encounter stale cached data.
-                            Absent if no sync has occurred yet.
                     last_test_status:
                         $ref: '#/definitions/v1SourceTestStatus'
                         description: |-
@@ -7342,14 +7295,6 @@ definitions:
             created_by:
                 $ref: '#/definitions/v1ActorRef'
                 description: The user or agent who created this source (server-populated from token).
-            last_synced_at:
-                type: string
-                format: date-time
-                description: |-
-                    When the source metadata was last synced from the external system
-                    (registry, Git, Helm repo). Updated by SyncSource and by automatic
-                    background refresh when discovery RPCs encounter stale cached data.
-                    Absent if no sync has occurred yet.
             last_test_status:
                 $ref: '#/definitions/v1SourceTestStatus'
                 description: |-
@@ -7672,13 +7617,6 @@ definitions:
             StateVersion contains metadata about a historical state version. Used in
             ListStateVersions to provide version history without the full state data
             blob.
-    v1SyncSourceResponse:
-        type: object
-        properties:
-            source:
-                $ref: '#/definitions/v1Source'
-                description: The source with refreshed metadata.
-        description: SyncSourceResponse confirms the sync was triggered.
     v1TerraformPlanSummary:
         type: object
         properties:
