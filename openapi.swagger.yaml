@@ -1436,6 +1436,37 @@ paths:
                   type: string
             tags:
                 - DeploymentAPI
+    /api/v1/deployments/{deployment_id}/apply:
+        post:
+            summary: |-
+                ApplyDeployment transitions a deployment from plan phase to apply phase.
+                All revisions currently in AWAITING_APPROVAL status get an APPLY job
+                dispatched to their assigned runner. This is the explicit human approval
+                gate between plan output and infrastructure mutation.
+            description: 'Scope: `deploy:write`'
+            operationId: DeploymentAPI_ApplyDeployment
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ApplyDeploymentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: deployment_id
+                  description: Unique identifier of the deployment to apply (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/DeploymentAPIApplyDeploymentBody'
+            tags:
+                - DeploymentAPI
     /api/v1/deployments/{deployment_id}/cancel:
         post:
             summary: |-
@@ -3813,6 +3844,13 @@ definitions:
                     The set of fields to update. If unset, all mutable fields are updated.
                     Supported fields: `name`, `description`, `auth_config`, `labels`.
         description: UpdateCredentialRequest contains the credential fields to update.
+    DeploymentAPIApplyDeploymentBody:
+        type: object
+        properties:
+            message:
+                type: string
+                description: Optional message describing the apply (e.g., "Approved by @martin").
+        description: ApplyDeploymentRequest transitions a planned deployment to apply phase.
     DeploymentAPICancelDeploymentBody:
         type: object
         properties:
@@ -4710,6 +4748,17 @@ definitions:
             Application represents a deployable unit within a tenant. An application
             groups manifests, dependencies, and environment configuration into a single
             entity that Admiral orchestrates across environments.
+    v1ApplyDeploymentResponse:
+        type: object
+        properties:
+            deployment:
+                $ref: '#/definitions/v1Deployment'
+                description: |-
+                    The deployment with status advanced to RUNNING. Revisions that were
+                    AWAITING_APPROVAL are now APPLYING.
+        description: |-
+            ApplyDeploymentResponse contains the deployment after apply jobs are
+            dispatched.
     v1AuthConfig:
         type: object
         properties:
@@ -7339,6 +7388,7 @@ definitions:
             - REVISION_STATUS_PENDING
             - REVISION_STATUS_QUEUED
             - REVISION_STATUS_PLANNING
+            - REVISION_STATUS_AWAITING_APPROVAL
             - REVISION_STATUS_APPLYING
             - REVISION_STATUS_SUCCEEDED
             - REVISION_STATUS_FAILED
@@ -7355,7 +7405,10 @@ definitions:
              - REVISION_STATUS_QUEUED: The revision is queued for execution. Its upstream dependencies have
             completed and it will begin shortly.
              - REVISION_STATUS_PLANNING: (Infrastructure only) Terraform plan is being generated. Transitions
-            to APPLYING once the plan is complete.
+            to AWAITING_APPROVAL on success or FAILED on error.
+             - REVISION_STATUS_AWAITING_APPROVAL: (Infrastructure only) Plan completed successfully and is awaiting an
+            explicit apply (via ApplyDeployment). The plan output is available on
+            the revision for review.
              - REVISION_STATUS_APPLYING: The revision is being applied. For infrastructure, this is
             `terraform apply`. For workloads, this is applying manifests to the
             target cluster.

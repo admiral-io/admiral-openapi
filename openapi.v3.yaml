@@ -1795,6 +1795,50 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.deployment.v1.GetDeploymentResponse'
+    /api/v1/deployments/{deployment_id}/apply:
+        post:
+            tags:
+                - Deployments
+            summary: Apply a planned deployment
+            description: 'Scope: `deploy:write`'
+            operationId: DeploymentAPI_ApplyDeployment
+            parameters:
+                - name: deployment_id
+                  in: path
+                  description: Unique identifier of the deployment to apply (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: deployment_id
+                    format: uuid
+                    description: Unique identifier of the deployment to apply (UUID).
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                deployment_id:
+                                    type: string
+                                    title: deployment_id
+                                    format: uuid
+                                    description: Unique identifier of the deployment to apply (UUID).
+                                message:
+                                    type: string
+                                    title: message
+                                    maxLength: 1024
+                                    description: Optional message describing the apply (e.g., "Approved by @martin").
+                            title: ApplyDeploymentRequest
+                            additionalProperties: false
+                            description: ApplyDeploymentRequest transitions a planned deployment to apply phase.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.deployment.v1.ApplyDeploymentResponse'
     /api/v1/deployments/{deployment_id}/cancel:
         post:
             tags:
@@ -7601,6 +7645,36 @@ components:
             title: UpdateCredentialResponse
             additionalProperties: false
             description: UpdateCredentialResponse contains the updated credential.
+        admiral.deployment.v1.ApplyDeploymentRequest:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    title: deployment_id
+                    format: uuid
+                    description: Unique identifier of the deployment to apply (UUID).
+                message:
+                    type: string
+                    title: message
+                    maxLength: 1024
+                    description: Optional message describing the apply (e.g., "Approved by @martin").
+            title: ApplyDeploymentRequest
+            additionalProperties: false
+            description: ApplyDeploymentRequest transitions a planned deployment to apply phase.
+        admiral.deployment.v1.ApplyDeploymentResponse:
+            type: object
+            properties:
+                deployment:
+                    title: deployment
+                    description: |-
+                        The deployment with status advanced to RUNNING. Revisions that were
+                         AWAITING_APPROVAL are now APPLYING.
+                    $ref: '#/components/schemas/admiral.deployment.v1.Deployment'
+            title: ApplyDeploymentResponse
+            additionalProperties: false
+            description: |-
+                ApplyDeploymentResponse contains the deployment after apply jobs are
+                 dispatched.
         admiral.deployment.v1.CancelDeploymentRequest:
             type: object
             properties:
@@ -8070,6 +8144,7 @@ components:
                 - REVISION_STATUS_PENDING
                 - REVISION_STATUS_QUEUED
                 - REVISION_STATUS_PLANNING
+                - REVISION_STATUS_AWAITING_APPROVAL
                 - REVISION_STATUS_APPLYING
                 - REVISION_STATUS_SUCCEEDED
                 - REVISION_STATUS_FAILED
