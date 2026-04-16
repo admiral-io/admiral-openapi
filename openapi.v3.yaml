@@ -5790,13 +5790,13 @@ components:
                     description: |-
                         Optional description of the component's purpose
                          (e.g., "Primary VPC for all environments" or "Redis cache layer").
-                category:
-                    title: category
+                kind:
+                    title: kind
                     description: |-
                         Whether this is an infrastructure or workload component. Derived from
                          the referenced module's type when the component is created, but stored
                          explicitly for filtering and to determine execution behavior.
-                    $ref: '#/components/schemas/admiral.component.v1.ComponentCategory'
+                    $ref: '#/components/schemas/admiral.component.v1.ComponentKind'
                 module_id:
                     type: string
                     title: module_id
@@ -5915,7 +5915,7 @@ components:
                 application_id: "a1b2c3d4-5678-9abc-def0-1234567890ab"
                 name: "api-server"
                 description: "Main API server deployed via Helm chart."
-                category: "COMPONENT_CATEGORY_WORKLOAD"
+                kind: "COMPONENT_KIND_WORKLOAD"
                 source_id: "f6a7b8c9-0123-4def-5678-901234567890"
                 version: "2.4.1"
                 values_template: "{\"replicaCount\": \"{{ .var.REPLICA_COUNT }}\", \"image.tag\": \"{{ .var.IMAGE_TAG }}\"}"
@@ -5927,15 +5927,15 @@ components:
                 created_by: "d290f1ee-6c54-4b01-90e6-d701748f0851"
                 created_at: "2025-09-16T09:00:00Z"
                 updated_at: "2025-10-28T11:30:00Z"
-        admiral.component.v1.ComponentCategory:
+        admiral.component.v1.ComponentKind:
             type: string
-            title: ComponentCategory
+            title: ComponentKind
             enum:
-                - COMPONENT_CATEGORY_UNSPECIFIED
-                - COMPONENT_CATEGORY_INFRASTRUCTURE
-                - COMPONENT_CATEGORY_WORKLOAD
+                - COMPONENT_KIND_UNSPECIFIED
+                - COMPONENT_KIND_INFRASTRUCTURE
+                - COMPONENT_KIND_WORKLOAD
             description: |-
-                ComponentCategory indicates whether the component provisions infrastructure
+                ComponentKind indicates whether the component provisions infrastructure
                  or deploys workloads. This is derived from the referenced module's type but
                  stored explicitly for filtering and to determine rendering and execution
                  behavior.
@@ -7949,10 +7949,10 @@ components:
                     type: string
                     title: component_name
                     description: Component name at the time of deployment (denormalized for display).
-                category:
-                    title: category
-                    description: Component category at the time of deployment (after override resolution).
-                    $ref: '#/components/schemas/admiral.deployment.v1.RevisionCategory'
+                kind:
+                    title: kind
+                    description: Component kind at the time of deployment (after override resolution).
+                    $ref: '#/components/schemas/admiral.deployment.v1.RevisionKind'
                 status:
                     title: status
                     description: Lifecycle status of this revision.
@@ -8051,17 +8051,17 @@ components:
                      build, or raw file collection).
                    - Manifests are ordered (CRDs before resources, namespaces first).
                    - The rendered bundle is sent to the K8s agent for application.
-        admiral.deployment.v1.RevisionCategory:
+        admiral.deployment.v1.RevisionKind:
             type: string
-            title: RevisionCategory
+            title: RevisionKind
             enum:
-                - REVISION_CATEGORY_UNSPECIFIED
-                - REVISION_CATEGORY_INFRASTRUCTURE
-                - REVISION_CATEGORY_WORKLOAD
+                - REVISION_KIND_UNSPECIFIED
+                - REVISION_KIND_INFRASTRUCTURE
+                - REVISION_KIND_WORKLOAD
             description: |-
-                RevisionCategory mirrors ComponentCategory but is stored on the revision
-                 to capture the effective category at deployment time (may differ from
-                 the component default if an environment override changed the source type).
+                RevisionKind mirrors ComponentKind but is stored on the revision to capture
+                 the effective kind at deployment time (may differ from the component default
+                 if an environment override changed the source type).
         admiral.deployment.v1.RevisionStatus:
             type: string
             title: RevisionStatus
@@ -9732,9 +9732,13 @@ components:
             title: RunnerKind
             enum:
                 - RUNNER_KIND_UNSPECIFIED
-                - RUNNER_KIND_TERRAFORM
+                - RUNNER_KIND_INFRASTRUCTURE
                 - RUNNER_KIND_WORKFLOW
-            description: RunnerKind identifies the type of operations a runner executes.
+            description: |-
+                RunnerKind identifies the category of operations a runner executes. The
+                 specific tool (Terraform, OpenTofu, Pulumi, ...) is reported per-runner via
+                 RunnerStatus.tool_versions and is used for job-to-runner matching; the kind
+                 itself is product-agnostic.
         admiral.runner.v1.RunnerStatus:
             type: object
             properties:

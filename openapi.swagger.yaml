@@ -3547,8 +3547,8 @@ definitions:
                         description: |-
                             Optional description of the component's purpose
                             (e.g., "Primary VPC for all environments" or "Redis cache layer").
-                    category:
-                        $ref: '#/definitions/v1ComponentCategory'
+                    kind:
+                        $ref: '#/definitions/v1ComponentKind'
                         description: |-
                             Whether this is an infrastructure or workload component. Derived from
                             the referenced module's type when the component is created, but stored
@@ -4956,8 +4956,8 @@ definitions:
                 description: |-
                     Optional description of the component's purpose
                     (e.g., "Primary VPC for all environments" or "Redis cache layer").
-            category:
-                $ref: '#/definitions/v1ComponentCategory'
+            kind:
+                $ref: '#/definitions/v1ComponentKind'
                 description: |-
                     Whether this is an infrastructure or workload component. Derived from
                     the referenced module's type when the component is created, but stored
@@ -5062,25 +5062,25 @@ definitions:
             components declare outputs explicitly. Other components consume these via
             template expressions. The deployment engine resolves this DAG to determine
             execution order.
-    v1ComponentCategory:
+    v1ComponentKind:
         type: string
         enum:
-            - COMPONENT_CATEGORY_UNSPECIFIED
-            - COMPONENT_CATEGORY_INFRASTRUCTURE
-            - COMPONENT_CATEGORY_WORKLOAD
-        default: COMPONENT_CATEGORY_UNSPECIFIED
+            - COMPONENT_KIND_UNSPECIFIED
+            - COMPONENT_KIND_INFRASTRUCTURE
+            - COMPONENT_KIND_WORKLOAD
+        default: COMPONENT_KIND_UNSPECIFIED
         description: |-
-            ComponentCategory indicates whether the component provisions infrastructure
+            ComponentKind indicates whether the component provisions infrastructure
             or deploys workloads. This is derived from the referenced module's type but
             stored explicitly for filtering and to determine rendering and execution
             behavior.
 
-             - COMPONENT_CATEGORY_UNSPECIFIED: Default value. Must not be used.
-             - COMPONENT_CATEGORY_INFRASTRUCTURE: Infrastructure component backed by a Terraform module. Follows the
-            plan → approve → apply lifecycle. Produces outputs that are
-            auto-discovered from the Terraform module's output blocks. Each
-            component gets its own Terraform state.
-             - COMPONENT_CATEGORY_WORKLOAD: Workload component backed by a Kubernetes module (Helm, Kustomize, raw
+             - COMPONENT_KIND_UNSPECIFIED: Default value. Must not be used.
+             - COMPONENT_KIND_INFRASTRUCTURE: Infrastructure component backed by an IaC module (Terraform, OpenTofu,
+            etc.). Follows the plan → approve → apply lifecycle. Produces outputs
+            that are auto-discovered from the module's output declarations. Each
+            component gets its own state file.
+             - COMPONENT_KIND_WORKLOAD: Workload component backed by a Kubernetes module (Helm, Kustomize, raw
             manifests). Applied to the target cluster via the K8s agent. CRD ordering
             is handled within the rendered bundle. Outputs must be declared explicitly
             via the component's `outputs` field.
@@ -7184,9 +7184,9 @@ definitions:
             component_name:
                 type: string
                 description: Component name at the time of deployment (denormalized for display).
-            category:
-                $ref: '#/definitions/v1RevisionCategory'
-                description: Component category at the time of deployment (after override resolution).
+            kind:
+                $ref: '#/definitions/v1RevisionKind'
+                description: Component kind at the time of deployment (after override resolution).
             status:
                 $ref: '#/definitions/v1RevisionStatus'
                 description: Lifecycle status of this revision.
@@ -7297,21 +7297,21 @@ definitions:
         description: |-
             RevisionBundle contains pre-rendered Kubernetes manifests for a workload
             revision, ready for server-side apply by the K8s agent.
-    v1RevisionCategory:
+    v1RevisionKind:
         type: string
         enum:
-            - REVISION_CATEGORY_UNSPECIFIED
-            - REVISION_CATEGORY_INFRASTRUCTURE
-            - REVISION_CATEGORY_WORKLOAD
-        default: REVISION_CATEGORY_UNSPECIFIED
+            - REVISION_KIND_UNSPECIFIED
+            - REVISION_KIND_INFRASTRUCTURE
+            - REVISION_KIND_WORKLOAD
+        default: REVISION_KIND_UNSPECIFIED
         description: |-
-            RevisionCategory mirrors ComponentCategory but is stored on the revision
-            to capture the effective category at deployment time (may differ from
-            the component default if an environment override changed the source type).
+            RevisionKind mirrors ComponentKind but is stored on the revision to capture
+            the effective kind at deployment time (may differ from the component default
+            if an environment override changed the source type).
 
-             - REVISION_CATEGORY_UNSPECIFIED: Default value. Must not be used.
-             - REVISION_CATEGORY_INFRASTRUCTURE: Infrastructure revision (Terraform). Plan → apply lifecycle.
-             - REVISION_CATEGORY_WORKLOAD: Workload revision (Helm, Kustomize, manifests). Direct apply lifecycle.
+             - REVISION_KIND_UNSPECIFIED: Default value. Must not be used.
+             - REVISION_KIND_INFRASTRUCTURE: Infrastructure revision (IaC). Plan → apply lifecycle.
+             - REVISION_KIND_WORKLOAD: Workload revision (Helm, Kustomize, manifests). Direct apply lifecycle.
     v1RevisionResult:
         type: object
         properties:
@@ -7490,14 +7490,18 @@ definitions:
         type: string
         enum:
             - RUNNER_KIND_UNSPECIFIED
-            - RUNNER_KIND_TERRAFORM
+            - RUNNER_KIND_INFRASTRUCTURE
             - RUNNER_KIND_WORKFLOW
         default: RUNNER_KIND_UNSPECIFIED
         description: |-
-            RunnerKind identifies the type of operations a runner executes.
+            RunnerKind identifies the category of operations a runner executes. The
+            specific tool (Terraform, OpenTofu, Pulumi, ...) is reported per-runner via
+            RunnerStatus.tool_versions and is used for job-to-runner matching; the kind
+            itself is product-agnostic.
 
              - RUNNER_KIND_UNSPECIFIED: Default value. Must not be used.
-             - RUNNER_KIND_TERRAFORM: Executes Terraform plan, apply, and destroy operations.
+             - RUNNER_KIND_INFRASTRUCTURE: Provisions infrastructure via IaC tooling (Terraform, OpenTofu, Pulumi,
+            and similar). Follows plan → apply lifecycle.
              - RUNNER_KIND_WORKFLOW: Executes workflow operations (CI/CD pipelines, custom scripts).
     v1RunnerStatus:
         type: object
