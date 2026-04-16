@@ -857,17 +857,35 @@ paths:
                  Scope: `app:read`
             operationId: ComponentAPI_ListComponents
             parameters:
+                - name: application_id
+                  in: query
+                  description: |-
+                    Scope listing to a specific application (UUID). Required for meaningful
+                     results since components always belong to an application.
+                  schema:
+                    type: string
+                    title: application_id
+                    format: uuid
+                    description: |-
+                        Scope listing to a specific application (UUID). Required for meaningful
+                         results since components always belong to an application.
+                - name: environment_id
+                  in: query
+                  description: |-
+                    When set alongside `application_id`, returns the resolved view with
+                     environment overrides applied (UUID). Optional.
+                  schema:
+                    type: string
+                    title: environment_id
+                    format: uuid
+                    description: |-
+                        When set alongside `application_id`, returns the resolved view with
+                         environment overrides applied (UUID). Optional.
                 - name: filter
                   in: query
                   description: |-
-                    Filter expression using the PEG filter DSL.
-
-                     Common filter fields:
-                       - `application_id` -- scope to an application (required for meaningful
-                         results since components always belong to an application).
-                       - `environment_id` -- when present, triggers the resolved view with
-                         environment overrides applied to each component.
-                       - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
+                    Filter expression using the PEG filter DSL. Filterable fields:
+                       - `kind` -- filter by component kind (INFRASTRUCTURE, WORKLOAD).
                        - `name` -- filter by component name.
                        - `module_id` -- filter by module reference.
                   schema:
@@ -875,14 +893,8 @@ paths:
                     title: filter
                     maxLength: 1024
                     description: |-
-                        Filter expression using the PEG filter DSL.
-
-                         Common filter fields:
-                           - `application_id` -- scope to an application (required for meaningful
-                             results since components always belong to an application).
-                           - `environment_id` -- when present, triggers the resolved view with
-                             environment overrides applied to each component.
-                           - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
+                        Filter expression using the PEG filter DSL. Filterable fields:
+                           - `kind` -- filter by component kind (INFRASTRUCTURE, WORKLOAD).
                            - `name` -- filter by component name.
                            - `module_id` -- filter by module reference.
                 - name: page_size
@@ -6325,19 +6337,27 @@ components:
         admiral.component.v1.ListComponentsRequest:
             type: object
             properties:
+                application_id:
+                    type: string
+                    title: application_id
+                    format: uuid
+                    description: |-
+                        Scope listing to a specific application (UUID). Required for meaningful
+                         results since components always belong to an application.
+                environment_id:
+                    type: string
+                    title: environment_id
+                    format: uuid
+                    description: |-
+                        When set alongside `application_id`, returns the resolved view with
+                         environment overrides applied (UUID). Optional.
                 filter:
                     type: string
                     title: filter
                     maxLength: 1024
                     description: |-
-                        Filter expression using the PEG filter DSL.
-
-                         Common filter fields:
-                           - `application_id` -- scope to an application (required for meaningful
-                             results since components always belong to an application).
-                           - `environment_id` -- when present, triggers the resolved view with
-                             environment overrides applied to each component.
-                           - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
+                        Filter expression using the PEG filter DSL. Filterable fields:
+                           - `kind` -- filter by component kind (INFRASTRUCTURE, WORKLOAD).
                            - `name` -- filter by component name.
                            - `module_id` -- filter by module reference.
                 page_size:
@@ -6354,16 +6374,18 @@ components:
             title: ListComponentsRequest
             additionalProperties: false
             description: |-
-                ListComponentsRequest contains pagination and filter parameters.
+                ListComponentsRequest contains pagination, scoping, and filter parameters.
 
-                 The filter controls both scoping and response behavior:
-                   - `application_id` in filter: returns application-level component
-                     definitions (defaults).
-                   - `application_id` + `environment_id` in filter: returns the resolved
-                     view with environment overrides applied. Each component reflects its
-                     effective source, version, values_template, depends_on, and outputs.
-                     Disabled components are included with `disabled=true`. Components with
-                     any overridden field have `has_override=true`.
+                 Scoping uses dedicated fields, not the filter DSL:
+                   - `application_id` alone: application-level component defaults.
+                   - `application_id` + `environment_id`: resolved view with environment
+                     overrides applied. Each component reflects its effective module,
+                     version, values_template, depends_on, and outputs. Disabled
+                     components are included with `disabled=true`. Components with any
+                     overridden field have `has_override=true`.
+
+                 `filter` is reserved for predicates on component columns (`kind`,
+                 `name`, `module_id`).
         admiral.component.v1.ListComponentsResponse:
             type: object
             properties:

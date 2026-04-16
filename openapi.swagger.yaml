@@ -706,16 +706,24 @@ paths:
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
+                - name: application_id
+                  description: |-
+                    Scope listing to a specific application (UUID). Required for meaningful
+                    results since components always belong to an application.
+                  in: query
+                  required: false
+                  type: string
+                - name: environment_id
+                  description: |-
+                    When set alongside `application_id`, returns the resolved view with
+                    environment overrides applied (UUID). Optional.
+                  in: query
+                  required: false
+                  type: string
                 - name: filter
                   description: |-
-                    Filter expression using the PEG filter DSL.
-
-                    Common filter fields:
-                      - `application_id` -- scope to an application (required for meaningful
-                        results since components always belong to an application).
-                      - `environment_id` -- when present, triggers the resolved view with
-                        environment overrides applied to each component.
-                      - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
+                    Filter expression using the PEG filter DSL. Filterable fields:
+                      - `kind` -- filter by component kind (INFRASTRUCTURE, WORKLOAD).
                       - `name` -- filter by component name.
                       - `module_id` -- filter by module reference.
                   in: query
