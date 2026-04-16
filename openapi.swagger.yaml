@@ -2534,83 +2534,6 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /api/v1/sources/{source_id}/inputs:
-        get:
-            summary: |-
-                GetSourceInputs fetches the source artifact at a specific version and
-                parses its inputs (configurable parameters).
-            description: |-
-                For Terraform modules, this parses HCL variable blocks using
-                terraform-config-inspect. For Helm charts, this extracts values.yaml and
-                optionally values.schema.json. For Kustomize and raw manifests, inputs
-                are not discoverable and the response will be empty.
-
-                This operation fetches and parses the external artifact in real time and
-                may take several seconds.
-
-                Scope: `source:read`
-            operationId: SourceAPI_GetSourceInputs
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetSourceInputsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source_id
-                  description: Unique identifier of the source to inspect (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: version
-                  description: |-
-                    The version to inspect. For registry sources, a semver string. For Git
-                    sources, a tag, branch, or commit SHA. Required.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - SourceAPI
-    /api/v1/sources/{source_id}/outputs:
-        get:
-            summary: |-
-                GetSourceOutputs fetches the source artifact at a specific version and
-                parses its outputs (values produced after apply).
-            description: |-
-                Only meaningful for Terraform modules, which declare formal output blocks.
-                Helm charts, Kustomize, and raw manifests do not have formal outputs --
-                workload component outputs are user-declared, not discovered.
-
-                This operation queries the external system in real time and may take
-                several seconds.
-
-                Scope: `source:read`
-            operationId: SourceAPI_GetSourceOutputs
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetSourceOutputsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source_id
-                  description: Unique identifier of the source to inspect (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: version
-                  description: The version to inspect. Required.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - SourceAPI
     /api/v1/sources/{source_id}/test:
         post:
             summary: |-
@@ -6121,43 +6044,6 @@ definitions:
                 $ref: '#/definitions/v1AccessToken'
                 description: The token metadata. The token secret is never included.
         description: GetRunnerTokenResponse contains the requested runner SAT metadata.
-    v1GetSourceInputsResponse:
-        type: object
-        properties:
-            inputs:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1SourceInput'
-                description: |-
-                    Discovered input parameters. Empty for source types that do not support
-                    input discovery (Kustomize, raw manifests).
-            resolved_version:
-                type: string
-                description: |-
-                    The version that was actually inspected (resolved from the requested
-                    version -- e.g., a branch name resolved to a commit SHA).
-        description: |-
-            GetSourceInputsResponse contains the discovered inputs for the source at
-            the requested version.
-    v1GetSourceOutputsResponse:
-        type: object
-        properties:
-            outputs:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1SourceOutput'
-                description: |-
-                    Discovered output definitions. Only populated for Terraform module sources.
-                    Workload sources (Helm, Kustomize, manifests) do not have formal outputs --
-                    workload component outputs are user-declared at the component level.
-            resolved_version:
-                type: string
-                description: The version that was actually inspected.
-        description: |-
-            GetSourceOutputsResponse contains the discovered outputs for the source at
-            the requested version.
     v1GetSourceResponse:
         type: object
         properties:
@@ -7327,68 +7213,6 @@ definitions:
 
             Sources are tenant-scoped and optionally marked as catalog entries (curated,
             pre-approved artifacts managed by platform engineers).
-    v1SourceInput:
-        type: object
-        properties:
-            name:
-                type: string
-                description: Parameter name (e.g., "instance_class", "replicaCount").
-            type:
-                type: string
-                description: |-
-                    Type constraint as a string. For Terraform: HCL type expression
-                    (e.g., "string", "number", "list(string)", "object({name=string})").
-                    For Helm: JSON Schema type (e.g., "string", "integer", "object").
-                    Empty if type cannot be determined.
-            description:
-                type: string
-                description: |-
-                    Human-readable description of the parameter. From Terraform variable
-                    description or Helm values.schema.json description field.
-            default_value:
-                type: string
-                description: |-
-                    JSON-encoded default value. Null/absent means no default (parameter is
-                    required). For Terraform, this is the default from the variable block.
-                    For Helm, this is the value from values.yaml.
-            required:
-                type: boolean
-                description: |-
-                    Whether this parameter is required (no default value provided).
-                    For Terraform: true when the variable has no default.
-                    For Helm: true when values.schema.json marks it as required.
-            sensitive:
-                type: boolean
-                description: |-
-                    Whether this parameter is sensitive (should be masked in logs and UI).
-                    For Terraform: from the variable's sensitive attribute.
-                    For Helm: not typically available.
-        description: |-
-            SourceInput represents a configurable parameter discovered from the source
-            artifact. For Terraform modules, these are variable blocks. For Helm charts,
-            these are entries from values.yaml (with optional type info from
-            values.schema.json).
-    v1SourceOutput:
-        type: object
-        properties:
-            name:
-                type: string
-                description: Output name (e.g., "endpoint", "db_arn", "connection_string").
-            type:
-                type: string
-                description: Type of the output value, if declared (e.g., "string", "list(string)").
-            description:
-                type: string
-                description: Human-readable description of the output.
-            sensitive:
-                type: boolean
-                description: Whether this output is sensitive (masked in logs and CLI output).
-        description: |-
-            SourceOutput represents a value produced by the source after apply. Only
-            meaningful for Terraform modules, which declare formal output blocks.
-            Workload sources (Helm, Kustomize, manifests) do not have formal outputs --
-            workload component outputs are user-declared at the component level, not
-            discovered from the source.
     v1SourceTestStatus:
         type: string
         enum:
