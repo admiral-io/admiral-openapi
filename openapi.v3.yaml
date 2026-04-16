@@ -9254,71 +9254,59 @@ components:
             description: UpdateRunnerResponse contains the updated runner.
         admiral.source.v1.CreateSourceRequest:
             type: object
-            allOf:
-                - properties:
-                    name:
-                        type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: URL-safe, human-readable identifier. Must be unique within the tenant.
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: Optional description of the source's purpose.
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: URL-safe, human-readable identifier. Must be unique within the tenant.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: Optional description of the source's purpose.
+                type:
+                    not:
+                        enum:
+                            - SOURCE_TYPE_UNSPECIFIED
+                    title: type
+                    description: The kind of artifact and fetch protocol.
+                    $ref: '#/components/schemas/admiral.source.v1.SourceType'
+                url:
+                    type: string
+                    title: url
+                    minLength: 1
+                    description: Base URL for the source (see Source.url for per-type semantics).
+                credential_id:
                     type:
-                        not:
-                            enum:
-                                - SOURCE_TYPE_UNSPECIFIED
-                        title: type
-                        description: The kind of artifact and fetch protocol.
-                        $ref: '#/components/schemas/admiral.source.v1.SourceType'
-                    url:
+                        - string
+                        - "null"
+                    title: credential_id
+                    format: uuid
+                    description: |-
+                        Reference to the credential providing authentication (UUID). Optional for
+                         public sources.
+                catalog:
+                    type: boolean
+                    title: catalog
+                    description: Whether this is a curated catalog entry.
+                source_config:
+                    title: source_config
+                    description: |-
+                        Type-specific configuration. Only required for TERRAFORM and HELM;
+                         omit for GIT, OCI, HTTP.
+                    $ref: '#/components/schemas/admiral.source.v1.SourceConfig'
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
                         type: string
-                        title: url
-                        minLength: 1
-                        description: Base URL for the source (see Source.url for per-type semantics).
-                    credential_id:
-                        type:
-                            - string
-                            - "null"
-                        title: credential_id
-                        format: uuid
-                        description: |-
-                            Reference to the credential providing authentication (UUID). Optional for
-                             public sources.
-                    catalog:
-                        type: boolean
-                        title: catalog
-                        description: Whether this is a curated catalog entry.
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: Arbitrary key-value labels.
-                - oneOf:
-                    - type: object
-                      properties:
-                        helm:
-                            title: helm
-                            $ref: '#/components/schemas/admiral.source.v1.HelmConfig'
-                      title: helm
-                      required:
-                        - helm
-                    - type: object
-                      properties:
-                        terraform:
-                            title: terraform
-                            $ref: '#/components/schemas/admiral.source.v1.TerraformConfig'
-                      title: terraform
-                      required:
-                        - terraform
+                        title: value
+                        maxLength: 256
+                    description: Arbitrary key-value labels.
             title: CreateSourceRequest
             additionalProperties: false
             description: CreateSourceRequest contains the parameters for creating a new source.
@@ -9487,126 +9475,114 @@ components:
             description: ListSourcesResponse contains a page of sources.
         admiral.source.v1.Source:
             type: object
-            allOf:
-                - properties:
-                    id:
-                        type: string
-                        title: id
-                        format: uuid
-                        description: Unique identifier for the source (UUID).
-                    name:
-                        type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "corporate-rds", "nginx-chart").
-                             Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                             start with a letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: |-
-                            Optional longer-form description of the source's purpose
-                             (e.g., "Corporate-approved RDS module with encryption and backups").
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the source (UUID).
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier (e.g., "corporate-rds", "nginx-chart").
+                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
+                         start with a letter and end with an alphanumeric character (1-63 chars).
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: |-
+                        Optional longer-form description of the source's purpose
+                         (e.g., "Corporate-approved RDS module with encryption and backups").
+                type:
+                    title: type
+                    description: The kind of artifact and fetch protocol.
+                    $ref: '#/components/schemas/admiral.source.v1.SourceType'
+                url:
+                    type: string
+                    title: url
+                    minLength: 1
+                    description: |-
+                        Base URL for the source. The meaning varies by source type:
+                           - GIT: Git repo URL (https:// or git@host:...)
+                           - TERRAFORM: registry hostname (e.g., "registry.terraform.io")
+                           - HELM: chart repo URL (e.g., "https://charts.bitnami.com/bitnami")
+                           - OCI: OCI repository URL (e.g., "oci://ghcr.io/myorg/charts/my-app")
+                           - HTTP: full HTTP(S) URL to the archive (tar/zip) -- covers plain
+                             HTTP hosts and presigned S3/GCS/Azure Blob URLs.
+                credential_id:
                     type:
-                        title: type
-                        description: The kind of artifact and fetch protocol.
-                        $ref: '#/components/schemas/admiral.source.v1.SourceType'
-                    url:
+                        - string
+                        - "null"
+                    title: credential_id
+                    format: uuid
+                    description: |-
+                        Reference to the credential providing authentication for this source (UUID).
+                         Optional -- null for public sources that require no authentication
+                         (e.g., public Terraform registry, public Helm repos).
+                catalog:
+                    type: boolean
+                    title: catalog
+                    description: |-
+                        Whether this source is a curated catalog entry. Catalog sources are managed
+                         by platform engineers and may be the only sources available to developers
+                         if the organization enforces catalog-only policy.
+                source_config:
+                    title: source_config
+                    description: |-
+                        Type-specific configuration. Only set for source types whose location is
+                         not fully expressed by `url` alone (currently TERRAFORM and HELM, which
+                         both host multiple artifacts and need a selector). Other source types
+                         (GIT, OCI, HTTP) carry all location information in `url`.
+                    $ref: '#/components/schemas/admiral.source.v1.SourceConfig'
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
                         type: string
-                        title: url
-                        minLength: 1
-                        description: |-
-                            Base URL for the source. The meaning varies by source type:
-                               - GIT: Git repo URL (https:// or git@host:...)
-                               - TERRAFORM: registry hostname (e.g., "registry.terraform.io")
-                               - HELM: chart repo URL (e.g., "https://charts.bitnami.com/bitnami")
-                               - OCI: OCI repository URL (e.g., "oci://ghcr.io/myorg/charts/my-app")
-                               - HTTP: full HTTP(S) URL to the archive (tar/zip) -- covers plain
-                                 HTTP hosts and presigned S3/GCS/Azure Blob URLs.
-                    credential_id:
-                        type:
-                            - string
-                            - "null"
-                        title: credential_id
-                        format: uuid
-                        description: |-
-                            Reference to the credential providing authentication for this source (UUID).
-                             Optional -- null for public sources that require no authentication
-                             (e.g., public Terraform registry, public Helm repos).
-                    catalog:
-                        type: boolean
-                        title: catalog
-                        description: |-
-                            Whether this source is a curated catalog entry. Catalog sources are managed
-                             by platform engineers and may be the only sources available to developers
-                             if the organization enforces catalog-only policy.
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering sources
-                             (e.g., `{"team": "platform", "category": "database"}`).
-                    created_by:
-                        title: created_by
-                        description: The user or agent who created this source (server-populated from token).
-                        $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    last_test_status:
-                        oneOf:
-                            - $ref: '#/components/schemas/admiral.source.v1.SourceTestStatus'
-                            - type: "null"
-                        title: last_test_status
-                        description: |-
-                            Outcome of the most recent TestSource invocation. Reflects whether the
-                             attached credential successfully authenticated against `url` the last time
-                             a test was run. Absent if the source has never been tested.
-                    last_test_error:
-                        type: string
-                        title: last_test_error
-                        description: |-
-                            Human-readable error message from the most recent failed TestSource.
-                             Empty when `last_test_status` is SUCCESS or unset.
-                    last_tested_at:
-                        title: last_tested_at
-                        description: |-
-                            When TestSource was last invoked against this source. Absent if never
-                             tested.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    created_at:
-                        title: created_at
-                        description: When the source was created.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    updated_at:
-                        title: updated_at
-                        description: When the source was last updated.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                - oneOf:
-                    - type: object
-                      properties:
-                        helm:
-                            title: helm
-                            description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
-                            $ref: '#/components/schemas/admiral.source.v1.HelmConfig'
-                      title: helm
-                      required:
-                        - helm
-                    - type: object
-                      properties:
-                        terraform:
-                            title: terraform
-                            description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
-                            $ref: '#/components/schemas/admiral.source.v1.TerraformConfig'
-                      title: terraform
-                      required:
-                        - terraform
+                        title: value
+                        maxLength: 256
+                    description: |-
+                        Arbitrary key-value labels for organizing and filtering sources
+                         (e.g., `{"team": "platform", "category": "database"}`).
+                created_by:
+                    title: created_by
+                    description: The user or agent who created this source (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                last_test_status:
+                    oneOf:
+                        - $ref: '#/components/schemas/admiral.source.v1.SourceTestStatus'
+                        - type: "null"
+                    title: last_test_status
+                    description: |-
+                        Outcome of the most recent TestSource invocation. Reflects whether the
+                         attached credential successfully authenticated against `url` the last time
+                         a test was run. Absent if the source has never been tested.
+                last_test_error:
+                    type: string
+                    title: last_test_error
+                    description: |-
+                        Human-readable error message from the most recent failed TestSource.
+                         Empty when `last_test_status` is SUCCESS or unset.
+                last_tested_at:
+                    title: last_tested_at
+                    description: |-
+                        When TestSource was last invoked against this source. Absent if never
+                         tested.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                created_at:
+                    title: created_at
+                    description: When the source was created.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                updated_at:
+                    title: updated_at
+                    description: When the source was last updated.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Source
             additionalProperties: false
             description: |-
@@ -9640,6 +9616,34 @@ components:
                     title: value
             title: LabelsEntry
             additionalProperties: false
+        admiral.source.v1.SourceConfig:
+            type: object
+            oneOf:
+                - type: object
+                  properties:
+                    helm:
+                        title: helm
+                        description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
+                        $ref: '#/components/schemas/admiral.source.v1.HelmConfig'
+                  title: helm
+                  required:
+                    - helm
+                - type: object
+                  properties:
+                    terraform:
+                        title: terraform
+                        description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
+                        $ref: '#/components/schemas/admiral.source.v1.TerraformConfig'
+                  title: terraform
+                  required:
+                    - terraform
+            title: SourceConfig
+            additionalProperties: false
+            description: |-
+                SourceConfig is the type-specific configuration attached to a Source. Only
+                 source types whose location is not fully expressed by `url` alone (TERRAFORM,
+                 HELM) populate a variant. Source types whose URL is self-contained (GIT, OCI,
+                 HTTP) leave this message unset.
         admiral.source.v1.SourceTestStatus:
             type: string
             title: SourceTestStatus

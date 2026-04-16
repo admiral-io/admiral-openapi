@@ -3857,12 +3857,13 @@ definitions:
                             Whether this source is a curated catalog entry. Catalog sources are managed
                             by platform engineers and may be the only sources available to developers
                             if the organization enforces catalog-only policy.
-                    terraform:
-                        $ref: '#/definitions/admiralSourceV1TerraformConfig'
-                        description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
-                    helm:
-                        $ref: '#/definitions/v1HelmConfig'
-                        description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
+                    source_config:
+                        $ref: '#/definitions/v1SourceConfig'
+                        description: |-
+                            Type-specific configuration. Only set for source types whose location is
+                            not fully expressed by `url` alone (currently TERRAFORM and HELM, which
+                            both host multiple artifacts and need a selector). Other source types
+                            (GIT, OCI, HTTP) carry all location information in `url`.
                     labels:
                         type: object
                         additionalProperties:
@@ -5485,10 +5486,11 @@ definitions:
             catalog:
                 type: boolean
                 description: Whether this is a curated catalog entry.
-            terraform:
-                $ref: '#/definitions/admiralSourceV1TerraformConfig'
-            helm:
-                $ref: '#/definitions/v1HelmConfig'
+            source_config:
+                $ref: '#/definitions/v1SourceConfig'
+                description: |-
+                    Type-specific configuration. Only required for TERRAFORM and HELM;
+                    omit for GIT, OCI, HTTP.
             labels:
                 type: object
                 additionalProperties:
@@ -7165,12 +7167,13 @@ definitions:
                     Whether this source is a curated catalog entry. Catalog sources are managed
                     by platform engineers and may be the only sources available to developers
                     if the organization enforces catalog-only policy.
-            terraform:
-                $ref: '#/definitions/admiralSourceV1TerraformConfig'
-                description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
-            helm:
-                $ref: '#/definitions/v1HelmConfig'
-                description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
+            source_config:
+                $ref: '#/definitions/v1SourceConfig'
+                description: |-
+                    Type-specific configuration. Only set for source types whose location is
+                    not fully expressed by `url` alone (currently TERRAFORM and HELM, which
+                    both host multiple artifacts and need a selector). Other source types
+                    (GIT, OCI, HTTP) carry all location information in `url`.
             labels:
                 type: object
                 additionalProperties:
@@ -7213,6 +7216,20 @@ definitions:
 
             Sources are tenant-scoped and optionally marked as catalog entries (curated,
             pre-approved artifacts managed by platform engineers).
+    v1SourceConfig:
+        type: object
+        properties:
+            terraform:
+                $ref: '#/definitions/admiralSourceV1TerraformConfig'
+                description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
+            helm:
+                $ref: '#/definitions/v1HelmConfig'
+                description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
+        description: |-
+            SourceConfig is the type-specific configuration attached to a Source. Only
+            source types whose location is not fully expressed by `url` alone (TERRAFORM,
+            HELM) populate a variant. Source types whose URL is self-contained (GIT, OCI,
+            HTTP) leave this message unset.
     v1SourceTestStatus:
         type: string
         enum:
