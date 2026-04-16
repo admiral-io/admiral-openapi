@@ -869,6 +869,7 @@ paths:
                          environment overrides applied to each component.
                        - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
                        - `name` -- filter by component name.
+                       - `module_id` -- filter by module reference.
                   schema:
                     type: string
                     title: filter
@@ -883,6 +884,7 @@ paths:
                              environment overrides applied to each component.
                            - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
                            - `name` -- filter by component name.
+                           - `module_id` -- filter by module reference.
                 - name: page_size
                   in: query
                   description: Maximum number of components to return per page.
@@ -912,7 +914,7 @@ paths:
                 - Components
             summary: Create a component
             description: |-
-                The component name must be unique within the application. The source must
+                The component name must be unique within the application. The module must
                  exist and be accessible to the caller's tenant.
 
                  Scope: `app:write`
@@ -968,7 +970,7 @@ paths:
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. If unset, all mutable fields are updated.
-                                         Supported fields: `name`, `description`, `source_id`, `version`,
+                                         Supported fields: `name`, `description`, `module_id`, `version`,
                                          `values_template`, `depends_on`, `outputs`.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateComponentRequest
@@ -1116,7 +1118,7 @@ paths:
                 - Components
             summary: Set a component override
             description: |-
-                For example, a "redis" component might use a Helm chart source in dev but
+                For example, a "redis" component might use a Helm chart module in dev but
                  a Terraform ElastiCache module in prod.
 
                  This is an upsert -- if an override already exists for this component +
@@ -1163,18 +1165,19 @@ paths:
                                     type: boolean
                                     title: disabled
                                     description: When true, the component is not deployed in this environment.
-                                source_id:
+                                module_id:
                                     type:
                                         - string
                                         - "null"
-                                    title: source_id
+                                    title: module_id
                                     format: uuid
-                                    description: Override source (UUID). When set, replaces the component's default source.
+                                    description: Override module (UUID). When set, replaces the component's default module.
                                 version:
                                     type:
                                         - string
                                         - "null"
                                     title: version
+                                    maxLength: 256
                                     description: Override version. When set, replaces the component's default version.
                                 values_template:
                                     type:
@@ -5791,32 +5794,31 @@ components:
                     title: category
                     description: |-
                         Whether this is an infrastructure or workload component. Derived from
-                         the source type when the component is created, but stored explicitly
-                         for filtering and to determine execution behavior.
+                         the referenced module's type when the component is created, but stored
+                         explicitly for filtering and to determine execution behavior.
                     $ref: '#/components/schemas/admiral.component.v1.ComponentCategory'
-                source_id:
+                module_id:
                     type: string
-                    title: source_id
+                    title: module_id
                     format: uuid
                     description: |-
-                        The source artifact this component deploys (UUID). References a Source
-                         defined via the SourceAPI.
+                        The module this component deploys (UUID). References a Module defined
+                         via the ModuleAPI. The module's source, ref, root, and path are inherited.
                 version:
                     type: string
                     title: version
-                    minLength: 1
+                    maxLength: 256
                     description: |-
-                        Pinned version of the source artifact. For registry sources, a semver
-                         string (e.g., "1.2.3"). For Git sources, a tag, branch, or commit SHA.
-                         Required -- components always pin a version. Use UpdateComponent to
-                         change the version (rolling update).
+                        Optional ref override for the module's default ref. When empty, the
+                         module's ref is used. When set, overrides the module's ref at deploy time
+                         (e.g., pin a specific tag, branch, or commit SHA for this component).
                 values_template:
                     type: string
                     title: values_template
                     maxLength: 65536
                     description: |-
-                        Values template that maps configuration into the source's expected inputs.
-                         This is a JSON-encoded object where keys are the source input names and
+                        Values template that maps configuration into the module's expected inputs.
+                         This is a JSON-encoded object where keys are the module input names and
                          values are either literal values or template expressions.
 
                          Template expressions can reference:
@@ -5899,9 +5901,9 @@ components:
             additionalProperties: false
             description: |-
                 Component represents a named, deployable unit within an application. It
-                 binds a source artifact to an application with configuration (values
-                 template) that maps variables and other component outputs into the source's
-                 expected inputs.
+                 binds a module to an application with configuration (values template) that
+                 maps variables and other component outputs into the module's expected
+                 inputs.
 
                  Components are the nodes in Admiral's dependency graph. Infrastructure
                  components produce auto-discovered outputs (Terraform outputs). Workload
@@ -5934,8 +5936,9 @@ components:
                 - COMPONENT_CATEGORY_WORKLOAD
             description: |-
                 ComponentCategory indicates whether the component provisions infrastructure
-                 or deploys workloads. This is derived from the source type but stored
-                 explicitly for filtering and to determine rendering and execution behavior.
+                 or deploys workloads. This is derived from the referenced module's type but
+                 stored explicitly for filtering and to determine rendering and execution
+                 behavior.
         admiral.component.v1.ComponentOutput:
             type: object
             properties:
@@ -6003,17 +6006,17 @@ components:
                     description: |-
                         When true, the component is not deployed in this environment.
                          All other override fields are ignored when disabled.
-                source_id:
+                module_id:
                     type:
                         - string
                         - "null"
-                    title: source_id
+                    title: module_id
                     format: uuid
                     description: |-
-                        Override source for this environment (UUID). When set, this source is
-                         used instead of the component's default source. This may also change the
-                         component's effective category (e.g., switching from a Helm source to a
-                         Terraform source changes the component from workload to infrastructure
+                        Override module for this environment (UUID). When set, this module is
+                         used instead of the component's default module. This may also change the
+                         component's effective category (e.g., switching from a Helm module to a
+                         Terraform module changes the component from workload to infrastructure
                          in this environment).
                 version:
                     type:
@@ -6048,7 +6051,7 @@ components:
                     title: outputs
                     description: |-
                         Override outputs for this environment. When set, replaces the component's
-                         declared outputs. Useful when an override changes the source type
+                         declared outputs. Useful when an override changes the module type
                          (e.g., Helm → Terraform) and the output templates need to change.
                 created_by:
                     title: created_by
@@ -6071,7 +6074,7 @@ components:
                  defaults during deployment.
 
                  This enables patterns like:
-                   - Different sources per environment (Helm Redis in dev, Terraform
+                   - Different modules per environment (Helm Redis in dev, Terraform
                      ElastiCache in prod)
                    - Different versions per environment (canary version in staging)
                    - Different values per environment (smaller instance in dev)
@@ -6098,22 +6101,24 @@ components:
                     title: description
                     maxLength: 1024
                     description: Optional description of the component's purpose.
-                source_id:
+                module_id:
                     type: string
-                    title: source_id
+                    title: module_id
                     format: uuid
-                    description: The source artifact for this component (UUID).
+                    description: The module this component deploys (UUID).
                 version:
                     type: string
                     title: version
-                    minLength: 1
-                    description: Pinned version of the source artifact.
+                    maxLength: 256
+                    description: |-
+                        Optional ref override for the module's default ref. When empty, the
+                         module's default ref is used.
                 values_template:
                     type: string
                     title: values_template
                     maxLength: 65536
                     description: |-
-                        Values template mapping configuration into the source's inputs.
+                        Values template mapping configuration into the module's inputs.
                          See Component.values_template for template expression syntax.
                 depends_on:
                     type: array
@@ -6290,6 +6295,7 @@ components:
                              environment overrides applied to each component.
                            - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
                            - `name` -- filter by component name.
+                           - `module_id` -- filter by module reference.
                 page_size:
                     type: integer
                     title: page_size
@@ -6349,18 +6355,19 @@ components:
                     type: boolean
                     title: disabled
                     description: When true, the component is not deployed in this environment.
-                source_id:
+                module_id:
                     type:
                         - string
                         - "null"
-                    title: source_id
+                    title: module_id
                     format: uuid
-                    description: Override source (UUID). When set, replaces the component's default source.
+                    description: Override module (UUID). When set, replaces the component's default module.
                 version:
                     type:
                         - string
                         - "null"
                     title: version
+                    maxLength: 256
                     description: Override version. When set, replaces the component's default version.
                 values_template:
                     type:
@@ -6412,7 +6419,7 @@ components:
                     title: update_mask
                     description: |-
                         The set of fields to update. If unset, all mutable fields are updated.
-                         Supported fields: `name`, `description`, `source_id`, `version`,
+                         Supported fields: `name`, `description`, `module_id`, `version`,
                          `values_template`, `depends_on`, `outputs`.
                     $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateComponentRequest

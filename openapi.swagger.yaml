@@ -717,6 +717,7 @@ paths:
                         environment overrides applied to each component.
                       - `category` -- filter by component category (INFRASTRUCTURE, WORKLOAD).
                       - `name` -- filter by component name.
+                      - `module_id` -- filter by module reference.
                   in: query
                   required: false
                   type: string
@@ -736,7 +737,7 @@ paths:
         post:
             summary: CreateComponent adds a new component to an application.
             description: |-
-                The component name must be unique within the application. The source must
+                The component name must be unique within the application. The module must
                 exist and be accessible to the caller's tenant.
 
                 Scope: `app:write`
@@ -941,10 +942,10 @@ paths:
         put:
             summary: |-
                 SetComponentOverride creates or replaces an environment-level override for
-                a component. Overrides allow an environment to use a different source,
+                a component. Overrides allow an environment to use a different module,
                 version, values template, or to disable the component entirely.
             description: |-
-                For example, a "redis" component might use a Helm chart source in dev but
+                For example, a "redis" component might use a Helm chart module in dev but
                 a Terraform ElastiCache module in prod.
 
                 This is an upsert -- if an override already exists for this component +
@@ -3500,9 +3501,9 @@ definitions:
             disabled:
                 type: boolean
                 description: When true, the component is not deployed in this environment.
-            source_id:
+            module_id:
                 type: string
-                description: Override source (UUID). When set, replaces the component's default source.
+                description: Override module (UUID). When set, replaces the component's default module.
             version:
                 type: string
                 description: Override version. When set, replaces the component's default version.
@@ -3550,25 +3551,24 @@ definitions:
                         $ref: '#/definitions/v1ComponentCategory'
                         description: |-
                             Whether this is an infrastructure or workload component. Derived from
-                            the source type when the component is created, but stored explicitly
-                            for filtering and to determine execution behavior.
-                    source_id:
+                            the referenced module's type when the component is created, but stored
+                            explicitly for filtering and to determine execution behavior.
+                    module_id:
                         type: string
                         description: |-
-                            The source artifact this component deploys (UUID). References a Source
-                            defined via the SourceAPI.
+                            The module this component deploys (UUID). References a Module defined
+                            via the ModuleAPI. The module's source, ref, root, and path are inherited.
                     version:
                         type: string
                         description: |-
-                            Pinned version of the source artifact. For registry sources, a semver
-                            string (e.g., "1.2.3"). For Git sources, a tag, branch, or commit SHA.
-                            Required -- components always pin a version. Use UpdateComponent to
-                            change the version (rolling update).
+                            Optional ref override for the module's default ref. When empty, the
+                            module's ref is used. When set, overrides the module's ref at deploy time
+                            (e.g., pin a specific tag, branch, or commit SHA for this component).
                     values_template:
                         type: string
                         description: |-
-                            Values template that maps configuration into the source's expected inputs.
-                            This is a JSON-encoded object where keys are the source input names and
+                            Values template that maps configuration into the module's expected inputs.
+                            This is a JSON-encoded object where keys are the module input names and
                             values are either literal values or template expressions.
 
                             Template expressions can reference:
@@ -3649,7 +3649,7 @@ definitions:
                 type: string
                 description: |-
                     The set of fields to update. If unset, all mutable fields are updated.
-                    Supported fields: `name`, `description`, `source_id`, `version`,
+                    Supported fields: `name`, `description`, `module_id`, `version`,
                     `values_template`, `depends_on`, `outputs`.
         description: UpdateComponentRequest contains the component fields to update.
     ConnectionAPITestConnectionBody:
@@ -4960,25 +4960,24 @@ definitions:
                 $ref: '#/definitions/v1ComponentCategory'
                 description: |-
                     Whether this is an infrastructure or workload component. Derived from
-                    the source type when the component is created, but stored explicitly
-                    for filtering and to determine execution behavior.
-            source_id:
+                    the referenced module's type when the component is created, but stored
+                    explicitly for filtering and to determine execution behavior.
+            module_id:
                 type: string
                 description: |-
-                    The source artifact this component deploys (UUID). References a Source
-                    defined via the SourceAPI.
+                    The module this component deploys (UUID). References a Module defined
+                    via the ModuleAPI. The module's source, ref, root, and path are inherited.
             version:
                 type: string
                 description: |-
-                    Pinned version of the source artifact. For registry sources, a semver
-                    string (e.g., "1.2.3"). For Git sources, a tag, branch, or commit SHA.
-                    Required -- components always pin a version. Use UpdateComponent to
-                    change the version (rolling update).
+                    Optional ref override for the module's default ref. When empty, the
+                    module's ref is used. When set, overrides the module's ref at deploy time
+                    (e.g., pin a specific tag, branch, or commit SHA for this component).
             values_template:
                 type: string
                 description: |-
-                    Values template that maps configuration into the source's expected inputs.
-                    This is a JSON-encoded object where keys are the source input names and
+                    Values template that maps configuration into the module's expected inputs.
+                    This is a JSON-encoded object where keys are the module input names and
                     values are either literal values or template expressions.
 
                     Template expressions can reference:
@@ -5054,9 +5053,9 @@ definitions:
                 description: When the component was last updated.
         description: |-
             Component represents a named, deployable unit within an application. It
-            binds a source artifact to an application with configuration (values
-            template) that maps variables and other component outputs into the source's
-            expected inputs.
+            binds a module to an application with configuration (values template) that
+            maps variables and other component outputs into the module's expected
+            inputs.
 
             Components are the nodes in Admiral's dependency graph. Infrastructure
             components produce auto-discovered outputs (Terraform outputs). Workload
@@ -5072,15 +5071,16 @@ definitions:
         default: COMPONENT_CATEGORY_UNSPECIFIED
         description: |-
             ComponentCategory indicates whether the component provisions infrastructure
-            or deploys workloads. This is derived from the source type but stored
-            explicitly for filtering and to determine rendering and execution behavior.
+            or deploys workloads. This is derived from the referenced module's type but
+            stored explicitly for filtering and to determine rendering and execution
+            behavior.
 
              - COMPONENT_CATEGORY_UNSPECIFIED: Default value. Must not be used.
-             - COMPONENT_CATEGORY_INFRASTRUCTURE: Infrastructure component backed by a Terraform source. Follows the
+             - COMPONENT_CATEGORY_INFRASTRUCTURE: Infrastructure component backed by a Terraform module. Follows the
             plan → approve → apply lifecycle. Produces outputs that are
             auto-discovered from the Terraform module's output blocks. Each
             component gets its own Terraform state.
-             - COMPONENT_CATEGORY_WORKLOAD: Workload component backed by a Kubernetes source (Helm, Kustomize, raw
+             - COMPONENT_CATEGORY_WORKLOAD: Workload component backed by a Kubernetes module (Helm, Kustomize, raw
             manifests). Applied to the target cluster via the K8s agent. CRD ordering
             is handled within the rendered bundle. Outputs must be declared explicitly
             via the component's `outputs` field.
@@ -5135,13 +5135,13 @@ definitions:
                 description: |-
                     When true, the component is not deployed in this environment.
                     All other override fields are ignored when disabled.
-            source_id:
+            module_id:
                 type: string
                 description: |-
-                    Override source for this environment (UUID). When set, this source is
-                    used instead of the component's default source. This may also change the
-                    component's effective category (e.g., switching from a Helm source to a
-                    Terraform source changes the component from workload to infrastructure
+                    Override module for this environment (UUID). When set, this module is
+                    used instead of the component's default module. This may also change the
+                    component's effective category (e.g., switching from a Helm module to a
+                    Terraform module changes the component from workload to infrastructure
                     in this environment).
             version:
                 type: string
@@ -5168,7 +5168,7 @@ definitions:
                     $ref: '#/definitions/v1ComponentOutput'
                 description: |-
                     Override outputs for this environment. When set, replaces the component's
-                    declared outputs. Useful when an override changes the source type
+                    declared outputs. Useful when an override changes the module type
                     (e.g., Helm → Terraform) and the output templates need to change.
             created_by:
                 $ref: '#/definitions/v1ActorRef'
@@ -5188,7 +5188,7 @@ definitions:
             defaults during deployment.
 
             This enables patterns like:
-              - Different sources per environment (Helm Redis in dev, Terraform
+              - Different modules per environment (Helm Redis in dev, Terraform
                 ElastiCache in prod)
               - Different versions per environment (canary version in staging)
               - Different values per environment (smaller instance in dev)
@@ -5460,16 +5460,18 @@ definitions:
             description:
                 type: string
                 description: Optional description of the component's purpose.
-            source_id:
+            module_id:
                 type: string
-                description: The source artifact for this component (UUID).
+                description: The module this component deploys (UUID).
             version:
                 type: string
-                description: Pinned version of the source artifact.
+                description: |-
+                    Optional ref override for the module's default ref. When empty, the
+                    module's default ref is used.
             values_template:
                 type: string
                 description: |-
-                    Values template mapping configuration into the source's inputs.
+                    Values template mapping configuration into the module's inputs.
                     See Component.values_template for template expression syntax.
             depends_on:
                 type: array
