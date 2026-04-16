@@ -2166,6 +2166,239 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.healthcheck.v1.HealthcheckResponse'
+    /api/v1/modules:
+        get:
+            tags:
+                - Modules
+            summary: List modules
+            description: 'Scope: `module:read`'
+            operationId: ModuleAPI_ListModules
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                     Filterable fields:
+                       - `name` -- filter by module name.
+                       - `type` -- filter by module type (TERRAFORM, HELM, KUSTOMIZE, MANIFEST).
+                       - `source_id` -- filter by source reference.
+
+                     Example: `field['type'] = 'TERRAFORM'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Filterable fields:
+                           - `name` -- filter by module name.
+                           - `type` -- filter by module type (TERRAFORM, HELM, KUSTOMIZE, MANIFEST).
+                           - `source_id` -- filter by source reference.
+
+                         Example: `field['type'] = 'TERRAFORM'`
+                - name: page_size
+                  in: query
+                  description: Maximum number of modules to return per page.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: Maximum number of modules to return per page.
+                - name: page_token
+                  in: query
+                  description: Opaque pagination token from a previous response.
+                  schema:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.module.v1.ListModulesResponse'
+        post:
+            tags:
+                - Modules
+            summary: Create a module
+            description: |-
+                The referenced source must exist. The module's ref, root, and path are
+                 optional and default to empty (meaning: the source's default ref, the
+                 repository root, and the root itself as working directory).
+
+                 Scope: `module:write`
+            operationId: ModuleAPI_CreateModule
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.module.v1.CreateModuleRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.module.v1.CreateModuleResponse'
+    /api/v1/modules/{module.id}:
+        patch:
+            tags:
+                - Modules
+            summary: Update a module
+            description: 'Scope: `module:write`'
+            operationId: ModuleAPI_UpdateModule
+            parameters:
+                - name: module.id
+                  in: path
+                  description: Unique identifier for the module (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the module (UUID).
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                module:
+                                    title: module
+                                    description: |-
+                                        The module with updated fields. Only fields specified in `update_mask`
+                                         are updated.
+                                    $ref: '#/components/schemas/admiral.module.v1.Module'
+                                update_mask:
+                                    title: update_mask
+                                    description: |-
+                                        The set of fields to update. Required -- the server rejects updates
+                                         without a mask to prevent accidental full-replace.
+                                         Supported fields: `name`, `description`, `source_id`, `ref`, `root`,
+                                         `path`, `labels`.
+                                         Immutable: `type` (returns InvalidArgument if included).
+                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
+                            title: UpdateModuleRequest
+                            required:
+                                - module
+                            additionalProperties: false
+                            description: UpdateModuleRequest contains the module fields to update.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.module.v1.UpdateModuleResponse'
+    /api/v1/modules/{module_id}:
+        get:
+            tags:
+                - Modules
+            summary: Retrieve a module
+            description: 'Scope: `module:read`'
+            operationId: ModuleAPI_GetModule
+            parameters:
+                - name: module_id
+                  in: path
+                  description: Unique identifier of the module (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: module_id
+                    format: uuid
+                    description: Unique identifier of the module (UUID).
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.module.v1.GetModuleResponse'
+        delete:
+            tags:
+                - Modules
+            summary: Delete a module
+            description: 'Scope: `module:write`'
+            operationId: ModuleAPI_DeleteModule
+            parameters:
+                - name: module_id
+                  in: path
+                  description: |-
+                    Unique identifier of the module to delete (UUID).
+                     Fails if any components still reference this module.
+                  required: true
+                  schema:
+                    type: string
+                    title: module_id
+                    format: uuid
+                    description: |-
+                        Unique identifier of the module to delete (UUID).
+                         Fails if any components still reference this module.
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.module.v1.DeleteModuleResponse'
+    /api/v1/modules/{module_id}/resolve:
+        post:
+            tags:
+                - Modules
+            summary: Resolve a module
+            description: |-
+                This operation fetches from the external system in real time and may take
+                 several seconds depending on the source type and size.
+
+                 Scope: `module:read`
+            operationId: ModuleAPI_ResolveModule
+            parameters:
+                - name: module_id
+                  in: path
+                  description: Unique identifier of the module to resolve (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: module_id
+                    format: uuid
+                    description: Unique identifier of the module to resolve (UUID).
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                module_id:
+                                    type: string
+                                    title: module_id
+                                    format: uuid
+                                    description: Unique identifier of the module to resolve (UUID).
+                                ref_override:
+                                    type: string
+                                    title: ref_override
+                                    maxLength: 256
+                                    description: |-
+                                        Optional ref override. When set, this ref is used instead of the module's
+                                         default ref. Useful for previewing a different version without modifying
+                                         the module definition.
+                            title: ResolveModuleRequest
+                            additionalProperties: false
+                            description: ResolveModuleRequest identifies a module to resolve.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.module.v1.ResolveModuleResponse'
     /api/v1/runner/heartbeat:
         post:
             tags:
@@ -8337,6 +8570,359 @@ components:
             additionalProperties: false
             description: |-
                 Empty response indicating the service is healthy.
+        admiral.module.v1.CreateModuleRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: URL-safe, human-readable identifier. Must be unique within the tenant.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: Optional description of the module's purpose.
+                type:
+                    not:
+                        enum:
+                            - MODULE_TYPE_UNSPECIFIED
+                    title: type
+                    description: The content type -- what this module contains and how it should be executed.
+                    $ref: '#/components/schemas/admiral.module.v1.ModuleType'
+                source_id:
+                    type: string
+                    title: source_id
+                    format: uuid
+                    description: Reference to the Source this module fetches from (UUID).
+                ref:
+                    type: string
+                    title: ref
+                    maxLength: 256
+                    description: Git ref, registry version, chart version, or OCI tag.
+                root:
+                    type: string
+                    title: root
+                    maxLength: 512
+                    description: Subdirectory within the fetched tree to treat as the module root.
+                path:
+                    type: string
+                    title: path
+                    maxLength: 512
+                    description: Working directory within root for execution.
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+                    description: Arbitrary key-value labels.
+            title: CreateModuleRequest
+            additionalProperties: false
+            description: CreateModuleRequest contains the parameters for creating a new module.
+        admiral.module.v1.CreateModuleRequest.LabelsEntry:
+            type: object
+            properties:
+                key:
+                    type: string
+                    title: key
+                value:
+                    type: string
+                    title: value
+            title: LabelsEntry
+            additionalProperties: false
+        admiral.module.v1.CreateModuleResponse:
+            type: object
+            properties:
+                module:
+                    title: module
+                    description: The created module.
+                    $ref: '#/components/schemas/admiral.module.v1.Module'
+            title: CreateModuleResponse
+            additionalProperties: false
+            description: CreateModuleResponse contains the newly created module.
+        admiral.module.v1.DeleteModuleRequest:
+            type: object
+            properties:
+                module_id:
+                    type: string
+                    title: module_id
+                    format: uuid
+                    description: |-
+                        Unique identifier of the module to delete (UUID).
+                         Fails if any components still reference this module.
+            title: DeleteModuleRequest
+            additionalProperties: false
+            description: DeleteModuleRequest identifies a module to delete.
+        admiral.module.v1.DeleteModuleResponse:
+            type: object
+            title: DeleteModuleResponse
+            additionalProperties: false
+            description: DeleteModuleResponse is empty on success.
+        admiral.module.v1.GetModuleRequest:
+            type: object
+            properties:
+                module_id:
+                    type: string
+                    title: module_id
+                    format: uuid
+                    description: Unique identifier of the module (UUID).
+            title: GetModuleRequest
+            additionalProperties: false
+            description: GetModuleRequest identifies a module to retrieve.
+        admiral.module.v1.GetModuleResponse:
+            type: object
+            properties:
+                module:
+                    title: module
+                    description: The module record.
+                    $ref: '#/components/schemas/admiral.module.v1.Module'
+            title: GetModuleResponse
+            additionalProperties: false
+            description: GetModuleResponse contains the module record.
+        admiral.module.v1.ListModulesRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Filterable fields:
+                           - `name` -- filter by module name.
+                           - `type` -- filter by module type (TERRAFORM, HELM, KUSTOMIZE, MANIFEST).
+                           - `source_id` -- filter by source reference.
+
+                         Example: `field['type'] = 'TERRAFORM'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: Maximum number of modules to return per page.
+                page_token:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            title: ListModulesRequest
+            additionalProperties: false
+            description: ListModulesRequest contains pagination and filter parameters.
+        admiral.module.v1.ListModulesResponse:
+            type: object
+            properties:
+                modules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.module.v1.Module'
+                    title: modules
+                    description: The list of modules.
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                    description: Pagination token for the next page. Empty when there are no more results.
+            title: ListModulesResponse
+            additionalProperties: false
+            description: ListModulesResponse contains a page of modules.
+        admiral.module.v1.Module:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the module (UUID).
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
+                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
+                         start with a letter and end with an alphanumeric character (1-63 chars).
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: |-
+                        Optional longer-form description of the module's purpose
+                         (e.g., "Standard VPC module for billing workloads").
+                type:
+                    title: type
+                    description: The content type -- what this module contains and how it should be executed.
+                    $ref: '#/components/schemas/admiral.module.v1.ModuleType'
+                source_id:
+                    type: string
+                    title: source_id
+                    format: uuid
+                    description: Reference to the Source this module fetches from (UUID).
+                ref:
+                    type: string
+                    title: ref
+                    maxLength: 256
+                    description: |-
+                        Git ref, registry version, chart version, or OCI tag to fetch.
+                         Optional -- when empty, the backend uses its default (e.g., HEAD for Git,
+                         latest for registries). This is an overridable default: Components can
+                         override the ref at deploy time.
+                root:
+                    type: string
+                    title: root
+                    maxLength: 512
+                    description: |-
+                        Subdirectory within the fetched tree to treat as the module root.
+                         Optional -- when empty, the entire fetched tree is the module root.
+                         Example: "modules/vpc" within a monorepo.
+                path:
+                    type: string
+                    title: path
+                    maxLength: 512
+                    description: |-
+                        Working directory within root for execution (e.g., "environments/prod").
+                         Optional -- when empty, defaults to root itself.
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+                    description: |-
+                        Arbitrary key-value labels for organizing and filtering modules
+                         (e.g., `{"team": "platform", "stack": "networking"}`).
+                created_by:
+                    title: created_by
+                    description: The user or agent who created this module (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                created_at:
+                    title: created_at
+                    description: When the module was created.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                updated_at:
+                    title: updated_at
+                    description: When the module was last updated.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+            title: Module
+            additionalProperties: false
+            description: |-
+                Module represents a named reference to a slice of content within a Source at
+                 a specific ref. One Source can back many Modules (different refs, different
+                 subtrees, different working directories).
+
+                 The module type identifies what the content is (Terraform, Helm, Kustomize,
+                 raw manifests) independently of how it is fetched (the Source type). This
+                 separation allows a single Git source to back Terraform, Helm, and manifest
+                 modules in different subdirectories.
+        admiral.module.v1.Module.LabelsEntry:
+            type: object
+            properties:
+                key:
+                    type: string
+                    title: key
+                value:
+                    type: string
+                    title: value
+            title: LabelsEntry
+            additionalProperties: false
+        admiral.module.v1.ModuleType:
+            type: string
+            title: ModuleType
+            enum:
+                - MODULE_TYPE_UNSPECIFIED
+                - MODULE_TYPE_TERRAFORM
+                - MODULE_TYPE_HELM
+                - MODULE_TYPE_KUSTOMIZE
+                - MODULE_TYPE_MANIFEST
+            description: |-
+                ModuleType identifies the content semantics -- what the fetched content is and
+                 how it should be executed. This is orthogonal to SourceType, which identifies
+                 the fetch protocol. A single GIT source can back TERRAFORM, HELM, KUSTOMIZE,
+                 and MANIFEST modules in different subdirectories.
+        admiral.module.v1.ResolveModuleRequest:
+            type: object
+            properties:
+                module_id:
+                    type: string
+                    title: module_id
+                    format: uuid
+                    description: Unique identifier of the module to resolve (UUID).
+                ref_override:
+                    type: string
+                    title: ref_override
+                    maxLength: 256
+                    description: |-
+                        Optional ref override. When set, this ref is used instead of the module's
+                         default ref. Useful for previewing a different version without modifying
+                         the module definition.
+            title: ResolveModuleRequest
+            additionalProperties: false
+            description: ResolveModuleRequest identifies a module to resolve.
+        admiral.module.v1.ResolveModuleResponse:
+            type: object
+            properties:
+                revision:
+                    type: string
+                    title: revision
+                    description: |-
+                        The resolved revision identifier. For Git sources, this is the commit SHA.
+                         For registry sources, the canonical version string. For HTTP, a content hash.
+                digest:
+                    type: string
+                    title: digest
+                    description: |-
+                        Content-addressing digest of the fetched content (e.g., "sha1:<commit>",
+                         "sha256:<hash>").
+                module:
+                    title: module
+                    description: The module that was resolved, with current field values.
+                    $ref: '#/components/schemas/admiral.module.v1.Module'
+            title: ResolveModuleResponse
+            additionalProperties: false
+            description: |-
+                ResolveModuleResponse contains the resolved metadata from fetching the
+                 module's content via its Source.
+        admiral.module.v1.UpdateModuleRequest:
+            type: object
+            properties:
+                module:
+                    title: module
+                    description: |-
+                        The module with updated fields. Only fields specified in `update_mask`
+                         are updated.
+                    $ref: '#/components/schemas/admiral.module.v1.Module'
+                update_mask:
+                    title: update_mask
+                    description: |-
+                        The set of fields to update. Required -- the server rejects updates
+                         without a mask to prevent accidental full-replace.
+                         Supported fields: `name`, `description`, `source_id`, `ref`, `root`,
+                         `path`, `labels`.
+                         Immutable: `type` (returns InvalidArgument if included).
+                    $ref: '#/components/schemas/google.protobuf.FieldMask'
+            title: UpdateModuleRequest
+            required:
+                - module
+            additionalProperties: false
+            description: UpdateModuleRequest contains the module fields to update.
+        admiral.module.v1.UpdateModuleResponse:
+            type: object
+            properties:
+                module:
+                    title: module
+                    description: The updated module.
+                    $ref: '#/components/schemas/admiral.module.v1.Module'
+            title: UpdateModuleResponse
+            additionalProperties: false
+            description: UpdateModuleResponse contains the updated module.
         admiral.runner.v1.ActiveJobInfo:
             type: object
             properties:

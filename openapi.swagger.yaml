@@ -10,6 +10,7 @@ tags:
     - name: CredentialAPI
     - name: DeploymentAPI
     - name: EnvironmentAPI
+    - name: ModuleAPI
     - name: RunnerAPI
     - name: SourceAPI
     - name: StateAPI
@@ -1725,6 +1726,186 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             tags:
                 - HealthcheckAPI
+    /api/v1/modules:
+        get:
+            summary: |-
+                ListModules returns a paginated list of modules within the caller's tenant.
+                Use the filter to scope by name, source, or labels.
+            description: 'Scope: `module:read`'
+            operationId: ModuleAPI_ListModules
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListModulesResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                    Filterable fields:
+                      - `name` -- filter by module name.
+                      - `type` -- filter by module type (TERRAFORM, HELM, KUSTOMIZE, MANIFEST).
+                      - `source_id` -- filter by source reference.
+
+                    Example: `field['type'] = 'TERRAFORM'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  description: Maximum number of modules to return per page.
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  description: Opaque pagination token from a previous response.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - ModuleAPI
+        post:
+            summary: CreateModule registers a new module definition within the caller's tenant.
+            description: |-
+                The referenced source must exist. The module's ref, root, and path are
+                optional and default to empty (meaning: the source's default ref, the
+                repository root, and the root itself as working directory).
+
+                Scope: `module:write`
+            operationId: ModuleAPI_CreateModule
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateModuleResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: CreateModuleRequest contains the parameters for creating a new module.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateModuleRequest'
+            tags:
+                - ModuleAPI
+    /api/v1/modules/{module.id}:
+        patch:
+            summary: |-
+                UpdateModule updates a module's mutable fields.
+                Use the `update_mask` to specify which fields to update.
+            description: 'Scope: `module:write`'
+            operationId: ModuleAPI_UpdateModule
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdateModuleResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: module.id
+                  description: Unique identifier for the module (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ModuleAPIUpdateModuleBody'
+            tags:
+                - ModuleAPI
+    /api/v1/modules/{module_id}:
+        get:
+            summary: GetModule retrieves a module by ID.
+            description: 'Scope: `module:read`'
+            operationId: ModuleAPI_GetModule
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetModuleResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: module_id
+                  description: Unique identifier of the module (UUID).
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ModuleAPI
+        delete:
+            summary: |-
+                DeleteModule permanently deletes a module definition. Fails if any
+                components still reference this module. This action cannot be undone.
+            description: 'Scope: `module:write`'
+            operationId: ModuleAPI_DeleteModule
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteModuleResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: module_id
+                  description: |-
+                    Unique identifier of the module to delete (UUID).
+                    Fails if any components still reference this module.
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ModuleAPI
+    /api/v1/modules/{module_id}/resolve:
+        post:
+            summary: |-
+                ResolveModule fetches the module via its Source and returns the resolved
+                revision and content digest. Does NOT stream content -- content delivery
+                to Runners is a separate concern (Phase 6).
+            description: |-
+                This operation fetches from the external system in real time and may take
+                several seconds depending on the source type and size.
+
+                Scope: `module:read`
+            operationId: ModuleAPI_ResolveModule
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ResolveModuleResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: module_id
+                  description: Unique identifier of the module to resolve (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ModuleAPIResolveModuleBody'
+            tags:
+                - ModuleAPI
     /api/v1/runner/heartbeat:
         post:
             summary: |-
@@ -3735,6 +3916,87 @@ definitions:
                     When updating target lists, the entire list is replaced -- there is no
                     partial merge of individual targets within the list.
         description: UpdateEnvironmentRequest contains the environment fields to update.
+    ModuleAPIResolveModuleBody:
+        type: object
+        properties:
+            ref_override:
+                type: string
+                description: |-
+                    Optional ref override. When set, this ref is used instead of the module's
+                    default ref. Useful for previewing a different version without modifying
+                    the module definition.
+        description: ResolveModuleRequest identifies a module to resolve.
+    ModuleAPIUpdateModuleBody:
+        type: object
+        properties:
+            module:
+                type: object
+                properties:
+                    name:
+                        type: string
+                        description: |-
+                            URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
+                            Unique within the tenant. Lowercase alphanumeric and hyphens only, must
+                            start with a letter and end with an alphanumeric character (1-63 chars).
+                    description:
+                        type: string
+                        description: |-
+                            Optional longer-form description of the module's purpose
+                            (e.g., "Standard VPC module for billing workloads").
+                    type:
+                        $ref: '#/definitions/v1ModuleType'
+                        description: The content type -- what this module contains and how it should be executed.
+                    source_id:
+                        type: string
+                        description: Reference to the Source this module fetches from (UUID).
+                    ref:
+                        type: string
+                        description: |-
+                            Git ref, registry version, chart version, or OCI tag to fetch.
+                            Optional -- when empty, the backend uses its default (e.g., HEAD for Git,
+                            latest for registries). This is an overridable default: Components can
+                            override the ref at deploy time.
+                    root:
+                        type: string
+                        description: |-
+                            Subdirectory within the fetched tree to treat as the module root.
+                            Optional -- when empty, the entire fetched tree is the module root.
+                            Example: "modules/vpc" within a monorepo.
+                    path:
+                        type: string
+                        description: |-
+                            Working directory within root for execution (e.g., "environments/prod").
+                            Optional -- when empty, defaults to root itself.
+                    labels:
+                        type: object
+                        additionalProperties:
+                            type: string
+                        description: |-
+                            Arbitrary key-value labels for organizing and filtering modules
+                            (e.g., `{"team": "platform", "stack": "networking"}`).
+                    created_by:
+                        $ref: '#/definitions/v1ActorRef'
+                        description: The user or agent who created this module (server-populated from token).
+                    created_at:
+                        type: string
+                        format: date-time
+                        description: When the module was created.
+                    updated_at:
+                        type: string
+                        format: date-time
+                        description: When the module was last updated.
+                description: |-
+                    The module with updated fields. Only fields specified in `update_mask`
+                    are updated.
+            update_mask:
+                type: string
+                description: |-
+                    The set of fields to update. Required -- the server rejects updates
+                    without a mask to prevent accidental full-replace.
+                    Supported fields: `name`, `description`, `source_id`, `ref`, `root`,
+                    `path`, `labels`.
+                    Immutable: `type` (returns InvalidArgument if included).
+        description: UpdateModuleRequest contains the module fields to update.
     RunnerAPICreateRunnerTokenBody:
         type: object
         properties:
@@ -5384,6 +5646,43 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The created environment.
         description: CreateEnvironmentResponse contains the newly created environment.
+    v1CreateModuleRequest:
+        type: object
+        properties:
+            name:
+                type: string
+                description: URL-safe, human-readable identifier. Must be unique within the tenant.
+            description:
+                type: string
+                description: Optional description of the module's purpose.
+            type:
+                $ref: '#/definitions/v1ModuleType'
+                description: The content type -- what this module contains and how it should be executed.
+            source_id:
+                type: string
+                description: Reference to the Source this module fetches from (UUID).
+            ref:
+                type: string
+                description: Git ref, registry version, chart version, or OCI tag.
+            root:
+                type: string
+                description: Subdirectory within the fetched tree to treat as the module root.
+            path:
+                type: string
+                description: Working directory within root for execution.
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+                description: Arbitrary key-value labels.
+        description: CreateModuleRequest contains the parameters for creating a new module.
+    v1CreateModuleResponse:
+        type: object
+        properties:
+            module:
+                $ref: '#/definitions/v1Module'
+                description: The created module.
+        description: CreateModuleResponse contains the newly created module.
     v1CreatePersonalAccessTokenRequest:
         type: object
         properties:
@@ -5652,6 +5951,9 @@ definitions:
     v1DeleteEnvironmentResponse:
         type: object
         description: DeleteEnvironmentResponse is empty on success.
+    v1DeleteModuleResponse:
+        type: object
+        description: DeleteModuleResponse is empty on success.
     v1DeleteRunnerResponse:
         type: object
         description: DeleteRunnerResponse is empty on success.
@@ -6000,6 +6302,13 @@ definitions:
                 $ref: '#/definitions/v1User'
                 description: The user profile.
         description: GetMeResponse contains the authenticated user's profile.
+    v1GetModuleResponse:
+        type: object
+        properties:
+            module:
+                $ref: '#/definitions/v1Module'
+                description: The module record.
+        description: GetModuleResponse contains the module record.
     v1GetPersonalAccessTokenResponse:
         type: object
         properties:
@@ -6489,6 +6798,19 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListEnvironmentsResponse contains a page of environments.
+    v1ListModulesResponse:
+        type: object
+        properties:
+            modules:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Module'
+                description: The list of modules.
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListModulesResponse contains a page of modules.
     v1ListPersonalAccessTokensResponse:
         type: object
         properties:
@@ -6644,6 +6966,99 @@ definitions:
                 type: string
                 description: The IdP authorization URL. The client should redirect the browser here.
         description: LoginResponse contains the IdP authorization URL for the client to redirect to.
+    v1Module:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier for the module (UUID).
+            name:
+                type: string
+                description: |-
+                    URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
+                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must
+                    start with a letter and end with an alphanumeric character (1-63 chars).
+            description:
+                type: string
+                description: |-
+                    Optional longer-form description of the module's purpose
+                    (e.g., "Standard VPC module for billing workloads").
+            type:
+                $ref: '#/definitions/v1ModuleType'
+                description: The content type -- what this module contains and how it should be executed.
+            source_id:
+                type: string
+                description: Reference to the Source this module fetches from (UUID).
+            ref:
+                type: string
+                description: |-
+                    Git ref, registry version, chart version, or OCI tag to fetch.
+                    Optional -- when empty, the backend uses its default (e.g., HEAD for Git,
+                    latest for registries). This is an overridable default: Components can
+                    override the ref at deploy time.
+            root:
+                type: string
+                description: |-
+                    Subdirectory within the fetched tree to treat as the module root.
+                    Optional -- when empty, the entire fetched tree is the module root.
+                    Example: "modules/vpc" within a monorepo.
+            path:
+                type: string
+                description: |-
+                    Working directory within root for execution (e.g., "environments/prod").
+                    Optional -- when empty, defaults to root itself.
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+                description: |-
+                    Arbitrary key-value labels for organizing and filtering modules
+                    (e.g., `{"team": "platform", "stack": "networking"}`).
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                description: The user or agent who created this module (server-populated from token).
+            created_at:
+                type: string
+                format: date-time
+                description: When the module was created.
+            updated_at:
+                type: string
+                format: date-time
+                description: When the module was last updated.
+        description: |-
+            Module represents a named reference to a slice of content within a Source at
+            a specific ref. One Source can back many Modules (different refs, different
+            subtrees, different working directories).
+
+            The module type identifies what the content is (Terraform, Helm, Kustomize,
+            raw manifests) independently of how it is fetched (the Source type). This
+            separation allows a single Git source to back Terraform, Helm, and manifest
+            modules in different subdirectories.
+    v1ModuleType:
+        type: string
+        enum:
+            - MODULE_TYPE_UNSPECIFIED
+            - MODULE_TYPE_TERRAFORM
+            - MODULE_TYPE_HELM
+            - MODULE_TYPE_KUSTOMIZE
+            - MODULE_TYPE_MANIFEST
+        default: MODULE_TYPE_UNSPECIFIED
+        description: |-
+            ModuleType identifies the content semantics -- what the fetched content is and
+            how it should be executed. This is orthogonal to SourceType, which identifies
+            the fetch protocol. A single GIT source can back TERRAFORM, HELM, KUSTOMIZE,
+            and MANIFEST modules in different subdirectories.
+
+             - MODULE_TYPE_UNSPECIFIED: Default value. Must not be used.
+             - MODULE_TYPE_TERRAFORM: Terraform root module. Contains main.tf, variables.tf, etc. Executed via
+            `terraform init/plan/apply`. Works with GIT, TERRAFORM, and HTTP sources.
+             - MODULE_TYPE_HELM: Helm chart. Contains Chart.yaml, values.yaml, templates/. Rendered via
+            `helm template` or installed via `helm install`. Works with GIT, HELM,
+            OCI, and HTTP sources.
+             - MODULE_TYPE_KUSTOMIZE: Kustomize overlay. Contains kustomization.yaml. Rendered via
+            `kustomize build`. Works with GIT and HTTP sources.
+             - MODULE_TYPE_MANIFEST: Raw Kubernetes manifests. Applied directly via `kubectl apply`. Works with
+            GIT and HTTP sources.
     v1ObjectReference:
         type: object
         properties:
@@ -6723,6 +7138,25 @@ definitions:
                 type: boolean
                 description: Whether the report was accepted.
         description: ReportWorkloadStatusResponse acknowledges a workload telemetry push.
+    v1ResolveModuleResponse:
+        type: object
+        properties:
+            revision:
+                type: string
+                description: |-
+                    The resolved revision identifier. For Git sources, this is the commit SHA.
+                    For registry sources, the canonical version string. For HTTP, a content hash.
+            digest:
+                type: string
+                description: |-
+                    Content-addressing digest of the fetched content (e.g., "sha1:<commit>",
+                    "sha256:<hash>").
+            module:
+                $ref: '#/definitions/v1Module'
+                description: The module that was resolved, with current field values.
+        description: |-
+            ResolveModuleResponse contains the resolved metadata from fetching the
+            module's content via its Source.
     v1RetryRevisionResponse:
         type: object
         properties:
@@ -7574,6 +8008,13 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The updated environment.
         description: UpdateEnvironmentResponse contains the updated environment.
+    v1UpdateModuleResponse:
+        type: object
+        properties:
+            module:
+                $ref: '#/definitions/v1Module'
+                description: The updated module.
+        description: UpdateModuleResponse contains the updated module.
     v1UpdatePersonalAccessTokenResponse:
         type: object
         properties:
