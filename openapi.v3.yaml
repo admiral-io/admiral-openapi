@@ -7001,6 +7001,39 @@ components:
             title: UpdateConnectionResponse
             additionalProperties: false
             description: UpdateConnectionResponse contains the updated connection.
+        admiral.credential.v1.AuthConfig:
+            type: object
+            oneOf:
+                - type: object
+                  properties:
+                    basic_auth:
+                        title: basic_auth
+                        $ref: '#/components/schemas/admiral.credential.v1.BasicAuth'
+                  title: basic_auth
+                  required:
+                    - basic_auth
+                - type: object
+                  properties:
+                    bearer_token:
+                        title: bearer_token
+                        $ref: '#/components/schemas/admiral.credential.v1.BearerTokenAuth'
+                  title: bearer_token
+                  required:
+                    - bearer_token
+                - type: object
+                  properties:
+                    ssh_key:
+                        title: ssh_key
+                        $ref: '#/components/schemas/admiral.credential.v1.SSHKeyAuth'
+                  title: ssh_key
+                  required:
+                    - ssh_key
+            title: AuthConfig
+            additionalProperties: false
+            description: |-
+                AuthConfig is the polymorphic auth configuration attached to a Credential.
+                 Exactly one variant is populated, corresponding to the credential's type.
+                 Sensitive fields within each variant are write-only.
         admiral.credential.v1.BasicAuth:
             type: object
             properties:
@@ -7041,63 +7074,41 @@ components:
                      password and a dummy username
         admiral.credential.v1.CreateCredentialRequest:
             type: object
-            allOf:
-                - properties:
-                    name:
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
+                         Must be unique within the tenant.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: Optional description of the credential's purpose.
+                type:
+                    not:
+                        enum:
+                            - CREDENTIAL_TYPE_UNSPECIFIED
+                    title: type
+                    description: The type of external system and authentication mechanism.
+                    $ref: '#/components/schemas/admiral.credential.v1.CredentialType'
+                auth_config:
+                    title: auth_config
+                    description: Auth material corresponding to `type`.
+                    $ref: '#/components/schemas/admiral.credential.v1.AuthConfig'
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
                         type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                             Must be unique within the tenant.
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: Optional description of the credential's purpose.
-                    type:
-                        not:
-                            enum:
-                                - CREDENTIAL_TYPE_UNSPECIFIED
-                        title: type
-                        description: The type of external system and authentication mechanism.
-                        $ref: '#/components/schemas/admiral.credential.v1.CredentialType'
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: Arbitrary key-value labels for organizing and filtering credentials.
-                - oneOf:
-                    - type: object
-                      properties:
-                        basic_auth:
-                            title: basic_auth
-                            $ref: '#/components/schemas/admiral.credential.v1.BasicAuth'
-                      title: basic_auth
-                      required:
-                        - basic_auth
-                    - type: object
-                      properties:
-                        bearer_token:
-                            title: bearer_token
-                            $ref: '#/components/schemas/admiral.credential.v1.BearerTokenAuth'
-                      title: bearer_token
-                      required:
-                        - bearer_token
-                    - type: object
-                      properties:
-                        ssh_key:
-                            title: ssh_key
-                            $ref: '#/components/schemas/admiral.credential.v1.SSHKeyAuth'
-                      title: ssh_key
-                      required:
-                        - ssh_key
+                        title: value
+                        maxLength: 256
+                    description: Arbitrary key-value labels for organizing and filtering credentials.
             title: CreateCredentialRequest
             additionalProperties: false
             description: CreateCredentialRequest contains the parameters for creating a new credential.
@@ -7124,82 +7135,62 @@ components:
             description: CreateCredentialResponse contains the newly created credential.
         admiral.credential.v1.Credential:
             type: object
-            allOf:
-                - properties:
-                    id:
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the credential (UUID).
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
+                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
+                         start with a letter and end with an alphanumeric character (1-63 chars).
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: |-
+                        Optional longer-form description of what this credential is for
+                         (e.g., "Read-only access to the platform team's GitHub org").
+                type:
+                    title: type
+                    description: The type of external system and authentication mechanism.
+                    $ref: '#/components/schemas/admiral.credential.v1.CredentialType'
+                auth_config:
+                    title: auth_config
+                    description: |-
+                        Auth material corresponding to `type`. Sensitive fields are write-only
+                         and masked in responses.
+                    $ref: '#/components/schemas/admiral.credential.v1.AuthConfig'
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
                         type: string
-                        title: id
-                        format: uuid
-                        description: Unique identifier for the credential (UUID).
-                    name:
-                        type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                             Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                             start with a letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: |-
-                            Optional longer-form description of what this credential is for
-                             (e.g., "Read-only access to the platform team's GitHub org").
-                    type:
-                        title: type
-                        description: The type of external system and authentication mechanism.
-                        $ref: '#/components/schemas/admiral.credential.v1.CredentialType'
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering credentials
-                             (e.g., `{"team": "platform", "environment": "prod"}`).
-                    created_by:
-                        title: created_by
-                        description: The user or agent who created this credential (server-populated from token).
-                        $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    created_at:
-                        title: created_at
-                        description: When the credential was created.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    updated_at:
-                        title: updated_at
-                        description: When the credential was last updated.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                - oneOf:
-                    - type: object
-                      properties:
-                        basic_auth:
-                            title: basic_auth
-                            $ref: '#/components/schemas/admiral.credential.v1.BasicAuth'
-                      title: basic_auth
-                      required:
-                        - basic_auth
-                    - type: object
-                      properties:
-                        bearer_token:
-                            title: bearer_token
-                            $ref: '#/components/schemas/admiral.credential.v1.BearerTokenAuth'
-                      title: bearer_token
-                      required:
-                        - bearer_token
-                    - type: object
-                      properties:
-                        ssh_key:
-                            title: ssh_key
-                            $ref: '#/components/schemas/admiral.credential.v1.SSHKeyAuth'
-                      title: ssh_key
-                      required:
-                        - ssh_key
+                        title: value
+                        maxLength: 256
+                    description: |-
+                        Arbitrary key-value labels for organizing and filtering credentials
+                         (e.g., `{"team": "platform", "environment": "prod"}`).
+                created_by:
+                    title: created_by
+                    description: The user or agent who created this credential (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                created_at:
+                    title: created_at
+                    description: When the credential was created.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                updated_at:
+                    title: updated_at
+                    description: When the credential was last updated.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Credential
             additionalProperties: false
             description: |-

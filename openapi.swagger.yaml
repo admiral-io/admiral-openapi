@@ -3597,12 +3597,11 @@ definitions:
                     type:
                         $ref: '#/definitions/v1CredentialType'
                         description: The type of external system and authentication mechanism.
-                    ssh_key:
-                        $ref: '#/definitions/v1SSHKeyAuth'
-                    basic_auth:
-                        $ref: '#/definitions/admiralCredentialV1BasicAuth'
-                    bearer_token:
-                        $ref: '#/definitions/admiralCredentialV1BearerTokenAuth'
+                    auth_config:
+                        $ref: '#/definitions/v1AuthConfig'
+                        description: |-
+                            Auth material corresponding to `type`. Sensitive fields are write-only
+                            and masked in responses.
                     labels:
                         type: object
                         additionalProperties:
@@ -4449,6 +4448,19 @@ definitions:
             Application represents a deployable unit within a tenant. An application
             groups manifests, dependencies, and environment configuration into a single
             entity that Admiral orchestrates across environments.
+    v1AuthConfig:
+        type: object
+        properties:
+            ssh_key:
+                $ref: '#/definitions/v1SSHKeyAuth'
+            basic_auth:
+                $ref: '#/definitions/admiralCredentialV1BasicAuth'
+            bearer_token:
+                $ref: '#/definitions/admiralCredentialV1BearerTokenAuth'
+        description: |-
+            AuthConfig is the polymorphic auth configuration attached to a Credential.
+            Exactly one variant is populated, corresponding to the credential's type.
+            Sensitive fields within each variant are write-only.
     v1AzureFederationConfig:
         type: object
         properties:
@@ -5286,12 +5298,9 @@ definitions:
             type:
                 $ref: '#/definitions/v1CredentialType'
                 description: The type of external system and authentication mechanism.
-            ssh_key:
-                $ref: '#/definitions/v1SSHKeyAuth'
-            basic_auth:
-                $ref: '#/definitions/admiralCredentialV1BasicAuth'
-            bearer_token:
-                $ref: '#/definitions/admiralCredentialV1BearerTokenAuth'
+            auth_config:
+                $ref: '#/definitions/v1AuthConfig'
+                description: Auth material corresponding to `type`.
             labels:
                 type: object
                 additionalProperties:
@@ -5568,12 +5577,11 @@ definitions:
             type:
                 $ref: '#/definitions/v1CredentialType'
                 description: The type of external system and authentication mechanism.
-            ssh_key:
-                $ref: '#/definitions/v1SSHKeyAuth'
-            basic_auth:
-                $ref: '#/definitions/admiralCredentialV1BasicAuth'
-            bearer_token:
-                $ref: '#/definitions/admiralCredentialV1BearerTokenAuth'
+            auth_config:
+                $ref: '#/definitions/v1AuthConfig'
+                description: |-
+                    Auth material corresponding to `type`. Sensitive fields are write-only
+                    and masked in responses.
             labels:
                 type: object
                 additionalProperties:
