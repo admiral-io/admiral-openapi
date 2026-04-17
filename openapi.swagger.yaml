@@ -6704,6 +6704,14 @@ definitions:
             duration:
                 type: string
                 description: How long the Terraform operation took to execute.
+            outputs:
+                type: object
+                additionalProperties:
+                    $ref: '#/definitions/v1TerraformOutput'
+                description: |-
+                    (Apply/destroy-apply jobs only) Terraform outputs captured via
+                    `terraform output -json`. Keys are output names, values contain the
+                    output value, type, and sensitivity flag.
         description: JobResult contains the outcome of a completed job, reported by the runner.
     v1JobStatus:
         type: string
@@ -7998,6 +8006,23 @@ definitions:
             StateVersion contains metadata about a historical state version. Used in
             ListStateVersions to provide version history without the full state data
             blob.
+    v1TerraformOutput:
+        type: object
+        properties:
+            value:
+                type: string
+                description: |-
+                    The output value, serialized as a string. Complex values (lists, maps)
+                    are JSON-encoded.
+            type:
+                type: string
+                description: |-
+                    Terraform type descriptor (e.g., "string", "number", "bool",
+                    "list(string)", "map(string)", "object({...})").
+            sensitive:
+                type: boolean
+                description: Whether Terraform marked this output as sensitive.
+        description: TerraformOutput represents a single output value from `terraform output -json`.
     v1TerraformPlanSummary:
         type: object
         properties:

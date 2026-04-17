@@ -9524,9 +9524,30 @@ components:
                     title: duration
                     description: How long the Terraform operation took to execute.
                     $ref: '#/components/schemas/google.protobuf.Duration'
+                outputs:
+                    type: object
+                    title: outputs
+                    additionalProperties:
+                        title: value
+                        $ref: '#/components/schemas/admiral.runner.v1.TerraformOutput'
+                    description: |-
+                        (Apply/destroy-apply jobs only) Terraform outputs captured via
+                         `terraform output -json`. Keys are output names, values contain the
+                         output value, type, and sensitivity flag.
             title: JobResult
             additionalProperties: false
             description: JobResult contains the outcome of a completed job, reported by the runner.
+        admiral.runner.v1.JobResult.OutputsEntry:
+            type: object
+            properties:
+                key:
+                    type: string
+                    title: key
+                value:
+                    title: value
+                    $ref: '#/components/schemas/admiral.runner.v1.TerraformOutput'
+            title: OutputsEntry
+            additionalProperties: false
         admiral.runner.v1.JobStatus:
             type: string
             title: JobStatus
@@ -9936,6 +9957,28 @@ components:
                     title: value
             title: ToolVersionsEntry
             additionalProperties: false
+        admiral.runner.v1.TerraformOutput:
+            type: object
+            properties:
+                value:
+                    type: string
+                    title: value
+                    description: |-
+                        The output value, serialized as a string. Complex values (lists, maps)
+                         are JSON-encoded.
+                type:
+                    type: string
+                    title: type
+                    description: |-
+                        Terraform type descriptor (e.g., "string", "number", "bool",
+                         "list(string)", "map(string)", "object({...})").
+                sensitive:
+                    type: boolean
+                    title: sensitive
+                    description: Whether Terraform marked this output as sensitive.
+            title: TerraformOutput
+            additionalProperties: false
+            description: TerraformOutput represents a single output value from `terraform output -json`.
         admiral.runner.v1.UpdateRunnerRequest:
             type: object
             properties:
