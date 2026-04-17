@@ -7749,6 +7749,16 @@ components:
                          infra components and deletes workload resources from the cluster, in
                          reverse dependency order. Required before deleting an environment that
                          has active resources.
+                source_deployment_id:
+                    type: string
+                    title: source_deployment_id
+                    description: |-
+                        Optional: deploy from a prior deployment's configuration snapshots
+                         instead of from the current component HEAD. When set, each revision is
+                         seeded from the source deployment's revision for the same component
+                         (module_id, version, resolved_values, source_id, working_directory).
+                         This is the rollback mechanism: re-plan and re-apply a known-good
+                         configuration against the current infrastructure state.
             title: CreateDeploymentRequest
             additionalProperties: false
             description: CreateDeploymentRequest triggers a new deployment.
@@ -7808,6 +7818,13 @@ components:
                          resources in the environment: Terraform destroy for infra components,
                          resource deletion for workload components. Executed in reverse dependency
                          order. Required before an environment with active resources can be deleted.
+                source_deployment_id:
+                    type: string
+                    title: source_deployment_id
+                    description: |-
+                        If this deployment was created as a rollback from a prior deployment,
+                         this field contains the source deployment's UUID. Empty for normal
+                         deployments.
                 revision_summary:
                     title: revision_summary
                     description: Summary counts for quick status display.
