@@ -6654,6 +6654,13 @@ definitions:
                     Subdirectory within the extracted archive where the executor should run
                     (e.g., "modules/cloudsql"). Empty means the archive root. Preserves
                     the broader directory tree so that relative module references resolve.
+            plan_file_url:
+                type: string
+                description: |-
+                    (Apply/destroy-apply jobs only) URL to download the binary plan file
+                    produced by the preceding plan job. The runner downloads this file and
+                    passes it to `terraform apply <plan_file>` to ensure the exact reviewed
+                    plan is applied. Empty for plan jobs.
         description: |-
             JobBundle contains everything a runner needs to execute a Terraform operation.
             Fetched separately from ClaimJob to keep the claim response lightweight.
