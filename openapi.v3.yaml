@@ -8095,18 +8095,18 @@ components:
                     description: |-
                         Storage location of the rendered artifact bundle. Internal reference
                          used by agents/runners to fetch the bundle.
-                plan_output:
-                    type: string
-                    title: plan_output
-                    description: |-
-                        (Infrastructure only) The Terraform plan output in human-readable format.
-                         Populated after planning completes. Used for visibility and audit.
                 plan_summary:
                     title: plan_summary
                     description: |-
                         (Infrastructure only) The number of resources Terraform plans to add,
                          change, and destroy. Populated after planning completes.
                     $ref: '#/components/schemas/admiral.deployment.v1.TerraformPlanSummary'
+                has_plan_output:
+                    type: boolean
+                    title: has_plan_output
+                    description: |-
+                        True when plan output is available in object storage.
+                         Fetch via GET /api/v1/deployments/{id}/revisions/{id}/plan.
                 error_message:
                     type: string
                     title: error_message
@@ -8128,6 +8128,20 @@ components:
                     title: completed_at
                     description: When the revision finished (succeeded, failed, or cancelled).
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
+                module_id:
+                    type: string
+                    title: module_id
+                    description: |-
+                        The module used for this revision (UUID, after override resolution).
+                         Captures which module produced the source_id and version, needed for
+                         rollback (re-deploying from a prior revision's snapshot).
+                working_directory:
+                    type: string
+                    title: working_directory
+                    description: |-
+                        Subdirectory within the delivered archive where the executor runs.
+                         Empty means the archive root. Populated from the module's path field
+                         at snapshot time so that relative module references resolve correctly.
             title: Revision
             additionalProperties: false
             description: |-
@@ -9428,6 +9442,13 @@ components:
                     type: string
                     title: terraform_version
                     description: The Terraform version to use for this operation (e.g., "1.7.5").
+                working_directory:
+                    type: string
+                    title: working_directory
+                    description: |-
+                        Subdirectory within the extracted archive where the executor should run
+                         (e.g., "modules/cloudsql"). Empty means the archive root. Preserves
+                         the broader directory tree so that relative module references resolve.
             title: JobBundle
             additionalProperties: false
             description: |-
@@ -11540,6 +11561,13 @@ components:
                     title: updated_at
                     description: When the variable was last updated.
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
+                source:
+                    title: source
+                    description: |-
+                        How the variable was created. USER for variables created via the API/CLI,
+                         INFRASTRUCTURE for variables produced by terraform output capture.
+                         Server-populated; not settable via CreateVariable.
+                    $ref: '#/components/schemas/admiral.variable.v1.VariableSource'
             title: Variable
             additionalProperties: false
             description: |-
@@ -11564,6 +11592,14 @@ components:
                 created_by: "d290f1ee-6c54-4b01-90e6-d701748f0851"
                 created_at: "2025-09-16T12:00:00Z"
                 updated_at: "2025-10-30T15:00:00Z"
+        admiral.variable.v1.VariableSource:
+            type: string
+            title: VariableSource
+            enum:
+                - VARIABLE_SOURCE_UNSPECIFIED
+                - VARIABLE_SOURCE_USER
+                - VARIABLE_SOURCE_INFRASTRUCTURE
+            description: VariableSource indicates how the variable was created.
         admiral.variable.v1.VariableType:
             type: string
             title: VariableType

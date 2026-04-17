@@ -4350,6 +4350,12 @@ definitions:
                         type: string
                         format: date-time
                         description: When the variable was last updated.
+                    source:
+                        $ref: '#/definitions/v1VariableSource'
+                        description: |-
+                            How the variable was created. USER for variables created via the API/CLI,
+                            INFRASTRUCTURE for variables produced by terraform output capture.
+                            Server-populated; not settable via CreateVariable.
                 description: |-
                     The variable with updated fields.
                     Only fields specified in `update_mask` are updated.
@@ -6642,6 +6648,12 @@ definitions:
             terraform_version:
                 type: string
                 description: The Terraform version to use for this operation (e.g., "1.7.5").
+            working_directory:
+                type: string
+                description: |-
+                    Subdirectory within the extracted archive where the executor should run
+                    (e.g., "modules/cloudsql"). Empty means the archive root. Preserves
+                    the broader directory tree so that relative module references resolve.
         description: |-
             JobBundle contains everything a runner needs to execute a Terraform operation.
             Fetched separately from ClaimJob to keep the claim response lightweight.
@@ -7282,16 +7294,16 @@ definitions:
                 description: |-
                     Storage location of the rendered artifact bundle. Internal reference
                     used by agents/runners to fetch the bundle.
-            plan_output:
-                type: string
-                description: |-
-                    (Infrastructure only) The Terraform plan output in human-readable format.
-                    Populated after planning completes. Used for visibility and audit.
             plan_summary:
                 $ref: '#/definitions/v1TerraformPlanSummary'
                 description: |-
                     (Infrastructure only) The number of resources Terraform plans to add,
                     change, and destroy. Populated after planning completes.
+            has_plan_output:
+                type: boolean
+                description: |-
+                    True when plan output is available in object storage.
+                    Fetch via GET /api/v1/deployments/{id}/revisions/{id}/plan.
             error_message:
                 type: string
                 description: Error message if the revision failed. Empty on success.
@@ -7311,6 +7323,18 @@ definitions:
                 type: string
                 format: date-time
                 description: When the revision finished (succeeded, failed, or cancelled).
+            module_id:
+                type: string
+                description: |-
+                    The module used for this revision (UUID, after override resolution).
+                    Captures which module produced the source_id and version, needed for
+                    rollback (re-deploying from a prior revision's snapshot).
+            working_directory:
+                type: string
+                description: |-
+                    Subdirectory within the delivered archive where the executor runs.
+                    Empty means the archive root. Populated from the module's path field
+                    at snapshot time so that relative module references resolve correctly.
         description: |-
             Revision represents an immutable, rendered artifact for a single component
             within a deployment. Each revision tracks the full lifecycle from rendering
@@ -8202,6 +8226,12 @@ definitions:
                 type: string
                 format: date-time
                 description: When the variable was last updated.
+            source:
+                $ref: '#/definitions/v1VariableSource'
+                description: |-
+                    How the variable was created. USER for variables created via the API/CLI,
+                    INFRASTRUCTURE for variables produced by terraform output capture.
+                    Server-populated; not settable via CreateVariable.
         description: |-
             Variable represents a configuration key-value pair scoped to a tenant,
             application, or application+environment. Variables are resolved at deployment
@@ -8211,6 +8241,21 @@ definitions:
             outputs which are system-managed values produced by apply (e.g., Terraform
             outputs). Component outputs are resolved at render time and referenced via
             a separate namespace ({{ .component.<name>.<output> }}).
+    v1VariableSource:
+        type: string
+        enum:
+            - VARIABLE_SOURCE_UNSPECIFIED
+            - VARIABLE_SOURCE_USER
+            - VARIABLE_SOURCE_INFRASTRUCTURE
+        default: VARIABLE_SOURCE_UNSPECIFIED
+        description: |-
+            VariableSource indicates how the variable was created.
+
+             - VARIABLE_SOURCE_UNSPECIFIED: Default value. Must not be used.
+             - VARIABLE_SOURCE_USER: User-managed variable created via API or CLI.
+             - VARIABLE_SOURCE_INFRASTRUCTURE: System-managed variable produced by infrastructure apply (e.g., Terraform
+            outputs). These variables are written by the output capture pipeline and
+            cannot be created or deleted via the public API.
     v1VariableType:
         type: string
         enum:
