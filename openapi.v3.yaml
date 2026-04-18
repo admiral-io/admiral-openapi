@@ -1258,250 +1258,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.component.v1.DeleteComponentOverrideResponse'
-    /api/v1/connections:
-        get:
-            tags:
-                - Connections
-            summary: List connections
-            description: 'Scope: `connection:read`'
-            operationId: ConnectionAPI_ListConnections
-            parameters:
-                - name: filter
-                  in: query
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL.
-
-                     Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
-                     (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
-                     STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
-
-                     Filterable fields:
-                       - `name` -- filter by connection name.
-                       - `type` -- filter by connection type (GIT_TOKEN, HELM_HTTP, etc.).
-                       - `status` -- filter by connection status (ACTIVE, ERROR, UNTESTED).
-                       - `labels.key` -- filter by label key.
-
-                     Example: `field['type'] = 'GIT_TOKEN' AND field['status'] = 'ACTIVE'`
-                  schema:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL.
-
-                         Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
-                         (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
-                         STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
-
-                         Filterable fields:
-                           - `name` -- filter by connection name.
-                           - `type` -- filter by connection type (GIT_TOKEN, HELM_HTTP, etc.).
-                           - `status` -- filter by connection status (ACTIVE, ERROR, UNTESTED).
-                           - `labels.key` -- filter by label key.
-
-                         Example: `field['type'] = 'GIT_TOKEN' AND field['status'] = 'ACTIVE'`
-                - name: page_size
-                  in: query
-                  description: Maximum number of connections to return per page.
-                  schema:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                    description: Maximum number of connections to return per page.
-                - name: page_token
-                  in: query
-                  description: Opaque pagination token from a previous response.
-                  schema:
-                    type: string
-                    title: page_token
-                    description: Opaque pagination token from a previous response.
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.connection.v1.ListConnectionsResponse'
-        post:
-            tags:
-                - Connections
-            summary: Create a connection
-            description: |-
-                The connection type and auth config must match -- for example, a GIT_TOKEN
-                 connection requires a GitTokenAuth config. The server validates connectivity
-                 on creation when possible and sets the initial status accordingly.
-
-                 Scope: `connection:write`
-            operationId: ConnectionAPI_CreateConnection
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.connection.v1.CreateConnectionRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.connection.v1.CreateConnectionResponse'
-    /api/v1/connections/{connection.id}:
-        patch:
-            tags:
-                - Connections
-            summary: Update a connection
-            description: |-
-                When updating auth_config, the entire auth config is replaced -- partial
-                 updates within the auth config oneof are not supported. Omitting auth_config
-                 from the update_mask leaves credentials unchanged.
-
-                 Scope: `connection:write`
-            operationId: ConnectionAPI_UpdateConnection
-            parameters:
-                - name: connection.id
-                  in: path
-                  description: Unique identifier for the connection (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: id
-                    format: uuid
-                    description: Unique identifier for the connection (UUID).
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                connection:
-                                    title: connection
-                                    description: |-
-                                        The connection with updated fields.
-                                         Only fields specified in `update_mask` are updated.
-
-                                         When updating auth_config, the entire auth config is replaced.
-                                         Omitting auth_config from the update_mask leaves credentials unchanged.
-                                    $ref: '#/components/schemas/admiral.connection.v1.Connection'
-                                update_mask:
-                                    title: update_mask
-                                    description: |-
-                                        The set of fields to update. If unset, all mutable fields are updated.
-                                         Supported fields: `name`, `description`, `auth_config`, `labels`.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
-                            title: UpdateConnectionRequest
-                            required:
-                                - connection
-                            additionalProperties: false
-                            description: UpdateConnectionRequest contains the connection fields to update.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.connection.v1.UpdateConnectionResponse'
-    /api/v1/connections/{connection_id}:
-        get:
-            tags:
-                - Connections
-            summary: Retrieve a connection
-            description: |-
-                Returns connection metadata and status. Sensitive credential fields are
-                 never included in the response.
-
-                 Scope: `connection:read`
-            operationId: ConnectionAPI_GetConnection
-            parameters:
-                - name: connection_id
-                  in: path
-                  description: The unique identifier of the connection (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: connection_id
-                    format: uuid
-                    description: The unique identifier of the connection (UUID).
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.connection.v1.GetConnectionResponse'
-        delete:
-            tags:
-                - Connections
-            summary: Delete a connection
-            description: 'Scope: `connection:write`'
-            operationId: ConnectionAPI_DeleteConnection
-            parameters:
-                - name: connection_id
-                  in: path
-                  description: |-
-                    The unique identifier of the connection to delete (UUID).
-                     Fails if any sources still reference this connection.
-                  required: true
-                  schema:
-                    type: string
-                    title: connection_id
-                    format: uuid
-                    description: |-
-                        The unique identifier of the connection to delete (UUID).
-                         Fails if any sources still reference this connection.
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.connection.v1.DeleteConnectionResponse'
-    /api/v1/connections/{connection_id}/test:
-        post:
-            tags:
-                - Connections
-            summary: Test a connection
-            description: |-
-                This operation makes a network call to the external system and may take
-                 several seconds depending on the remote endpoint.
-
-                 Scope: `connection:write`
-            operationId: ConnectionAPI_TestConnection
-            parameters:
-                - name: connection_id
-                  in: path
-                  description: The unique identifier of the connection to test (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: connection_id
-                    format: uuid
-                    description: The unique identifier of the connection to test (UUID).
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                connection_id:
-                                    type: string
-                                    title: connection_id
-                                    format: uuid
-                                    description: The unique identifier of the connection to test (UUID).
-                            title: TestConnectionRequest
-                            additionalProperties: false
-                            description: TestConnectionRequest identifies a connection to validate.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.connection.v1.TestConnectionResponse'
     /api/v1/credentials:
         get:
             tags:
@@ -1766,7 +1522,7 @@ paths:
                  Concurrency: only one deployment can be active per application+environment
                  at a time. If a deployment is already in progress (PENDING or RUNNING),
                  the new deployment is queued and will start automatically when the
-                 current deployment completes or is cancelled.
+                 current deployment completes or is canceled.
 
                  Scope: `deploy:write`
             operationId: DeploymentAPI_CreateDeployment
@@ -2596,7 +2352,7 @@ paths:
             description: |-
                 The server validates that the SAT's runner binding matches the runner
                  assigned to this job. Returns PERMISSION_DENIED if they do not match.
-                 Returns NOT_FOUND if the job does not exist or has been cancelled.
+                 Returns NOT_FOUND if the job does not exist or has been canceled.
 
                  Maps to Terraform HTTP backend GET on the state address.
 
@@ -2832,11 +2588,11 @@ paths:
 
                      Filterable fields:
                        - `name` -- filter by runner name.
-                       - `kind` -- filter by runner kind (TERRAFORM, WORKFLOW).
+                       - `kind` -- filter by runner kind (INFRASTRUCTURE, WORKFLOW).
                        - `health_status` -- filter by health status.
                        - `labels.key` -- filter by label key.
 
-                     Example: `field['kind'] = 'TERRAFORM' AND field['health_status'] = 'HEALTHY'`
+                     Example: `field['kind'] = 'INFRASTRUCTURE' AND field['health_status'] = 'HEALTHY'`
                   schema:
                     type: string
                     title: filter
@@ -2850,11 +2606,11 @@ paths:
 
                          Filterable fields:
                            - `name` -- filter by runner name.
-                           - `kind` -- filter by runner kind (TERRAFORM, WORKFLOW).
+                           - `kind` -- filter by runner kind (INFRASTRUCTURE, WORKFLOW).
                            - `health_status` -- filter by health status.
                            - `labels.key` -- filter by label key.
 
-                         Example: `field['kind'] = 'TERRAFORM' AND field['health_status'] = 'HEALTHY'`
+                         Example: `field['kind'] = 'INFRASTRUCTURE' AND field['health_status'] = 'HEALTHY'`
                 - name: page_size
                   in: query
                   description: Maximum number of runners to return per page.
@@ -3480,7 +3236,7 @@ paths:
                   in: path
                   description: |-
                     Unique identifier of the source to delete (UUID).
-                     Fails if any application components still reference this source.
+                     Fails if any modules still reference this source.
                   required: true
                   schema:
                     type: string
@@ -3488,7 +3244,7 @@ paths:
                     format: uuid
                     description: |-
                         Unique identifier of the source to delete (UUID).
-                         Fails if any application components still reference this source.
+                         Fails if any modules still reference this source.
             responses:
                 "200":
                     description: Success
@@ -6345,7 +6101,9 @@ components:
                         Scope listing to a specific application (UUID). Required for meaningful
                          results since components always belong to an application.
                 environment_id:
-                    type: string
+                    type:
+                        - string
+                        - "null"
                     title: environment_id
                     format: uuid
                     description: |-
@@ -6503,810 +6261,6 @@ components:
             title: UpdateComponentResponse
             additionalProperties: false
             description: UpdateComponentResponse contains the updated component.
-        admiral.connection.v1.AWSFederationConfig:
-            type: object
-            properties:
-                role_arn:
-                    type: string
-                    title: role_arn
-                    minLength: 1
-                    description: The ARN of the IAM Role to assume (e.g., "arn:aws:iam::123456789012:role/admiral-ecr").
-                external_id:
-                    type: string
-                    title: external_id
-                    description: Optional external ID for additional assume-role protection.
-                region:
-                    type: string
-                    title: region
-                    description: AWS region for regional service endpoints (e.g., "us-east-1").
-            title: AWSFederationConfig
-            additionalProperties: false
-            description: |-
-                AWSFederationConfig holds the IAM role configuration for OIDC-based
-                 authentication to AWS services (ECR, S3, Terraform provider).
-
-                 Setup: Create an IAM Role with a trust policy that accepts Admiral's OIDC
-                 issuer (https://oidc.admiral.io) and conditions on the `tenant_id` claim
-                 matching your Admiral tenant.
-        admiral.connection.v1.AWSStaticAuth:
-            type: object
-            properties:
-                access_key_id:
-                    type: string
-                    title: access_key_id
-                    minLength: 1
-                    description: AWS access key ID.
-                secret_access_key:
-                    type: string
-                    title: secret_access_key
-                    description: |-
-                        AWS secret access key.
-                         Write-only: masked in responses.
-                region:
-                    type: string
-                    title: region
-                    description: AWS region for regional service endpoints.
-            title: AWSStaticAuth
-            additionalProperties: false
-            description: |-
-                AWSStaticAuth holds static AWS credentials. Prefer AWSFederationConfig
-                 (OIDC) instead. Static credentials require manual rotation and present a
-                 security risk if compromised.
-        admiral.connection.v1.AzureFederationConfig:
-            type: object
-            properties:
-                azure_tenant_id:
-                    type: string
-                    title: azure_tenant_id
-                    minLength: 1
-                    description: Azure AD tenant ID (directory ID).
-                client_id:
-                    type: string
-                    title: client_id
-                    minLength: 1
-                    description: Application (client) ID of the Azure AD app registration.
-            title: AzureFederationConfig
-            additionalProperties: false
-            description: |-
-                AzureFederationConfig holds the federated credential configuration for
-                 OIDC-based authentication to Azure services (ACR, Terraform).
-
-                 Setup: Create a Federated Identity Credential on your Azure AD app
-                 registration that trusts Admiral's OIDC issuer with your tenant_id claim.
-        admiral.connection.v1.AzureStaticAuth:
-            type: object
-            properties:
-                azure_tenant_id:
-                    type: string
-                    title: azure_tenant_id
-                    minLength: 1
-                    description: Azure AD tenant ID (directory ID).
-                client_id:
-                    type: string
-                    title: client_id
-                    minLength: 1
-                    description: Application (client) ID.
-                client_secret:
-                    type: string
-                    title: client_secret
-                    description: |-
-                        Client secret.
-                         Write-only: masked in responses.
-            title: AzureStaticAuth
-            additionalProperties: false
-            description: |-
-                AzureStaticAuth holds static Azure service principal credentials. Prefer
-                 AzureFederationConfig (Federated Credential) instead.
-        admiral.connection.v1.BasicAuth:
-            type: object
-            properties:
-                username:
-                    type: string
-                    title: username
-                    minLength: 1
-                    description: Username for authentication.
-                password:
-                    type: string
-                    title: password
-                    description: |-
-                        Password or token for authentication.
-                         Write-only: masked in responses.
-            title: BasicAuth
-            additionalProperties: false
-            description: |-
-                BasicAuth holds username/password credentials for OCI registries and other
-                 systems that use basic authentication.
-        admiral.connection.v1.BearerTokenAuth:
-            type: object
-            properties:
-                token:
-                    type: string
-                    title: token
-                    description: |-
-                        Bearer token value.
-                         Write-only: masked in responses.
-            title: BearerTokenAuth
-            additionalProperties: false
-            description: |-
-                BearerTokenAuth holds a bearer token for systems that use token-based
-                 authentication (e.g., private Terraform registries).
-        admiral.connection.v1.Connection:
-            type: object
-            allOf:
-                - properties:
-                    id:
-                        type: string
-                        title: id
-                        format: uuid
-                        description: Unique identifier for the connection (UUID).
-                    name:
-                        type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                             Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                             start with a letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: |-
-                            Optional longer-form description of what this connection is for
-                             (e.g., "Read-only access to the platform team's GitHub org").
-                    type:
-                        title: type
-                        description: The type of external system and authentication mechanism.
-                        $ref: '#/components/schemas/admiral.connection.v1.ConnectionType'
-                    status:
-                        title: status
-                        description: Current health status of the connection's credentials.
-                        $ref: '#/components/schemas/admiral.connection.v1.ConnectionStatus'
-                    status_message:
-                        type: string
-                        title: status_message
-                        description: |-
-                            Human-readable message when status is ERROR (e.g., "401 Unauthorized:
-                             token expired"). Empty when status is ACTIVE or UNTESTED.
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering connections
-                             (e.g., `{"team": "platform", "environment": "prod"}`).
-                    created_by:
-                        title: created_by
-                        description: The user or agent who created this connection (server-populated from token).
-                        $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    updated_by:
-                        title: updated_by
-                        description: The user or agent who last updated this connection (server-populated from token).
-                        $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    created_at:
-                        title: created_at
-                        description: When the connection was created.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    updated_at:
-                        title: updated_at
-                        description: When the connection was last updated.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    last_tested_at:
-                        title: last_tested_at
-                        description: |-
-                            When the connection was last tested (via TestConnection or auto-validation).
-                             Absent if never tested.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                - oneOf:
-                    - type: object
-                      properties:
-                        aws_federation:
-                            title: aws_federation
-                            description: AWS OIDC federation (for CONNECTION_TYPE_CLOUD_AWS).
-                            $ref: '#/components/schemas/admiral.connection.v1.AWSFederationConfig'
-                      title: aws_federation
-                      required:
-                        - aws_federation
-                    - type: object
-                      properties:
-                        aws_static:
-                            title: aws_static
-                            description: AWS static credentials (for CONNECTION_TYPE_CLOUD_AWS_STATIC, deprecated).
-                            deprecated: true
-                            $ref: '#/components/schemas/admiral.connection.v1.AWSStaticAuth'
-                      title: aws_static
-                      required:
-                        - aws_static
-                    - type: object
-                      properties:
-                        azure_federation:
-                            title: azure_federation
-                            description: Azure Federated Credential (for CONNECTION_TYPE_CLOUD_AZURE).
-                            $ref: '#/components/schemas/admiral.connection.v1.AzureFederationConfig'
-                      title: azure_federation
-                      required:
-                        - azure_federation
-                    - type: object
-                      properties:
-                        azure_static:
-                            title: azure_static
-                            description: Azure static credentials (for CONNECTION_TYPE_CLOUD_AZURE_STATIC, deprecated).
-                            deprecated: true
-                            $ref: '#/components/schemas/admiral.connection.v1.AzureStaticAuth'
-                      title: azure_static
-                      required:
-                        - azure_static
-                    - type: object
-                      properties:
-                        bearer_token:
-                            title: bearer_token
-                            description: Bearer token (for CONNECTION_TYPE_TERRAFORM_REGISTRY).
-                            $ref: '#/components/schemas/admiral.connection.v1.BearerTokenAuth'
-                      title: bearer_token
-                      required:
-                        - bearer_token
-                    - type: object
-                      properties:
-                        gcp_federation:
-                            title: gcp_federation
-                            description: GCP Workload Identity (for CONNECTION_TYPE_CLOUD_GCP).
-                            $ref: '#/components/schemas/admiral.connection.v1.GCPFederationConfig'
-                      title: gcp_federation
-                      required:
-                        - gcp_federation
-                    - type: object
-                      properties:
-                        gcp_static:
-                            title: gcp_static
-                            description: GCP static credentials (for CONNECTION_TYPE_CLOUD_GCP_STATIC, deprecated).
-                            deprecated: true
-                            $ref: '#/components/schemas/admiral.connection.v1.GCPStaticAuth'
-                      title: gcp_static
-                      required:
-                        - gcp_static
-                    - type: object
-                      properties:
-                        git_github_app:
-                            title: git_github_app
-                            description: GitHub App credentials (for CONNECTION_TYPE_GIT_GITHUB_APP).
-                            $ref: '#/components/schemas/admiral.connection.v1.GitHubAppAuth'
-                      title: git_github_app
-                      required:
-                        - git_github_app
-                    - type: object
-                      properties:
-                        git_ssh:
-                            title: git_ssh
-                            description: Git SSH key (for CONNECTION_TYPE_GIT_SSH).
-                            $ref: '#/components/schemas/admiral.connection.v1.GitSSHAuth'
-                      title: git_ssh
-                      required:
-                        - git_ssh
-                    - type: object
-                      properties:
-                        git_token:
-                            title: git_token
-                            description: Git HTTPS token (for CONNECTION_TYPE_GIT_TOKEN).
-                            $ref: '#/components/schemas/admiral.connection.v1.GitTokenAuth'
-                      title: git_token
-                      required:
-                        - git_token
-                    - type: object
-                      properties:
-                        helm_http:
-                            title: helm_http
-                            description: Helm HTTP basic auth (for CONNECTION_TYPE_HELM_HTTP).
-                            $ref: '#/components/schemas/admiral.connection.v1.HelmHTTPAuth'
-                      title: helm_http
-                      required:
-                        - helm_http
-                    - type: object
-                      properties:
-                        oci_basic:
-                            title: oci_basic
-                            description: OCI registry basic auth (for CONNECTION_TYPE_OCI_BASIC).
-                            $ref: '#/components/schemas/admiral.connection.v1.BasicAuth'
-                      title: oci_basic
-                      required:
-                        - oci_basic
-            title: Connection
-            additionalProperties: false
-            description: |-
-                Connection represents stored credentials for accessing an external system.
-                 Connections are tenant-scoped and referenced by sources when fetching artifacts.
-
-                 Sensitive fields within auth_config are write-only -- they are accepted on
-                 create and update but never returned in API responses.
-            example:
-                id: "b8c9d0e1-2345-6fab-cdef-0123456789ab"
-                name: "ecr-prod"
-                description: "Read-only access to production ECR registry for container image pulls."
-                type: "CONNECTION_TYPE_DOCKER_REGISTRY"
-                status: "CONNECTION_STATUS_ACTIVE"
-                labels:
-                    cloud: "aws"
-                    team: "platform"
-                created_by: "d290f1ee-6c54-4b01-90e6-d701748f0851"
-                created_at: "2025-07-20T14:00:00Z"
-                updated_at: "2025-10-15T10:30:00Z"
-                last_tested_at: "2025-11-01T08:00:00Z"
-        admiral.connection.v1.Connection.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
-        admiral.connection.v1.ConnectionStatus:
-            type: string
-            title: ConnectionStatus
-            enum:
-                - CONNECTION_STATUS_UNSPECIFIED
-                - CONNECTION_STATUS_ACTIVE
-                - CONNECTION_STATUS_ERROR
-                - CONNECTION_STATUS_UNTESTED
-            description: ConnectionStatus represents the health state of a connection's credentials.
-        admiral.connection.v1.ConnectionType:
-            type: string
-            title: ConnectionType
-            enum:
-                - CONNECTION_TYPE_UNSPECIFIED
-                - CONNECTION_TYPE_GIT_TOKEN
-                - CONNECTION_TYPE_GIT_SSH
-                - CONNECTION_TYPE_GIT_GITHUB_APP
-                - CONNECTION_TYPE_HELM_HTTP
-                - CONNECTION_TYPE_OCI_BASIC
-                - CONNECTION_TYPE_CLOUD_AWS
-                - CONNECTION_TYPE_CLOUD_GCP
-                - CONNECTION_TYPE_CLOUD_AZURE
-                - CONNECTION_TYPE_CLOUD_AWS_STATIC
-                - CONNECTION_TYPE_CLOUD_GCP_STATIC
-                - CONNECTION_TYPE_CLOUD_AZURE_STATIC
-                - CONNECTION_TYPE_TERRAFORM_REGISTRY
-                - CONNECTION_TYPE_S3
-                - CONNECTION_TYPE_GCS
-            description: |-
-                ConnectionType identifies the kind of external system and authentication
-                 mechanism a connection uses.
-        admiral.connection.v1.CreateConnectionRequest:
-            type: object
-            allOf:
-                - properties:
-                    name:
-                        type: string
-                        title: name
-                        maxLength: 63
-                        minLength: 1
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                             Must be unique within the tenant.
-                    description:
-                        type: string
-                        title: description
-                        maxLength: 1024
-                        description: Optional description of the connection's purpose.
-                    type:
-                        not:
-                            enum:
-                                - CONNECTION_TYPE_UNSPECIFIED
-                        title: type
-                        description: The type of external system and authentication mechanism.
-                        $ref: '#/components/schemas/admiral.connection.v1.ConnectionType'
-                    labels:
-                        type: object
-                        title: labels
-                        maxProperties: 64
-                        additionalProperties:
-                            type: string
-                            title: value
-                            maxLength: 256
-                        description: Arbitrary key-value labels for organizing and filtering connections.
-                - oneOf:
-                    - type: object
-                      properties:
-                        aws_federation:
-                            title: aws_federation
-                            $ref: '#/components/schemas/admiral.connection.v1.AWSFederationConfig'
-                      title: aws_federation
-                      required:
-                        - aws_federation
-                    - type: object
-                      properties:
-                        aws_static:
-                            title: aws_static
-                            deprecated: true
-                            $ref: '#/components/schemas/admiral.connection.v1.AWSStaticAuth'
-                      title: aws_static
-                      required:
-                        - aws_static
-                    - type: object
-                      properties:
-                        azure_federation:
-                            title: azure_federation
-                            $ref: '#/components/schemas/admiral.connection.v1.AzureFederationConfig'
-                      title: azure_federation
-                      required:
-                        - azure_federation
-                    - type: object
-                      properties:
-                        azure_static:
-                            title: azure_static
-                            deprecated: true
-                            $ref: '#/components/schemas/admiral.connection.v1.AzureStaticAuth'
-                      title: azure_static
-                      required:
-                        - azure_static
-                    - type: object
-                      properties:
-                        bearer_token:
-                            title: bearer_token
-                            $ref: '#/components/schemas/admiral.connection.v1.BearerTokenAuth'
-                      title: bearer_token
-                      required:
-                        - bearer_token
-                    - type: object
-                      properties:
-                        gcp_federation:
-                            title: gcp_federation
-                            $ref: '#/components/schemas/admiral.connection.v1.GCPFederationConfig'
-                      title: gcp_federation
-                      required:
-                        - gcp_federation
-                    - type: object
-                      properties:
-                        gcp_static:
-                            title: gcp_static
-                            deprecated: true
-                            $ref: '#/components/schemas/admiral.connection.v1.GCPStaticAuth'
-                      title: gcp_static
-                      required:
-                        - gcp_static
-                    - type: object
-                      properties:
-                        git_github_app:
-                            title: git_github_app
-                            $ref: '#/components/schemas/admiral.connection.v1.GitHubAppAuth'
-                      title: git_github_app
-                      required:
-                        - git_github_app
-                    - type: object
-                      properties:
-                        git_ssh:
-                            title: git_ssh
-                            $ref: '#/components/schemas/admiral.connection.v1.GitSSHAuth'
-                      title: git_ssh
-                      required:
-                        - git_ssh
-                    - type: object
-                      properties:
-                        git_token:
-                            title: git_token
-                            $ref: '#/components/schemas/admiral.connection.v1.GitTokenAuth'
-                      title: git_token
-                      required:
-                        - git_token
-                    - type: object
-                      properties:
-                        helm_http:
-                            title: helm_http
-                            $ref: '#/components/schemas/admiral.connection.v1.HelmHTTPAuth'
-                      title: helm_http
-                      required:
-                        - helm_http
-                    - type: object
-                      properties:
-                        oci_basic:
-                            title: oci_basic
-                            $ref: '#/components/schemas/admiral.connection.v1.BasicAuth'
-                      title: oci_basic
-                      required:
-                        - oci_basic
-            title: CreateConnectionRequest
-            additionalProperties: false
-            description: CreateConnectionRequest contains the parameters for creating a new connection.
-        admiral.connection.v1.CreateConnectionRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
-        admiral.connection.v1.CreateConnectionResponse:
-            type: object
-            properties:
-                connection:
-                    title: connection
-                    description: The created connection. Auth config sensitive fields are masked.
-                    $ref: '#/components/schemas/admiral.connection.v1.Connection'
-            title: CreateConnectionResponse
-            additionalProperties: false
-            description: CreateConnectionResponse contains the newly created connection.
-        admiral.connection.v1.DeleteConnectionRequest:
-            type: object
-            properties:
-                connection_id:
-                    type: string
-                    title: connection_id
-                    format: uuid
-                    description: |-
-                        The unique identifier of the connection to delete (UUID).
-                         Fails if any sources still reference this connection.
-            title: DeleteConnectionRequest
-            additionalProperties: false
-            description: DeleteConnectionRequest identifies a connection to delete.
-        admiral.connection.v1.DeleteConnectionResponse:
-            type: object
-            title: DeleteConnectionResponse
-            additionalProperties: false
-            description: DeleteConnectionResponse is empty on success.
-        admiral.connection.v1.GCPFederationConfig:
-            type: object
-            properties:
-                project_number:
-                    type: string
-                    title: project_number
-                    minLength: 1
-                    description: GCP project number (numeric, not project ID).
-                pool_id:
-                    type: string
-                    title: pool_id
-                    minLength: 1
-                    description: Workload Identity Pool ID.
-                provider_id:
-                    type: string
-                    title: provider_id
-                    minLength: 1
-                    description: Workload Identity Provider ID within the pool.
-                service_account_email:
-                    type: string
-                    title: service_account_email
-                    minLength: 1
-                    description: Email of the GCP service account to impersonate.
-            title: GCPFederationConfig
-            additionalProperties: false
-            description: |-
-                GCPFederationConfig holds the Workload Identity Federation configuration for
-                 OIDC-based authentication to GCP services (Artifact Registry, GCS, Terraform).
-
-                 Setup: Create a Workload Identity Pool and Provider that trusts Admiral's
-                 OIDC issuer, then grant the service account access to the required resources.
-        admiral.connection.v1.GCPStaticAuth:
-            type: object
-            properties:
-                service_account_json:
-                    type: string
-                    title: service_account_json
-                    description: |-
-                        JSON-encoded service account key.
-                         Write-only: masked in responses.
-            title: GCPStaticAuth
-            additionalProperties: false
-            description: |-
-                GCPStaticAuth holds a static GCP service account key. Prefer
-                 GCPFederationConfig (Workload Identity) instead.
-        admiral.connection.v1.GetConnectionRequest:
-            type: object
-            properties:
-                connection_id:
-                    type: string
-                    title: connection_id
-                    format: uuid
-                    description: The unique identifier of the connection (UUID).
-            title: GetConnectionRequest
-            additionalProperties: false
-            description: GetConnectionRequest identifies a connection to retrieve.
-        admiral.connection.v1.GetConnectionResponse:
-            type: object
-            properties:
-                connection:
-                    title: connection
-                    description: The connection record. Sensitive credential fields are masked.
-                    $ref: '#/components/schemas/admiral.connection.v1.Connection'
-            title: GetConnectionResponse
-            additionalProperties: false
-            description: GetConnectionResponse contains the connection record.
-        admiral.connection.v1.GitHubAppAuth:
-            type: object
-            properties:
-                app_id:
-                    type: string
-                    title: app_id
-                    minLength: 1
-                    description: The GitHub App's numeric ID.
-                installation_id:
-                    type: string
-                    title: installation_id
-                    minLength: 1
-                    description: The installation ID for the target organization or repository.
-                private_key:
-                    type: string
-                    title: private_key
-                    description: |-
-                        PEM-encoded private key for the GitHub App.
-                         Write-only: masked in responses.
-            title: GitHubAppAuth
-            additionalProperties: false
-            description: |-
-                GitHubAppAuth holds GitHub App credentials for Git operations.
-                 Preferred over personal tokens for organizations -- provides granular
-                 repository permissions and a better audit trail.
-        admiral.connection.v1.GitSSHAuth:
-            type: object
-            properties:
-                private_key:
-                    type: string
-                    title: private_key
-                    description: |-
-                        PEM-encoded SSH private key.
-                         Write-only: masked in responses.
-                passphrase:
-                    type: string
-                    title: passphrase
-                    description: |-
-                        Optional passphrase for the private key.
-                         Write-only: masked in responses.
-            title: GitSSHAuth
-            additionalProperties: false
-            description: GitSSHAuth holds SSH key credentials for Git operations.
-        admiral.connection.v1.GitTokenAuth:
-            type: object
-            properties:
-                token:
-                    type: string
-                    title: token
-                    description: |-
-                        Personal access token, OAuth token, or bot token.
-                         Write-only: masked in responses.
-            title: GitTokenAuth
-            additionalProperties: false
-            description: GitTokenAuth holds HTTPS token credentials for Git operations.
-        admiral.connection.v1.HelmHTTPAuth:
-            type: object
-            properties:
-                username:
-                    type: string
-                    title: username
-                    minLength: 1
-                    description: Username for basic authentication.
-                password:
-                    type: string
-                    title: password
-                    description: |-
-                        Password for basic authentication.
-                         Write-only: masked in responses.
-            title: HelmHTTPAuth
-            additionalProperties: false
-            description: HelmHTTPAuth holds basic auth credentials for classic Helm HTTP repositories.
-        admiral.connection.v1.ListConnectionsRequest:
-            type: object
-            properties:
-                filter:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL.
-
-                         Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
-                         (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
-                         STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
-
-                         Filterable fields:
-                           - `name` -- filter by connection name.
-                           - `type` -- filter by connection type (GIT_TOKEN, HELM_HTTP, etc.).
-                           - `status` -- filter by connection status (ACTIVE, ERROR, UNTESTED).
-                           - `labels.key` -- filter by label key.
-
-                         Example: `field['type'] = 'GIT_TOKEN' AND field['status'] = 'ACTIVE'`
-                page_size:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                    description: Maximum number of connections to return per page.
-                page_token:
-                    type: string
-                    title: page_token
-                    description: Opaque pagination token from a previous response.
-            title: ListConnectionsRequest
-            additionalProperties: false
-            description: ListConnectionsRequest contains pagination and filter parameters.
-        admiral.connection.v1.ListConnectionsResponse:
-            type: object
-            properties:
-                connections:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.connection.v1.Connection'
-                    title: connections
-                    description: The list of connections. Sensitive credential fields are masked.
-                next_page_token:
-                    type: string
-                    title: next_page_token
-                    description: Pagination token for the next page. Empty when there are no more results.
-            title: ListConnectionsResponse
-            additionalProperties: false
-            description: ListConnectionsResponse contains a page of connections.
-        admiral.connection.v1.TestConnectionRequest:
-            type: object
-            properties:
-                connection_id:
-                    type: string
-                    title: connection_id
-                    format: uuid
-                    description: The unique identifier of the connection to test (UUID).
-            title: TestConnectionRequest
-            additionalProperties: false
-            description: TestConnectionRequest identifies a connection to validate.
-        admiral.connection.v1.TestConnectionResponse:
-            type: object
-            properties:
-                connection:
-                    title: connection
-                    description: The updated connection with refreshed status and last_tested_at.
-                    $ref: '#/components/schemas/admiral.connection.v1.Connection'
-                success:
-                    type: boolean
-                    title: success
-                    description: Whether the test succeeded.
-                message:
-                    type: string
-                    title: message
-                    description: |-
-                        Human-readable message describing the test result. On failure, includes
-                         the error details (e.g., "401 Unauthorized: token expired").
-            title: TestConnectionResponse
-            additionalProperties: false
-            description: TestConnectionResponse contains the result of the connectivity test.
-        admiral.connection.v1.UpdateConnectionRequest:
-            type: object
-            properties:
-                connection:
-                    title: connection
-                    description: |-
-                        The connection with updated fields.
-                         Only fields specified in `update_mask` are updated.
-
-                         When updating auth_config, the entire auth config is replaced.
-                         Omitting auth_config from the update_mask leaves credentials unchanged.
-                    $ref: '#/components/schemas/admiral.connection.v1.Connection'
-                update_mask:
-                    title: update_mask
-                    description: |-
-                        The set of fields to update. If unset, all mutable fields are updated.
-                         Supported fields: `name`, `description`, `auth_config`, `labels`.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
-            title: UpdateConnectionRequest
-            required:
-                - connection
-            additionalProperties: false
-            description: UpdateConnectionRequest contains the connection fields to update.
-        admiral.connection.v1.UpdateConnectionResponse:
-            type: object
-            properties:
-                connection:
-                    title: connection
-                    description: The updated connection. Sensitive credential fields are masked.
-                    $ref: '#/components/schemas/admiral.connection.v1.Connection'
-            title: UpdateConnectionResponse
-            additionalProperties: false
-            description: UpdateConnectionResponse contains the updated connection.
         admiral.credential.v1.AuthConfig:
             type: object
             oneOf:
@@ -7718,7 +6672,7 @@ components:
             properties:
                 deployment:
                     title: deployment
-                    description: The cancelled deployment.
+                    description: The canceled deployment.
                     $ref: '#/components/schemas/admiral.deployment.v1.Deployment'
             title: CancelDeploymentResponse
             additionalProperties: false
@@ -7799,10 +6753,9 @@ components:
                     description: What triggered this deployment.
                     $ref: '#/components/schemas/admiral.deployment.v1.DeploymentTriggerType'
                 triggered_by:
-                    type: string
                     title: triggered_by
-                    format: uuid
-                    description: UUID of the user that triggered the deployment.
+                    description: The user or agent that triggered the deployment (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 message:
                     type: string
                     title: message
@@ -7837,7 +6790,7 @@ components:
                     title: completed_at
                     description: |-
                         When the deployment finished (all revisions completed, failed, or
-                         cancelled). Absent while the deployment is in progress.
+                         canceled). Absent while the deployment is in progress.
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Deployment
             additionalProperties: false
@@ -7868,7 +6821,7 @@ components:
                 - DEPLOYMENT_STATUS_SUCCEEDED
                 - DEPLOYMENT_STATUS_PARTIALLY_FAILED
                 - DEPLOYMENT_STATUS_FAILED
-                - DEPLOYMENT_STATUS_CANCELLED
+                - DEPLOYMENT_STATUS_CANCELED
             description: |-
                 DeploymentStatus represents the composite status of a deployment, derived
                  from the statuses of all its component revisions.
@@ -8143,7 +7096,7 @@ components:
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
                 completed_at:
                     title: completed_at
-                    description: When the revision finished (succeeded, failed, or cancelled).
+                    description: When the revision finished (succeeded, failed, or canceled).
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
                 module_id:
                     type: string
@@ -8202,7 +7155,7 @@ components:
                 - REVISION_STATUS_SUCCEEDED
                 - REVISION_STATUS_FAILED
                 - REVISION_STATUS_BLOCKED
-                - REVISION_STATUS_CANCELLED
+                - REVISION_STATUS_CANCELED
             description: |-
                 RevisionStatus represents the lifecycle status of a single component
                  revision within a deployment.
@@ -8234,11 +7187,11 @@ components:
                     title: running
                     format: int32
                     description: Number of revisions currently running (planning or applying).
-                cancelled:
+                canceled:
                     type: integer
-                    title: cancelled
+                    title: canceled
                     format: int32
-                    description: Number of revisions that were cancelled.
+                    description: Number of revisions that were canceled.
                 pending:
                     type: integer
                     title: pending
@@ -9411,7 +8364,7 @@ components:
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
                 completed_at:
                     title: completed_at
-                    description: When the job finished (succeeded, failed, or cancelled).
+                    description: When the job finished (succeeded, failed, or canceled).
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Job
             additionalProperties: false
@@ -9706,11 +8659,11 @@ components:
 
                          Filterable fields:
                            - `name` -- filter by runner name.
-                           - `kind` -- filter by runner kind (TERRAFORM, WORKFLOW).
+                           - `kind` -- filter by runner kind (INFRASTRUCTURE, WORKFLOW).
                            - `health_status` -- filter by health status.
                            - `labels.key` -- filter by label key.
 
-                         Example: `field['kind'] = 'TERRAFORM' AND field['health_status'] = 'HEALTHY'`
+                         Example: `field['kind'] = 'INFRASTRUCTURE' AND field['health_status'] = 'HEALTHY'`
                 page_size:
                     type: integer
                     title: page_size
@@ -10114,7 +9067,7 @@ components:
                     format: uuid
                     description: |-
                         Unique identifier of the source to delete (UUID).
-                         Fails if any application components still reference this source.
+                         Fails if any modules still reference this source.
             title: DeleteSourceRequest
             additionalProperties: false
             description: DeleteSourceRequest identifies a source to delete.
@@ -11563,12 +10516,12 @@ components:
                     title: key
                     maxLength: 63
                     minLength: 1
-                    pattern: ^[A-Za-z_][A-Za-z0-9_]{0,62}$
+                    pattern: ^[A-Za-z_][A-Za-z0-9_.]{0,62}$
                     description: |-
-                        The variable name. Must be a valid environment variable identifier
-                         (e.g., "DATABASE_URL", "API_KEY"). Alphanumeric and underscores
-                         (uppercase conventional but lowercase accepted), must start with a letter
-                         or underscore (max 255 chars).
+                        The variable name. For user-created variables, must be a valid
+                         environment variable identifier (e.g., "DATABASE_URL", "API_KEY").
+                         Infrastructure output variables use dot-namespaced keys
+                         (e.g., "vpc.vpc_id", "database.endpoint") and are system-managed.
                 value:
                     type: string
                     title: value
@@ -12062,8 +11015,10 @@ tags:
       description: Agent-facing endpoints for cluster telemetry and revision delivery. Requires a cluster SAT.
     - name: Components
       description: Manage application components and environment overrides.
-    - name: Connections
+    - name: Credentials
       description: Manage credentials for accessing external systems.
+    - name: Modules
+      description: Manage module definitions and resolve module content.
     - name: Deployments
       description: Manage deployments and track component revisions.
     - name: Environments
