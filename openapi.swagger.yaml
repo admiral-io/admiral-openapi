@@ -2055,11 +2055,10 @@ paths:
 
                     Filterable fields:
                       - `name` -- filter by runner name.
-                      - `kind` -- filter by runner kind (INFRASTRUCTURE, WORKFLOW).
                       - `health_status` -- filter by health status.
                       - `labels.key` -- filter by label key.
 
-                    Example: `field['kind'] = 'INFRASTRUCTURE' AND field['health_status'] = 'HEALTHY'`
+                    Example: `field['name'] = 'aws-prod' AND field['health_status'] = 'HEALTHY'`
                   in: query
                   required: false
                   type: string
@@ -2103,6 +2102,60 @@ paths:
                   required: true
                   schema:
                     $ref: '#/definitions/v1CreateRunnerRequest'
+            tags:
+                - RunnerAPI
+    /api/v1/runners/tokens/{token_id}:
+        get:
+            summary: |-
+                GetRunnerToken retrieves a single SAT by ID.
+                Returns metadata only -- the token secret is never included.
+            description: 'Scope: `runner:read`'
+            operationId: RunnerAPI_GetRunnerToken
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetRunnerTokenResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: token_id
+                  description: The unique identifier of the token (UUID).
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - RunnerAPI
+    /api/v1/runners/tokens/{token_id}/revoke:
+        post:
+            summary: |-
+                RevokeRunnerToken permanently revokes an SAT bound to this runner.
+                The runner will receive a 401 on its next request. If this is the only
+                active SAT for the runner, the runner will become disconnected.
+            description: 'Scope: `runner:write`'
+            operationId: RunnerAPI_RevokeRunnerToken
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1RevokeRunnerTokenResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: token_id
+                  description: The unique identifier of the token to revoke (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/RunnerAPIRevokeRunnerTokenBody'
             tags:
                 - RunnerAPI
     /api/v1/runners/{runner.id}:
@@ -2342,70 +2395,6 @@ paths:
                   required: true
                   schema:
                     $ref: '#/definitions/RunnerAPICreateRunnerTokenBody'
-            tags:
-                - RunnerAPI
-    /api/v1/runners/{runner_id}/tokens/{token_id}:
-        get:
-            summary: |-
-                GetRunnerToken retrieves a single SAT by ID.
-                Returns metadata only -- the token secret is never included.
-            description: 'Scope: `runner:read`'
-            operationId: RunnerAPI_GetRunnerToken
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetRunnerTokenResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: runner_id
-                  description: The runner the token belongs to (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: token_id
-                  description: The unique identifier of the token (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - RunnerAPI
-    /api/v1/runners/{runner_id}/tokens/{token_id}/revoke:
-        post:
-            summary: |-
-                RevokeRunnerToken permanently revokes an SAT bound to this runner.
-                The runner will receive a 401 on its next request. If this is the only
-                active SAT for the runner, the runner will become disconnected.
-            description: 'Scope: `runner:write`'
-            operationId: RunnerAPI_RevokeRunnerToken
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1RevokeRunnerTokenResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: runner_id
-                  description: The runner the token belongs to (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: token_id
-                  description: The unique identifier of the token to revoke (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/RunnerAPIRevokeRunnerTokenBody'
             tags:
                 - RunnerAPI
     /api/v1/sources:
@@ -3766,7 +3755,10 @@ definitions:
         description: ReportJobResultRequest contains the outcome of a completed job.
     RunnerAPIRevokeRunnerTokenBody:
         type: object
-        description: RevokeRunnerTokenRequest identifies a runner SAT to revoke.
+        description: |-
+            RevokeRunnerTokenRequest identifies a runner SAT to revoke. Token IDs are
+            globally unique, so no runner scoping is required; the server resolves the
+            parent runner from the token ID.
     RunnerAPIUpdateRunnerBody:
         type: object
         properties:
@@ -3784,9 +3776,6 @@ definitions:
                         description: |-
                             Optional longer-form description of the runner's purpose
                             (e.g., "Terraform runner for production AWS infrastructure").
-                    kind:
-                        $ref: '#/definitions/v1RunnerKind'
-                        description: The type of operations this runner executes.
                     labels:
                         type: object
                         additionalProperties:
@@ -5199,9 +5188,6 @@ definitions:
             description:
                 type: string
                 description: Optional longer-form description of the runner's purpose.
-            kind:
-                $ref: '#/definitions/v1RunnerKind'
-                description: The type of operations this runner executes.
             labels:
                 type: object
                 additionalProperties:
@@ -6841,9 +6827,6 @@ definitions:
                 description: |-
                     Optional longer-form description of the runner's purpose
                     (e.g., "Terraform runner for production AWS infrastructure").
-            kind:
-                $ref: '#/definitions/v1RunnerKind'
-                description: The type of operations this runner executes.
             labels:
                 type: object
                 additionalProperties:
@@ -6888,23 +6871,6 @@ definitions:
              - RUNNER_HEALTH_STATUS_DEGRADED: Runner is operational but reporting capacity constraints (e.g.,
             active jobs at or near max_concurrent_jobs).
              - RUNNER_HEALTH_STATUS_UNREACHABLE: No heartbeat received within 3x the heartbeat interval.
-    v1RunnerKind:
-        type: string
-        enum:
-            - RUNNER_KIND_UNSPECIFIED
-            - RUNNER_KIND_INFRASTRUCTURE
-            - RUNNER_KIND_WORKFLOW
-        default: RUNNER_KIND_UNSPECIFIED
-        description: |-
-            RunnerKind identifies the category of operations a runner executes. The
-            specific tool (Terraform, OpenTofu, Pulumi, ...) is reported per-runner via
-            RunnerStatus.tool_versions and is used for job-to-runner matching; the kind
-            itself is product-agnostic.
-
-             - RUNNER_KIND_UNSPECIFIED: Default value. Must not be used.
-             - RUNNER_KIND_INFRASTRUCTURE: Provisions infrastructure via IaC tooling (Terraform, OpenTofu, Pulumi,
-            and similar). Follows plan → apply lifecycle.
-             - RUNNER_KIND_WORKFLOW: Executes workflow operations (CI/CD pipelines, custom scripts).
     v1RunnerStatus:
         type: object
         properties:

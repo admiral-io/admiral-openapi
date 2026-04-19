@@ -2588,11 +2588,10 @@ paths:
 
                      Filterable fields:
                        - `name` -- filter by runner name.
-                       - `kind` -- filter by runner kind (INFRASTRUCTURE, WORKFLOW).
                        - `health_status` -- filter by health status.
                        - `labels.key` -- filter by label key.
 
-                     Example: `field['kind'] = 'INFRASTRUCTURE' AND field['health_status'] = 'HEALTHY'`
+                     Example: `field['name'] = 'aws-prod' AND field['health_status'] = 'HEALTHY'`
                   schema:
                     type: string
                     title: filter
@@ -2606,11 +2605,10 @@ paths:
 
                          Filterable fields:
                            - `name` -- filter by runner name.
-                           - `kind` -- filter by runner kind (INFRASTRUCTURE, WORKFLOW).
                            - `health_status` -- filter by health status.
                            - `labels.key` -- filter by label key.
 
-                         Example: `field['kind'] = 'INFRASTRUCTURE' AND field['health_status'] = 'HEALTHY'`
+                         Example: `field['name'] = 'aws-prod' AND field['health_status'] = 'HEALTHY'`
                 - name: page_size
                   in: query
                   description: Maximum number of runners to return per page.
@@ -2658,6 +2656,72 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.runner.v1.CreateRunnerResponse'
+    /api/v1/runners/tokens/{token_id}:
+        get:
+            tags:
+                - Runner Tokens
+            summary: Retrieve a runner token
+            description: 'Scope: `runner:read`'
+            operationId: RunnerAPI_GetRunnerToken
+            parameters:
+                - name: token_id
+                  in: path
+                  description: The unique identifier of the token (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: token_id
+                    format: uuid
+                    description: The unique identifier of the token (UUID).
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.runner.v1.GetRunnerTokenResponse'
+    /api/v1/runners/tokens/{token_id}/revoke:
+        post:
+            tags:
+                - Runner Tokens
+            summary: Revoke a runner token
+            description: 'Scope: `runner:write`'
+            operationId: RunnerAPI_RevokeRunnerToken
+            parameters:
+                - name: token_id
+                  in: path
+                  description: The unique identifier of the token to revoke (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: token_id
+                    format: uuid
+                    description: The unique identifier of the token to revoke (UUID).
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                token_id:
+                                    type: string
+                                    title: token_id
+                                    format: uuid
+                                    description: The unique identifier of the token to revoke (UUID).
+                            title: RevokeRunnerTokenRequest
+                            additionalProperties: false
+                            description: |-
+                                RevokeRunnerTokenRequest identifies a runner SAT to revoke. Token IDs are
+                                 globally unique, so no runner scoping is required; the server resolves the
+                                 parent runner from the token ID.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.runner.v1.RevokeRunnerTokenResponse'
     /api/v1/runners/{runner.id}:
         patch:
             tags:
@@ -2977,92 +3041,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.runner.v1.CreateRunnerTokenResponse'
-    /api/v1/runners/{runner_id}/tokens/{token_id}:
-        get:
-            tags:
-                - Runner Tokens
-            summary: Retrieve a runner token
-            description: 'Scope: `runner:read`'
-            operationId: RunnerAPI_GetRunnerToken
-            parameters:
-                - name: runner_id
-                  in: path
-                  description: The runner the token belongs to (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: runner_id
-                    format: uuid
-                    description: The runner the token belongs to (UUID).
-                - name: token_id
-                  in: path
-                  description: The unique identifier of the token (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: token_id
-                    format: uuid
-                    description: The unique identifier of the token (UUID).
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.runner.v1.GetRunnerTokenResponse'
-    /api/v1/runners/{runner_id}/tokens/{token_id}/revoke:
-        post:
-            tags:
-                - Runner Tokens
-            summary: Revoke a runner token
-            description: 'Scope: `runner:write`'
-            operationId: RunnerAPI_RevokeRunnerToken
-            parameters:
-                - name: runner_id
-                  in: path
-                  description: The runner the token belongs to (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: runner_id
-                    format: uuid
-                    description: The runner the token belongs to (UUID).
-                - name: token_id
-                  in: path
-                  description: The unique identifier of the token to revoke (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: token_id
-                    format: uuid
-                    description: The unique identifier of the token to revoke (UUID).
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                runner_id:
-                                    type: string
-                                    title: runner_id
-                                    format: uuid
-                                    description: The runner the token belongs to (UUID).
-                                token_id:
-                                    type: string
-                                    title: token_id
-                                    format: uuid
-                                    description: The unique identifier of the token to revoke (UUID).
-                            title: RevokeRunnerTokenRequest
-                            additionalProperties: false
-                            description: RevokeRunnerTokenRequest identifies a runner SAT to revoke.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.runner.v1.RevokeRunnerTokenResponse'
     /api/v1/sources:
         get:
             tags:
@@ -8068,10 +8046,6 @@ components:
                     title: description
                     maxLength: 1024
                     description: Optional longer-form description of the runner's purpose.
-                kind:
-                    title: kind
-                    description: The type of operations this runner executes.
-                    $ref: '#/components/schemas/admiral.runner.v1.RunnerKind'
                 labels:
                     type: object
                     title: labels
@@ -8259,11 +8233,6 @@ components:
         admiral.runner.v1.GetRunnerTokenRequest:
             type: object
             properties:
-                runner_id:
-                    type: string
-                    title: runner_id
-                    format: uuid
-                    description: The runner the token belongs to (UUID).
                 token_id:
                     type: string
                     title: token_id
@@ -8271,7 +8240,10 @@ components:
                     description: The unique identifier of the token (UUID).
             title: GetRunnerTokenRequest
             additionalProperties: false
-            description: GetRunnerTokenRequest identifies a runner SAT to retrieve.
+            description: |-
+                GetRunnerTokenRequest identifies a runner SAT to retrieve. Token IDs are
+                 globally unique, so no runner scoping is required; the server resolves the
+                 parent runner from the token ID.
         admiral.runner.v1.GetRunnerTokenResponse:
             type: object
             properties:
@@ -8659,11 +8631,10 @@ components:
 
                          Filterable fields:
                            - `name` -- filter by runner name.
-                           - `kind` -- filter by runner kind (INFRASTRUCTURE, WORKFLOW).
                            - `health_status` -- filter by health status.
                            - `labels.key` -- filter by label key.
 
-                         Example: `field['kind'] = 'INFRASTRUCTURE' AND field['health_status'] = 'HEALTHY'`
+                         Example: `field['name'] = 'aws-prod' AND field['health_status'] = 'HEALTHY'`
                 page_size:
                     type: integer
                     title: page_size
@@ -8724,11 +8695,6 @@ components:
         admiral.runner.v1.RevokeRunnerTokenRequest:
             type: object
             properties:
-                runner_id:
-                    type: string
-                    title: runner_id
-                    format: uuid
-                    description: The runner the token belongs to (UUID).
                 token_id:
                     type: string
                     title: token_id
@@ -8736,7 +8702,10 @@ components:
                     description: The unique identifier of the token to revoke (UUID).
             title: RevokeRunnerTokenRequest
             additionalProperties: false
-            description: RevokeRunnerTokenRequest identifies a runner SAT to revoke.
+            description: |-
+                RevokeRunnerTokenRequest identifies a runner SAT to revoke. Token IDs are
+                 globally unique, so no runner scoping is required; the server resolves the
+                 parent runner from the token ID.
         admiral.runner.v1.RevokeRunnerTokenResponse:
             type: object
             properties:
@@ -8772,10 +8741,6 @@ components:
                     description: |-
                         Optional longer-form description of the runner's purpose
                          (e.g., "Terraform runner for production AWS infrastructure").
-                kind:
-                    title: kind
-                    description: The type of operations this runner executes.
-                    $ref: '#/components/schemas/admiral.runner.v1.RunnerKind'
                 labels:
                     type: object
                     title: labels
@@ -8844,18 +8809,6 @@ components:
             description: |-
                 RunnerHealthStatus represents the derived health state of a runner.
                  The status is computed from heartbeat recency and capacity metrics.
-        admiral.runner.v1.RunnerKind:
-            type: string
-            title: RunnerKind
-            enum:
-                - RUNNER_KIND_UNSPECIFIED
-                - RUNNER_KIND_INFRASTRUCTURE
-                - RUNNER_KIND_WORKFLOW
-            description: |-
-                RunnerKind identifies the category of operations a runner executes. The
-                 specific tool (Terraform, OpenTofu, Pulumi, ...) is reported per-runner via
-                 RunnerStatus.tool_versions and is used for job-to-runner matching; the kind
-                 itself is product-agnostic.
         admiral.runner.v1.RunnerStatus:
             type: object
             properties:
