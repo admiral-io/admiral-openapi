@@ -3786,9 +3786,6 @@ definitions:
                     health_status:
                         $ref: '#/definitions/v1RunnerHealthStatus'
                         description: Derived health status based on heartbeat recency and capacity.
-                    created_by:
-                        $ref: '#/definitions/v1ActorRef'
-                        description: The user or agent who created this runner (server-populated from token).
                     created_at:
                         type: string
                         format: date-time
@@ -3797,6 +3794,9 @@ definitions:
                         type: string
                         format: date-time
                         description: When the runner record was last updated.
+                    created_by:
+                        $ref: '#/definitions/v1ActorRef'
+                        description: The user or agent who created this runner (server-populated from token).
                 description: |-
                     The runner with updated fields. The `id` field is required.
                     Only fields specified in `update_mask` are updated.
@@ -4221,6 +4221,11 @@ definitions:
                     URL-safe, human-readable identifier for the token (e.g., "ci-deploy-key").
                     Unique within the parent resource. Lowercase alphanumeric and hyphens only,
                     must start with a letter and end with an alphanumeric character (1-63 chars).
+            token_prefix:
+                type: string
+                description: |-
+                    Non-secret prefix of the token value (e.g., "adms_pL2m"). Useful for
+                    identifying a token during incident response without exposing the secret.
             token_type:
                 $ref: '#/definitions/v1TokenType'
                 description: The category of this token.
@@ -6837,9 +6842,6 @@ definitions:
             health_status:
                 $ref: '#/definitions/v1RunnerHealthStatus'
                 description: Derived health status based on heartbeat recency and capacity.
-            created_by:
-                $ref: '#/definitions/v1ActorRef'
-                description: The user or agent who created this runner (server-populated from token).
             created_at:
                 type: string
                 format: date-time
@@ -6848,6 +6850,9 @@ definitions:
                 type: string
                 format: date-time
                 description: When the runner record was last updated.
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                description: The user or agent who created this runner (server-populated from token).
         description: |-
             Runner represents a registered infrastructure execution runner within a
             tenant. Runners claim and execute Terraform operations (plan, apply, destroy)

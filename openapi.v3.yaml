@@ -5401,6 +5401,12 @@ components:
                         URL-safe, human-readable identifier for the token (e.g., "ci-deploy-key").
                          Unique within the parent resource. Lowercase alphanumeric and hyphens only,
                          must start with a letter and end with an alphanumeric character (1-63 chars).
+                token_prefix:
+                    type: string
+                    title: token_prefix
+                    description: |-
+                        Non-secret prefix of the token value (e.g., "adms_pL2m"). Useful for
+                         identifying a token during incident response without exposing the secret.
                 token_type:
                     title: token_type
                     description: The category of this token.
@@ -8756,10 +8762,6 @@ components:
                     title: health_status
                     description: Derived health status based on heartbeat recency and capacity.
                     $ref: '#/components/schemas/admiral.runner.v1.RunnerHealthStatus'
-                created_by:
-                    title: created_by
-                    description: The user or agent who created this runner (server-populated from token).
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
                     title: created_at
                     description: When the runner record was created.
@@ -8768,6 +8770,10 @@ components:
                     title: updated_at
                     description: When the runner record was last updated.
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
+                created_by:
+                    title: created_by
+                    description: The user or agent who created this runner (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
             title: Runner
             additionalProperties: false
             description: |-
