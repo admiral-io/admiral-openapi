@@ -4443,6 +4443,25 @@ definitions:
                 $ref: '#/definitions/v1Deployment'
                 description: The canceled deployment.
         description: CancelDeploymentResponse contains the updated deployment.
+    v1ChangeSummary:
+        type: object
+        properties:
+            additions:
+                type: integer
+                format: int32
+                description: Number of resources to be created.
+            changes:
+                type: integer
+                format: int32
+                description: Number of resources to be updated in place.
+            destructions:
+                type: integer
+                format: int32
+                description: Number of resources to be destroyed.
+        description: |-
+            ChangeSummary provides resource change counts from an infrastructure plan.
+            Engine-agnostic — the "+N / ~N / -N" shape is universal across Terraform,
+            OpenTofu, and similar engines.
     v1ClaimJobRequest:
         type: object
         description: |-
@@ -5527,6 +5546,45 @@ definitions:
              - DEPLOYMENT_TRIGGER_TYPE_DESTROY: Triggered as a destroy operation to tear down all resources in the
             environment. Runs Terraform destroy for infra components and deletes
             workload resources from the cluster, in reverse dependency order.
+    v1Engine:
+        type: string
+        enum:
+            - ENGINE_UNSPECIFIED
+            - ENGINE_TERRAFORM
+            - ENGINE_TOFU
+        default: ENGINE_UNSPECIFIED
+        description: |-
+            Engine identifies which infrastructure-as-code binary executes the job.
+            Deliberately narrow: only the terraform-semantic engines Admiral manages as
+            first-class citizens. Wrapper tools (e.g., terragrunt) and non-terraform-
+            semantic engines (Pulumi, CDK) are intentionally out of scope -- users
+            shell out to them via hooks if needed.
+
+             - ENGINE_UNSPECIFIED: Default value. Servers should treat this as ENGINE_TERRAFORM for
+            backwards compatibility with bundles written before this field existed.
+             - ENGINE_TERRAFORM: HashiCorp Terraform.
+             - ENGINE_TOFU: OpenTofu.
+    v1EngineOutput:
+        type: object
+        properties:
+            value:
+                type: string
+                description: |-
+                    The output value, serialized as a string. Complex values (lists, maps)
+                    are JSON-encoded.
+            type:
+                type: string
+                description: |-
+                    Engine type descriptor (e.g., "string", "number", "bool",
+                    "list(string)", "map(string)", "object({...})").
+            sensitive:
+                type: boolean
+                description: Whether the engine marked this output as sensitive.
+        description: |-
+            EngineOutput represents a single output value captured from the engine
+            after a successful apply (e.g., `terraform output -json` / `tofu output
+            -json`). Engine-agnostic: the three-field shape (value, type, sensitive)
+            generalizes across terraform-semantic engines.
     v1Environment:
         type: object
         properties:
@@ -5873,6 +5931,90 @@ definitions:
             HelmConfig identifies which chart within a Helm HTTP repository the source
             points to. A single Helm repository hosts many charts; the chart name
             selects one.
+    v1Hook:
+        type: object
+        properties:
+            script:
+                type: string
+                description: |-
+                    The shell script to execute. Passed to `sh -c`. The runner closes stdin
+                    (/dev/null) so interactive prompts cannot block execution.
+            timeout_seconds:
+                type: integer
+                format: int32
+                description: |-
+                    Per-script timeout in seconds. If 0, the runner applies its built-in
+                    default (currently 300s). A hook that exceeds its timeout is killed
+                    (SIGKILL after grace period) and treated as a failure.
+            name:
+                type: string
+                description: |-
+                    Optional human-friendly name used in log lines and error messages
+                    (e.g., "vault-login"). Not required to be unique.
+        description: |-
+            Hook is a single shell-script hook delivered with a JobBundle. Scripts are
+            inlined by the server -- the runner never fetches them from elsewhere.
+    v1Hooks:
+        type: object
+        properties:
+            before_init:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Hook'
+                description: Scripts to run before `terraform init` (or equivalent). Fail-fast.
+            after_init:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Hook'
+                description: Scripts to run after `terraform init` succeeded. Run-all.
+            before_plan:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Hook'
+                description: |-
+                    Scripts to run before `terraform plan` (plan and destroy-plan jobs).
+                    Fail-fast.
+            after_plan:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Hook'
+                description: Scripts to run after `terraform plan` succeeded. Run-all.
+            before_apply:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Hook'
+                description: |-
+                    Scripts to run before `terraform apply` (apply and destroy-apply jobs).
+                    Fail-fast.
+            after_apply:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Hook'
+                description: Scripts to run after `terraform apply` succeeded. Run-all.
+            after_run:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Hook'
+                description: |-
+                    Scripts to run after the job completes, regardless of success or
+                    failure. Always executed (finally-semantics). Run-all.
+        description: |-
+            Hooks groups the seven lifecycle extension points. Scripts within a list
+            run in list order. Failure behavior differs by phase:
+              - `before_*` hooks are fail-fast: the first non-zero exit aborts the
+                phase, the engine command does not run, and the job fails.
+              - `after_*` hooks and `after_run` hooks are run-all: every script in
+                the list executes regardless of sibling failures. Individual failures
+                are logged but do not fail the job.
+            `after_run` always runs, even if an earlier phase failed (it is the
+            runner's equivalent of a `finally` block).
     v1InfrastructureTarget:
         type: object
         properties:
@@ -5937,8 +6079,9 @@ definitions:
                 additionalProperties:
                     type: string
                 description: |-
-                    Resolved variable values to inject as TF_VAR_* environment variables.
-                    Sensitive values are included (runner is a trusted execution context).
+                    Resolved variable values written to the workspace as an auto-loaded
+                    tfvars file. Sensitive values are included (runner is a trusted
+                    execution context).
             provider_configs:
                 type: object
                 additionalProperties:
@@ -5949,11 +6092,22 @@ definitions:
             backend_config:
                 type: string
                 description: |-
-                    Terraform backend configuration (JSON-encoded). Contains the backend
-                    type and its configuration for state storage.
-            terraform_version:
+                    Backend configuration (JSON-encoded). Contains the backend type and its
+                    configuration for state storage. Engine-agnostic in shape; the engine's
+                    own backend implementation consumes it.
+            engine:
+                $ref: '#/definitions/v1Engine'
+                description: |-
+                    Which engine should execute this job. ENGINE_UNSPECIFIED means the
+                    runner's default (currently terraform) is used.
+            engine_version:
                 type: string
-                description: The Terraform version to use for this operation (e.g., "1.7.5").
+                description: |-
+                    Version of the selected engine (e.g., "1.7.5"). When empty, the runner
+                    uses whichever version it has pre-installed by default. When set, the
+                    runner writes the appropriate version file (`.terraform-version` /
+                    `.opentofu-version`) so tfenv / tofuenv dispatches to the matching
+                    binary, downloading it on demand if not already cached.
             working_directory:
                 type: string
                 description: |-
@@ -5965,11 +6119,20 @@ definitions:
                 description: |-
                     (Apply/destroy-apply jobs only) URL to download the binary plan file
                     produced by the preceding plan job. The runner downloads this file and
-                    passes it to `terraform apply <plan_file>` to ensure the exact reviewed
-                    plan is applied. Empty for plan jobs.
+                    passes it to `apply <plan_file>` so the exact reviewed plan is applied.
+                    Empty for plan jobs.
+            hooks:
+                $ref: '#/definitions/v1Hooks'
+                description: |-
+                    Shell-script hooks that run before and after each engine phase.
+                    The runner invokes each hook via `sh -c <script>` in the execution
+                    directory, with the same environment as the engine. Hook stdout/stderr
+                    is folded into the job transcript. See the Hooks message for failure
+                    semantics.
         description: |-
-            JobBundle contains everything a runner needs to execute a Terraform operation.
-            Fetched separately from ClaimJob to keep the claim response lightweight.
+            JobBundle contains everything a runner needs to execute an infrastructure
+            operation. Fetched separately from ClaimJob to keep the claim response
+            lightweight.
     v1JobPhase:
         type: string
         enum:
@@ -5999,7 +6162,7 @@ definitions:
                 type: string
                 description: (Plan jobs only) The Terraform plan output in human-readable format.
             plan_summary:
-                $ref: '#/definitions/v1TerraformPlanSummary'
+                $ref: '#/definitions/v1ChangeSummary'
                 description: (Plan jobs only) Summary of resource changes from the plan.
             error_message:
                 type: string
@@ -6013,11 +6176,11 @@ definitions:
             outputs:
                 type: object
                 additionalProperties:
-                    $ref: '#/definitions/v1TerraformOutput'
+                    $ref: '#/definitions/v1EngineOutput'
                 description: |-
-                    (Apply/destroy-apply jobs only) Terraform outputs captured via
-                    `terraform output -json`. Keys are output names, values contain the
-                    output value, type, and sensitivity flag.
+                    (Apply/destroy-apply jobs only) Engine outputs captured after a
+                    successful apply (e.g., `terraform output -json`). Keys are output
+                    names; values carry the output value, type, and sensitivity flag.
         description: JobResult contains the outcome of a completed job, reported by the runner.
     v1JobStatus:
         type: string
@@ -6603,10 +6766,12 @@ definitions:
                     Storage location of the rendered artifact bundle. Internal reference
                     used by agents/runners to fetch the bundle.
             plan_summary:
-                $ref: '#/definitions/v1TerraformPlanSummary'
+                $ref: '#/definitions/v1ChangeSummary'
                 description: |-
-                    (Infrastructure only) The number of resources Terraform plans to add,
-                    change, and destroy. Populated after planning completes.
+                    (Infrastructure only) The number of resources the plan will add,
+                    change, and destroy. Populated after planning completes. Engine-agnostic:
+                    applies to Terraform, OpenTofu, or any future engine that models changes
+                    as create/update/delete counts.
             has_plan_output:
                 type: boolean
                 description: |-
@@ -6890,23 +7055,6 @@ definitions:
                 type: integer
                 format: int32
                 description: Maximum number of concurrent jobs this runner supports.
-            available_providers:
-                type: array
-                items:
-                    type: string
-                description: Terraform providers available on this runner (e.g., ["aws", "google", "azurerm"]).
-            tool_versions:
-                type: object
-                additionalProperties:
-                    type: string
-                description: |-
-                    CLI tool versions installed on this runner, detected at startup and
-                    reported on every heartbeat. Visible to admins via GetRunnerStatus.
-                    The server uses tool_versions to match jobs to capable runners (e.g.,
-                    a job requiring Terraform 1.9.x will only be assigned to a runner
-                    reporting a compatible version).
-                    Keys are tool names (e.g., "terraform", "tofu", "helm", "kustomize", "kubectl").
-                    Values are semantic versions (e.g., "1.7.5", "1.9.0").
             active_job_details:
                 type: array
                 items:
@@ -6925,6 +7073,11 @@ definitions:
             Server-derived fields (health_status) are NOT included here -- they live
             on the Runner record and are returned alongside this message in
             GetRunnerStatusResponse.
+
+            Runner capabilities (which engines are installed, which credentials are
+            available, etc.) are operator-declared on the Runner record at registration
+            time -- they are NOT self-reported here. Heartbeat is purely for liveness
+            and capacity signals that change at runtime.
     v1SSHKeyAuth:
         type: object
         properties:
@@ -7279,39 +7432,6 @@ definitions:
             StateVersion contains metadata about a historical state version. Used in
             ListStateVersions to provide version history without the full state data
             blob.
-    v1TerraformOutput:
-        type: object
-        properties:
-            value:
-                type: string
-                description: |-
-                    The output value, serialized as a string. Complex values (lists, maps)
-                    are JSON-encoded.
-            type:
-                type: string
-                description: |-
-                    Terraform type descriptor (e.g., "string", "number", "bool",
-                    "list(string)", "map(string)", "object({...})").
-            sensitive:
-                type: boolean
-                description: Whether Terraform marked this output as sensitive.
-        description: TerraformOutput represents a single output value from `terraform output -json`.
-    v1TerraformPlanSummary:
-        type: object
-        properties:
-            additions:
-                type: integer
-                format: int32
-                description: Number of resources to be created.
-            changes:
-                type: integer
-                format: int32
-                description: Number of resources to be updated in place.
-            destructions:
-                type: integer
-                format: int32
-                description: Number of resources to be destroyed.
-        description: TerraformPlanSummary provides resource change counts from a Terraform plan.
     v1TestSourceResponse:
         type: object
         properties:

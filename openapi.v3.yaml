@@ -6661,6 +6661,30 @@ components:
             title: CancelDeploymentResponse
             additionalProperties: false
             description: CancelDeploymentResponse contains the updated deployment.
+        admiral.deployment.v1.ChangeSummary:
+            type: object
+            properties:
+                additions:
+                    type: integer
+                    title: additions
+                    format: int32
+                    description: Number of resources to be created.
+                changes:
+                    type: integer
+                    title: changes
+                    format: int32
+                    description: Number of resources to be updated in place.
+                destructions:
+                    type: integer
+                    title: destructions
+                    format: int32
+                    description: Number of resources to be destroyed.
+            title: ChangeSummary
+            additionalProperties: false
+            description: |-
+                ChangeSummary provides resource change counts from an infrastructure plan.
+                 Engine-agnostic — the "+N / ~N / -N" shape is universal across Terraform,
+                 OpenTofu, and similar engines.
         admiral.deployment.v1.CreateDeploymentRequest:
             type: object
             properties:
@@ -7052,9 +7076,11 @@ components:
                 plan_summary:
                     title: plan_summary
                     description: |-
-                        (Infrastructure only) The number of resources Terraform plans to add,
-                         change, and destroy. Populated after planning completes.
-                    $ref: '#/components/schemas/admiral.deployment.v1.TerraformPlanSummary'
+                        (Infrastructure only) The number of resources the plan will add,
+                         change, and destroy. Populated after planning completes. Engine-agnostic:
+                         applies to Terraform, OpenTofu, or any future engine that models changes
+                         as create/update/delete counts.
+                    $ref: '#/components/schemas/admiral.deployment.v1.ChangeSummary'
                 has_plan_output:
                     type: boolean
                     title: has_plan_output
@@ -7186,27 +7212,6 @@ components:
             description: |-
                 RevisionSummary provides aggregate counts of revision statuses within a
                  deployment, enabling quick status display without loading all revisions.
-        admiral.deployment.v1.TerraformPlanSummary:
-            type: object
-            properties:
-                additions:
-                    type: integer
-                    title: additions
-                    format: int32
-                    description: Number of resources to be created.
-                changes:
-                    type: integer
-                    title: changes
-                    format: int32
-                    description: Number of resources to be updated in place.
-                destructions:
-                    type: integer
-                    title: destructions
-                    format: int32
-                    description: Number of resources to be destroyed.
-            title: TerraformPlanSummary
-            additionalProperties: false
-            description: TerraformPlanSummary provides resource change counts from a Terraform plan.
         admiral.environment.v1.CreateEnvironmentRequest:
             type: object
             properties:
@@ -8160,6 +8165,45 @@ components:
             title: DeleteRunnerResponse
             additionalProperties: false
             description: DeleteRunnerResponse is empty on success.
+        admiral.runner.v1.Engine:
+            type: string
+            title: Engine
+            enum:
+                - ENGINE_UNSPECIFIED
+                - ENGINE_TERRAFORM
+                - ENGINE_TOFU
+            description: |-
+                Engine identifies which infrastructure-as-code binary executes the job.
+                 Deliberately narrow: only the terraform-semantic engines Admiral manages as
+                 first-class citizens. Wrapper tools (e.g., terragrunt) and non-terraform-
+                 semantic engines (Pulumi, CDK) are intentionally out of scope -- users
+                 shell out to them via hooks if needed.
+        admiral.runner.v1.EngineOutput:
+            type: object
+            properties:
+                value:
+                    type: string
+                    title: value
+                    description: |-
+                        The output value, serialized as a string. Complex values (lists, maps)
+                         are JSON-encoded.
+                type:
+                    type: string
+                    title: type
+                    description: |-
+                        Engine type descriptor (e.g., "string", "number", "bool",
+                         "list(string)", "map(string)", "object({...})").
+                sensitive:
+                    type: boolean
+                    title: sensitive
+                    description: Whether the engine marked this output as sensitive.
+            title: EngineOutput
+            additionalProperties: false
+            description: |-
+                EngineOutput represents a single output value captured from the engine
+                 after a successful apply (e.g., `terraform output -json` / `tofu output
+                 -json`). Engine-agnostic: the three-field shape (value, type, sensitive)
+                 generalizes across terraform-semantic engines.
         admiral.runner.v1.GetJobBundleRequest:
             type: object
             properties:
@@ -8301,6 +8345,102 @@ components:
             title: HeartbeatResponse
             additionalProperties: false
             description: HeartbeatResponse acknowledges the heartbeat.
+        admiral.runner.v1.Hook:
+            type: object
+            properties:
+                script:
+                    type: string
+                    title: script
+                    maxLength: 65536
+                    minLength: 1
+                    description: |-
+                        The shell script to execute. Passed to `sh -c`. The runner closes stdin
+                         (/dev/null) so interactive prompts cannot block execution.
+                timeout_seconds:
+                    type: integer
+                    title: timeout_seconds
+                    maximum: 3600
+                    minimum: 0
+                    format: int32
+                    description: |-
+                        Per-script timeout in seconds. If 0, the runner applies its built-in
+                         default (currently 300s). A hook that exceeds its timeout is killed
+                         (SIGKILL after grace period) and treated as a failure.
+                name:
+                    type: string
+                    title: name
+                    maxLength: 128
+                    description: |-
+                        Optional human-friendly name used in log lines and error messages
+                         (e.g., "vault-login"). Not required to be unique.
+            title: Hook
+            additionalProperties: false
+            description: |-
+                Hook is a single shell-script hook delivered with a JobBundle. Scripts are
+                 inlined by the server -- the runner never fetches them from elsewhere.
+        admiral.runner.v1.Hooks:
+            type: object
+            properties:
+                before_init:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.runner.v1.Hook'
+                    title: before_init
+                    description: Scripts to run before `terraform init` (or equivalent). Fail-fast.
+                after_init:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.runner.v1.Hook'
+                    title: after_init
+                    description: Scripts to run after `terraform init` succeeded. Run-all.
+                before_plan:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.runner.v1.Hook'
+                    title: before_plan
+                    description: |-
+                        Scripts to run before `terraform plan` (plan and destroy-plan jobs).
+                         Fail-fast.
+                after_plan:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.runner.v1.Hook'
+                    title: after_plan
+                    description: Scripts to run after `terraform plan` succeeded. Run-all.
+                before_apply:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.runner.v1.Hook'
+                    title: before_apply
+                    description: |-
+                        Scripts to run before `terraform apply` (apply and destroy-apply jobs).
+                         Fail-fast.
+                after_apply:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.runner.v1.Hook'
+                    title: after_apply
+                    description: Scripts to run after `terraform apply` succeeded. Run-all.
+                after_run:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.runner.v1.Hook'
+                    title: after_run
+                    description: |-
+                        Scripts to run after the job completes, regardless of success or
+                         failure. Always executed (finally-semantics). Run-all.
+            title: Hooks
+            additionalProperties: false
+            description: |-
+                Hooks groups the seven lifecycle extension points. Scripts within a list
+                 run in list order. Failure behavior differs by phase:
+                   - `before_*` hooks are fail-fast: the first non-zero exit aborts the
+                     phase, the engine command does not run, and the job fails.
+                   - `after_*` hooks and `after_run` hooks are run-all: every script in
+                     the list executes regardless of sibling failures. Individual failures
+                     are logged but do not fail the job.
+                 `after_run` always runs, even if an earlier phase failed (it is the
+                 runner's equivalent of a `finally` block).
         admiral.runner.v1.Job:
             type: object
             properties:
@@ -8369,8 +8509,9 @@ components:
                         type: string
                         title: value
                     description: |-
-                        Resolved variable values to inject as TF_VAR_* environment variables.
-                         Sensitive values are included (runner is a trusted execution context).
+                        Resolved variable values written to the workspace as an auto-loaded
+                         tfvars file. Sensitive values are included (runner is a trusted
+                         execution context).
                 provider_configs:
                     type: object
                     title: provider_configs
@@ -8384,12 +8525,24 @@ components:
                     type: string
                     title: backend_config
                     description: |-
-                        Terraform backend configuration (JSON-encoded). Contains the backend
-                         type and its configuration for state storage.
-                terraform_version:
+                        Backend configuration (JSON-encoded). Contains the backend type and its
+                         configuration for state storage. Engine-agnostic in shape; the engine's
+                         own backend implementation consumes it.
+                engine:
+                    title: engine
+                    description: |-
+                        Which engine should execute this job. ENGINE_UNSPECIFIED means the
+                         runner's default (currently terraform) is used.
+                    $ref: '#/components/schemas/admiral.runner.v1.Engine'
+                engine_version:
                     type: string
-                    title: terraform_version
-                    description: The Terraform version to use for this operation (e.g., "1.7.5").
+                    title: engine_version
+                    description: |-
+                        Version of the selected engine (e.g., "1.7.5"). When empty, the runner
+                         uses whichever version it has pre-installed by default. When set, the
+                         runner writes the appropriate version file (`.terraform-version` /
+                         `.opentofu-version`) so tfenv / tofuenv dispatches to the matching
+                         binary, downloading it on demand if not already cached.
                 working_directory:
                     type: string
                     title: working_directory
@@ -8403,13 +8556,23 @@ components:
                     description: |-
                         (Apply/destroy-apply jobs only) URL to download the binary plan file
                          produced by the preceding plan job. The runner downloads this file and
-                         passes it to `terraform apply <plan_file>` to ensure the exact reviewed
-                         plan is applied. Empty for plan jobs.
+                         passes it to `apply <plan_file>` so the exact reviewed plan is applied.
+                         Empty for plan jobs.
+                hooks:
+                    title: hooks
+                    description: |-
+                        Shell-script hooks that run before and after each engine phase.
+                         The runner invokes each hook via `sh -c <script>` in the execution
+                         directory, with the same environment as the engine. Hook stdout/stderr
+                         is folded into the job transcript. See the Hooks message for failure
+                         semantics.
+                    $ref: '#/components/schemas/admiral.runner.v1.Hooks'
             title: JobBundle
             additionalProperties: false
             description: |-
-                JobBundle contains everything a runner needs to execute a Terraform operation.
-                 Fetched separately from ClaimJob to keep the claim response lightweight.
+                JobBundle contains everything a runner needs to execute an infrastructure
+                 operation. Fetched separately from ClaimJob to keep the claim response
+                 lightweight.
         admiral.runner.v1.JobBundle.ProviderConfigsEntry:
             type: object
             properties:
@@ -8459,7 +8622,7 @@ components:
                 plan_summary:
                     title: plan_summary
                     description: (Plan jobs only) Summary of resource changes from the plan.
-                    $ref: '#/components/schemas/admiral.deployment.v1.TerraformPlanSummary'
+                    $ref: '#/components/schemas/admiral.deployment.v1.ChangeSummary'
                 error_message:
                     type: string
                     title: error_message
@@ -8477,11 +8640,11 @@ components:
                     title: outputs
                     additionalProperties:
                         title: value
-                        $ref: '#/components/schemas/admiral.runner.v1.TerraformOutput'
+                        $ref: '#/components/schemas/admiral.runner.v1.EngineOutput'
                     description: |-
-                        (Apply/destroy-apply jobs only) Terraform outputs captured via
-                         `terraform output -json`. Keys are output names, values contain the
-                         output value, type, and sensitivity flag.
+                        (Apply/destroy-apply jobs only) Engine outputs captured after a
+                         successful apply (e.g., `terraform output -json`). Keys are output
+                         names; values carry the output value, type, and sensitivity flag.
             title: JobResult
             additionalProperties: false
             description: JobResult contains the outcome of a completed job, reported by the runner.
@@ -8493,7 +8656,7 @@ components:
                     title: key
                 value:
                     title: value
-                    $ref: '#/components/schemas/admiral.runner.v1.TerraformOutput'
+                    $ref: '#/components/schemas/admiral.runner.v1.EngineOutput'
             title: OutputsEntry
             additionalProperties: false
         admiral.runner.v1.JobStatus:
@@ -8832,29 +8995,6 @@ components:
                     title: max_concurrent_jobs
                     format: int32
                     description: Maximum number of concurrent jobs this runner supports.
-                available_providers:
-                    type: array
-                    items:
-                        type: string
-                    title: available_providers
-                    description: Terraform providers available on this runner (e.g., ["aws", "google", "azurerm"]).
-                tool_versions:
-                    type: object
-                    title: tool_versions
-                    maxProperties: 32
-                    additionalProperties:
-                        type: string
-                        title: value
-                        maxLength: 32
-                        minLength: 1
-                    description: |-
-                        CLI tool versions installed on this runner, detected at startup and
-                         reported on every heartbeat. Visible to admins via GetRunnerStatus.
-                         The server uses tool_versions to match jobs to capable runners (e.g.,
-                         a job requiring Terraform 1.9.x will only be assigned to a runner
-                         reporting a compatible version).
-                         Keys are tool names (e.g., "terraform", "tofu", "helm", "kustomize", "kubectl").
-                         Values are semantic versions (e.g., "1.7.5", "1.9.0").
                 active_job_details:
                     type: array
                     items:
@@ -8875,39 +9015,11 @@ components:
                  Server-derived fields (health_status) are NOT included here -- they live
                  on the Runner record and are returned alongside this message in
                  GetRunnerStatusResponse.
-        admiral.runner.v1.RunnerStatus.ToolVersionsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: ToolVersionsEntry
-            additionalProperties: false
-        admiral.runner.v1.TerraformOutput:
-            type: object
-            properties:
-                value:
-                    type: string
-                    title: value
-                    description: |-
-                        The output value, serialized as a string. Complex values (lists, maps)
-                         are JSON-encoded.
-                type:
-                    type: string
-                    title: type
-                    description: |-
-                        Terraform type descriptor (e.g., "string", "number", "bool",
-                         "list(string)", "map(string)", "object({...})").
-                sensitive:
-                    type: boolean
-                    title: sensitive
-                    description: Whether Terraform marked this output as sensitive.
-            title: TerraformOutput
-            additionalProperties: false
-            description: TerraformOutput represents a single output value from `terraform output -json`.
+
+                 Runner capabilities (which engines are installed, which credentials are
+                 available, etc.) are operator-declared on the Runner record at registration
+                 time -- they are NOT self-reported here. Heartbeat is purely for liveness
+                 and capacity signals that change at runtime.
         admiral.runner.v1.UpdateRunnerRequest:
             type: object
             properties:
