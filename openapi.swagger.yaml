@@ -1163,13 +1163,19 @@ paths:
             parameters:
                 - name: filter
                   description: |-
-                    Filter expression using the PEG filter DSL.
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
 
-                    Common filter fields:
-                      - `application_id` -- deployments for a specific application.
-                      - `environment_id` -- deployments to a specific environment.
-                      - `status` -- filter by deployment status.
+                    Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
+                    (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
+                    STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
+
+                    Filterable fields:
+                      - `application_id` -- deployments for a specific application (UUID).
+                      - `environment_id` -- deployments to a specific environment (UUID).
+                      - `status` -- filter by deployment status (PENDING, RUNNING, SUCCEEDED, ...).
                       - `trigger_type` -- filter by trigger type (MANUAL, CI, DESTROY).
+
+                    Example: `field['environment_id'] = '<uuid>' AND field['status'] = 'SUCCEEDED'`
                   in: query
                   required: false
                   type: string
@@ -1195,9 +1201,10 @@ paths:
                 builds the dependency DAG, and begins rendering and executing revisions.
 
                 To destroy all resources in an environment (e.g., before deleting the
-                environment), set `destroy` to true. This runs Terraform destroy for
-                infrastructure components and deletes workload resources from the cluster,
-                in reverse dependency order.
+                environment), set `destroy` to true. This runs the engine's destroy
+                operation (e.g., `terraform destroy` / `tofu destroy`) for infrastructure
+                components and deletes workload resources from the cluster, in reverse
+                dependency order.
 
                 Concurrency: only one deployment can be active per application+environment
                 at a time. If a deployment is already in progress (PENDING or RUNNING),
@@ -1823,9 +1830,9 @@ paths:
                 from ClaimJob to keep the claim response lightweight -- the runner first
                 claims a job, then fetches the (potentially large) artifact bundle.
             description: |-
-                The bundle contains everything the runner needs to execute the Terraform
-                operation: rendered .tf files, resolved variables, provider configuration,
-                backend configuration, and the required Terraform version.
+                The bundle contains everything the runner needs to execute the infrastructure
+                operation: rendered infrastructure files, resolved variables, provider
+                configuration, backend configuration, the target engine, and its version.
 
                 This endpoint is runner-facing and restricted to service access tokens.
 
@@ -3031,15 +3038,17 @@ paths:
                 - UserAPI
     /api/v1/variables:
         get:
-            summary: ListVariables returns a merged, paginated list of variables.
-            description: |-
-                The returned list is a resolved view based on the provided filters:
+            summary: |-
+                ListVariables returns a paginated list of variables drawn from all levels
+                in scope for the provided filters:
                   - No application_id or environment_id: global variables only.
-                  - application_id only: global + app-level variables merged.
-                  - application_id + environment_id: global + app + environment variables merged.
-
-                When variables with the same key exist at multiple levels, all are returned
-                so clients can determine precedence.
+                  - application_id only: global + app-level variables.
+                  - application_id + environment_id: global + app + environment variables.
+            description: |-
+                The response is the raw union, not a precedence-resolved view: when the
+                same key exists at multiple levels, every entry is returned. This is
+                deliberate -- UIs need to show which level overrides which. Deployment
+                rendering applies precedence (env > app > global) automatically.
 
                 Scope: `var:read`
             operationId: VariableAPI_ListVariables
@@ -3055,16 +3064,23 @@ paths:
             parameters:
                 - name: filter
                   description: |-
-                    Filter expression using the PEG filter DSL.
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
 
-                    Common filter fields:
-                      - `application_id` -- scope to an application (triggers merge with
-                        app-level variables alongside global variables).
-                      - `environment_id` -- scope to an environment (requires application_id;
-                        triggers merge with environment-level variables).
-                      - `sensitive` -- filter by sensitivity.
-                      - `type` -- filter by variable type.
-                      - `key` -- filter by variable key (supports prefix matching).
+                    Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
+                    (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
+                    STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
+
+                    Filterable fields:
+                      - `application_id` -- scope to an application (UUID; also expands the
+                        returned union to include app-level variables).
+                      - `environment_id` -- scope to an environment (UUID; requires
+                        application_id; also expands the union to include environment-level
+                        variables).
+                      - `sensitive` -- filter by sensitivity flag.
+                      - `type` -- filter by variable type (STRING, NUMBER, BOOLEAN, COMPLEX).
+                      - `key` -- filter by variable key (supports prefix matching via ~=).
+
+                    Example: `field['application_id'] = '<uuid>' AND field['sensitive'] = 'false'`
                   in: query
                   required: false
                   type: string
@@ -3757,8 +3773,10 @@ definitions:
         type: object
         description: |-
             RevokeRunnerTokenRequest identifies a runner SAT to revoke. Token IDs are
-            globally unique, so no runner scoping is required; the server resolves the
-            parent runner from the token ID.
+            globally unique, so no runner scoping is required in the path; the server
+            resolves the parent runner from the token ID. Authorization is enforced
+            via the `runner:write` scope on the caller's token, not by path prefix --
+            a leaked token ID alone does not grant revocation.
     RunnerAPIUpdateRunnerBody:
         type: object
         properties:
@@ -3793,7 +3811,10 @@ definitions:
                     updated_at:
                         type: string
                         format: date-time
-                        description: When the runner record was last updated.
+                        description: |-
+                            When the runner record was last updated via UpdateRunner. Heartbeats do
+                            not bump this field -- liveness state is exposed separately via
+                            RunnerStatus and health_status.
                     created_by:
                         $ref: '#/definitions/v1ActorRef'
                         description: The user or agent who created this runner (server-populated from token).
@@ -4041,8 +4062,8 @@ definitions:
                         $ref: '#/definitions/v1VariableSource'
                         description: |-
                             How the variable was created. USER for variables created via the API/CLI,
-                            INFRASTRUCTURE for variables produced by terraform output capture.
-                            Server-populated; not settable via CreateVariable.
+                            INFRASTRUCTURE for variables produced by engine output capture (Terraform
+                            or OpenTofu). Server-populated; not settable via CreateVariable.
                 description: |-
                     The variable with updated fields.
                     Only fields specified in `update_mask` are updated.
@@ -4224,8 +4245,11 @@ definitions:
             token_prefix:
                 type: string
                 description: |-
-                    Non-secret prefix of the token value (e.g., "adms_pL2m"). Useful for
-                    identifying a token during incident response without exposing the secret.
+                    Non-secret prefix of the token value -- the five-character brand
+                    (`admp_` for PATs, `adms_` for SATs) followed by a short sample of
+                    characters from the secret body (e.g., "adms_pL2m"). URL-safe and safe
+                    to log and display. Use for incident response and audit trails without
+                    exposing the secret.
             token_type:
                 $ref: '#/definitions/v1TokenType'
                 description: The category of this token.
@@ -5064,10 +5088,10 @@ definitions:
             destroy:
                 type: boolean
                 description: |-
-                    Destroy all resources in the environment. Runs Terraform destroy for
-                    infra components and deletes workload resources from the cluster, in
-                    reverse dependency order. Required before deleting an environment that
-                    has active resources.
+                    Destroy all resources in the environment. Runs the engine's destroy
+                    phase (`terraform destroy` / `tofu destroy`) for infra components and
+                    deletes workload resources from the cluster, in reverse dependency
+                    order. Required before deleting an environment that has active resources.
             source_deployment_id:
                 type: string
                 description: |-
@@ -5298,7 +5322,10 @@ definitions:
                 type: string
                 description: |-
                     The variable name. Must be a valid environment variable identifier
-                    (e.g., "DATABASE_URL", "API_KEY").
+                    (e.g., "DATABASE_URL", "API_KEY"). Unlike Variable.key, dots are not
+                    permitted here: dot-namespaced keys (e.g., "vpc.vpc_id") are reserved
+                    for system-managed INFRASTRUCTURE variables captured from engine output
+                    and cannot be created through this RPC.
             value:
                 type: string
                 description: The variable value. For COMPLEX type, must be valid JSON.
@@ -5472,9 +5499,10 @@ definitions:
                 type: boolean
                 description: |-
                     Whether this is a destroy deployment. Destroy deployments tear down all
-                    resources in the environment: Terraform destroy for infra components,
-                    resource deletion for workload components. Executed in reverse dependency
-                    order. Required before an environment with active resources can be deleted.
+                    resources in the environment: the engine's destroy phase for infra
+                    components (`terraform destroy` / `tofu destroy`), resource deletion for
+                    workload components. Executed in reverse dependency order. Required
+                    before an environment with active resources can be deleted.
             source_deployment_id:
                 type: string
                 description: |-
@@ -5499,6 +5527,12 @@ definitions:
             environment. Each deployment produces one Revision per component. The
             deployment tracks the composite status across all revisions and provides
             the audit trail for what was deployed, when, and by whom.
+
+            Deployment records are immutable once created -- there is no UpdateDeployment
+            RPC and no `updated_at` field. The composite `status`, `revision_summary`,
+            and `completed_at` fields are server-maintained as revisions progress;
+            everything else is fixed at creation time. To change what is deployed,
+            create a new deployment.
     v1DeploymentStatus:
         type: string
         enum:
@@ -5544,8 +5578,9 @@ definitions:
              - DEPLOYMENT_TRIGGER_TYPE_MANUAL: Manually triggered by a user via API, CLI, or UI.
              - DEPLOYMENT_TRIGGER_TYPE_CI: Triggered by a CI/CD pipeline (via API with a PAT).
              - DEPLOYMENT_TRIGGER_TYPE_DESTROY: Triggered as a destroy operation to tear down all resources in the
-            environment. Runs Terraform destroy for infra components and deletes
-            workload resources from the cluster, in reverse dependency order.
+            environment. Runs the engine's destroy phase (`terraform destroy` /
+            `tofu destroy`) for infra components and deletes workload resources
+            from the cluster, in reverse dependency order.
     v1Engine:
         type: string
         enum:
@@ -5775,7 +5810,9 @@ definitions:
         properties:
             bundle:
                 $ref: '#/definitions/v1JobBundle'
-                description: The artifact bundle with everything needed to execute the TF operation.
+                description: |-
+                    The artifact bundle with everything needed to execute the infrastructure
+                    operation.
         description: GetJobBundleResponse contains the rendered artifacts for execution.
     v1GetMeResponse:
         type: object
@@ -5984,41 +6021,49 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1Hook'
-                description: Scripts to run before `terraform init` (or equivalent). Fail-fast.
+                description: |-
+                    Scripts to run before the init phase (`terraform init` / `tofu init`).
+                    Fail-fast.
             after_init:
                 type: array
                 items:
                     type: object
                     $ref: '#/definitions/v1Hook'
-                description: Scripts to run after `terraform init` succeeded. Run-all.
+                description: |-
+                    Scripts to run after the init phase succeeded. Run-all; skipped if
+                    init failed.
             before_plan:
                 type: array
                 items:
                     type: object
                     $ref: '#/definitions/v1Hook'
                 description: |-
-                    Scripts to run before `terraform plan` (plan and destroy-plan jobs).
-                    Fail-fast.
+                    Scripts to run before the plan phase (`terraform plan` / `tofu plan`;
+                    plan and destroy-plan jobs). Fail-fast.
             after_plan:
                 type: array
                 items:
                     type: object
                     $ref: '#/definitions/v1Hook'
-                description: Scripts to run after `terraform plan` succeeded. Run-all.
+                description: |-
+                    Scripts to run after the plan phase succeeded. Run-all; skipped if
+                    plan failed.
             before_apply:
                 type: array
                 items:
                     type: object
                     $ref: '#/definitions/v1Hook'
                 description: |-
-                    Scripts to run before `terraform apply` (apply and destroy-apply jobs).
-                    Fail-fast.
+                    Scripts to run before the apply phase (`terraform apply` / `tofu apply`;
+                    apply and destroy-apply jobs). Fail-fast.
             after_apply:
                 type: array
                 items:
                     type: object
                     $ref: '#/definitions/v1Hook'
-                description: Scripts to run after `terraform apply` succeeded. Run-all.
+                description: |-
+                    Scripts to run after the apply phase succeeded. Run-all; skipped if
+                    apply failed.
             after_run:
                 type: array
                 items:
@@ -6032,11 +6077,14 @@ definitions:
             run in list order. Failure behavior differs by phase:
               - `before_*` hooks are fail-fast: the first non-zero exit aborts the
                 phase, the engine command does not run, and the job fails.
-              - `after_*` hooks and `after_run` hooks are run-all: every script in
-                the list executes regardless of sibling failures. Individual failures
-                are logged but do not fail the job.
-            `after_run` always runs, even if an earlier phase failed (it is the
-            runner's equivalent of a `finally` block).
+              - `after_*` hooks run ONLY when the corresponding engine command
+                succeeded. If the engine command failed (non-zero exit), the matching
+                `after_*` list is skipped entirely and the job proceeds to `after_run`.
+                When they do run, they are run-all: every script executes regardless
+                of sibling failures, and individual non-zero exits are logged but do
+                not fail the job.
+              - `after_run` always runs, even when the engine command or any other
+                hook failed -- it is the runner's `finally` block. Also run-all.
     v1InfrastructureTarget:
         type: object
         properties:
@@ -6046,7 +6094,7 @@ definitions:
         description: |-
             InfrastructureTarget binds an environment to an infrastructure provisioning
             runtime. Each target carries type-specific configuration that references a
-            managed entity (e.g., a Runner for Terraform, a Connection for CloudFormation).
+            managed entity (e.g., a Runner for Terraform/OpenTofu).
 
             At most one target per InfrastructureType is allowed per environment.
     v1Job:
@@ -6066,7 +6114,7 @@ definitions:
                 description: The deployment this job belongs to (UUID). Denormalized for convenience.
             job_type:
                 $ref: '#/definitions/v1JobType'
-                description: The type of Terraform operation to execute.
+                description: The type of infrastructure operation to execute.
             status:
                 $ref: '#/definitions/v1JobStatus'
                 description: Current lifecycle status of the job.
@@ -6092,7 +6140,8 @@ definitions:
                 type: string
                 description: |-
                     Signed URL to download the rendered artifact bundle (tar.gz containing
-                    .tf files, .tfvars, etc.). Time-limited.
+                    the rendered infrastructure source tree -- `.tf` files, auto-loaded
+                    tfvars, etc.). Time-limited.
             artifact_checksum:
                 type: string
                 description: SHA-256 checksum of the artifact bundle for integrity verification.
@@ -6104,6 +6153,13 @@ definitions:
                     Resolved variable values written to the workspace as an auto-loaded
                     tfvars file. Sensitive values are included (runner is a trusted
                     execution context).
+
+                    Encoding contract: the runner writes the map verbatim as HCL
+                    `key = value` lines -- it does NOT re-quote strings or JSON-encode
+                    complex types. The server is responsible for producing the correct HCL
+                    literal for each variable's type (e.g., a string is already double-quoted,
+                    a list is already `["a", "b"]`). Keys must match the infrastructure
+                    module's variable names exactly.
             provider_configs:
                 type: object
                 additionalProperties:
@@ -6130,6 +6186,12 @@ definitions:
                     runner writes the appropriate version file (`.terraform-version` /
                     `.opentofu-version`) so tfenv / tofuenv dispatches to the matching
                     binary, downloading it on demand if not already cached.
+
+                    If the runner cannot provide the requested version (download disabled,
+                    no network egress, resolver error), the job fails fast with a
+                    descriptive `JobResult.error_message`; the server does NOT re-route to
+                    a different runner. Operators control which versions are permitted via
+                    the runner image's tfenv/tofuenv configuration.
             working_directory:
                 type: string
                 description: |-
@@ -6147,10 +6209,10 @@ definitions:
                 $ref: '#/definitions/v1Hooks'
                 description: |-
                     Shell-script hooks that run before and after each engine phase.
-                    The runner invokes each hook via `sh -c <script>` in the execution
-                    directory, with the same environment as the engine. Hook stdout/stderr
-                    is folded into the job transcript. See the Hooks message for failure
-                    semantics.
+                    The runner invokes each hook via the Hook's selected interpreter (bash
+                    by default) in the execution directory, with the same environment as the
+                    engine. Hook stdout/stderr is folded into the job transcript. See the
+                    Hooks message for per-phase failure semantics.
         description: |-
             JobBundle contains everything a runner needs to execute an infrastructure
             operation. Fetched separately from ClaimJob to keep the claim response
@@ -6182,7 +6244,9 @@ definitions:
                 description: The final status of the job (SUCCEEDED or FAILED).
             plan_output:
                 type: string
-                description: (Plan jobs only) The Terraform plan output in human-readable format.
+                description: |-
+                    (Plan jobs only) The engine's plan output in human-readable format
+                    (e.g., the text emitted by `terraform plan` / `tofu plan`).
             plan_summary:
                 $ref: '#/definitions/v1ChangeSummary'
                 description: (Plan jobs only) Summary of resource changes from the plan.
@@ -6194,7 +6258,9 @@ definitions:
                 description: URL to the full execution logs in external storage.
             duration:
                 type: string
-                description: How long the Terraform operation took to execute.
+                description: |-
+                    How long the infrastructure operation took to execute (engine run time,
+                    excluding artifact download and workspace setup).
             outputs:
                 type: object
                 additionalProperties:
@@ -6235,13 +6301,15 @@ definitions:
             - JOB_TYPE_DESTROY_APPLY
         default: JOB_TYPE_UNSPECIFIED
         description: |-
-            JobType identifies the kind of Terraform operation a job executes.
+            JobType identifies the kind of infrastructure operation a job executes.
+            The concrete engine (Terraform or OpenTofu) is selected per job via
+            JobBundle.engine; the semantics of each type are identical across engines.
 
              - JOB_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - JOB_TYPE_PLAN: Generate a Terraform execution plan.
-             - JOB_TYPE_APPLY: Apply a Terraform plan.
-             - JOB_TYPE_DESTROY_PLAN: Generate a Terraform destroy plan.
-             - JOB_TYPE_DESTROY_APPLY: Apply a Terraform destroy plan (tear down resources).
+             - JOB_TYPE_PLAN: Generate an execution plan (e.g., `terraform plan` / `tofu plan`).
+             - JOB_TYPE_APPLY: Apply a previously generated plan.
+             - JOB_TYPE_DESTROY_PLAN: Generate a destroy plan.
+             - JOB_TYPE_DESTROY_APPLY: Apply a destroy plan (tear down resources).
     v1KubernetesConfig:
         type: object
         properties:
@@ -6797,8 +6865,8 @@ definitions:
             has_plan_output:
                 type: boolean
                 description: |-
-                    True when plan output is available in object storage.
-                    Fetch via GET /api/v1/deployments/{id}/revisions/{id}/plan.
+                    True when plan output is available in object storage. Fetch via
+                    `GET /api/v1/deployments/{deployment_id}/revisions/{revision_id}/plan`.
             error_message:
                 type: string
                 description: Error message if the revision failed. Empty on success.
@@ -6834,13 +6902,16 @@ definitions:
             Revision represents an immutable, rendered artifact for a single component
             within a deployment. Each revision tracks the full lifecycle from rendering
             through execution, and stores references to the produced artifacts
-            (rendered manifests, Terraform plan files, etc.).
+            (rendered manifests, binary plan files, etc.).
 
-            For infrastructure components (Terraform):
-              - Rendering produces .tf files and .tfvars with resolved variable values.
-              - `terraform plan` and `terraform apply` are executed by the assigned runner.
+            For infrastructure components (terraform-semantic engine -- Terraform or
+            OpenTofu):
+              - Rendering produces the infrastructure source tree (.tf files and
+                auto-loaded tfvars) with resolved variable values.
+              - The engine's plan and apply phases are executed by the assigned
+                runner (see JobBundle.engine for engine selection).
               - The plan output is stored for visibility.
-              - Each component has its own Terraform state.
+              - Each component has its own state, stored via the configured backend.
 
             For workload components (Helm, Kustomize, manifests):
               - Rendering produces Kubernetes manifests (via helm template, kustomize
@@ -6931,17 +7002,18 @@ definitions:
             its turn in the dependency graph.
              - REVISION_STATUS_QUEUED: The revision is queued for execution. Its upstream dependencies have
             completed and it will begin shortly.
-             - REVISION_STATUS_PLANNING: (Infrastructure only) Terraform plan is being generated. Transitions
-            to AWAITING_APPROVAL on success or FAILED on error.
+             - REVISION_STATUS_PLANNING: (Infrastructure only) The engine's plan is being generated
+            (`terraform plan` / `tofu plan`). Transitions to AWAITING_APPROVAL on
+            success or FAILED on error.
              - REVISION_STATUS_AWAITING_APPROVAL: (Infrastructure only) Plan completed successfully and is awaiting an
             explicit apply (via ApplyDeployment). The plan output is available on
             the revision for review.
-             - REVISION_STATUS_APPLYING: The revision is being applied. For infrastructure, this is
-            `terraform apply`. For workloads, this is applying manifests to the
-            target cluster.
-             - REVISION_STATUS_SUCCEEDED: The revision completed successfully. For infrastructure, Terraform apply
-            succeeded. For workloads, the manifests were applied and the resources
-            reached a healthy state.
+             - REVISION_STATUS_APPLYING: The revision is being applied. For infrastructure, this is the engine's
+            apply phase (`terraform apply` / `tofu apply`). For workloads, this is
+            applying manifests to the target cluster.
+             - REVISION_STATUS_SUCCEEDED: The revision completed successfully. For infrastructure, the engine's
+            apply phase succeeded. For workloads, the manifests were applied and the
+            resources reached a healthy state.
              - REVISION_STATUS_FAILED: The revision failed. See `error_message` for details.
              - REVISION_STATUS_BLOCKED: The revision is blocked because an upstream dependency failed. See
             `blocked_by` for the component(s) that caused the block.
@@ -7036,14 +7108,18 @@ definitions:
             updated_at:
                 type: string
                 format: date-time
-                description: When the runner record was last updated.
+                description: |-
+                    When the runner record was last updated via UpdateRunner. Heartbeats do
+                    not bump this field -- liveness state is exposed separately via
+                    RunnerStatus and health_status.
             created_by:
                 $ref: '#/definitions/v1ActorRef'
                 description: The user or agent who created this runner (server-populated from token).
         description: |-
             Runner represents a registered infrastructure execution runner within a
-            tenant. Runners claim and execute Terraform operations (plan, apply, destroy)
-            dispatched by the deployment engine.
+            tenant. Runners claim and execute infrastructure operations (plan, apply,
+            destroy) dispatched by the deployment engine, using the terraform-semantic
+            engine selected per job (Terraform or OpenTofu).
     v1RunnerHealthStatus:
         type: string
         enum:
@@ -7087,6 +7163,10 @@ definitions:
                     worker thread updates job phase in shared memory; the heartbeat thread
                     reads and includes it on each tick. Gives the server visibility into
                     job progress for stuck-job detection and admin dashboards.
+
+                    This is the complete set of jobs currently in flight on the instance --
+                    the runner does not cap or sample this list. `len(active_job_details)`
+                    equals `active_jobs` on every heartbeat.
         description: |-
             RunnerStatus contains capacity and telemetry metrics for a runner, as
             reported via Heartbeat. This message is used in both the push payload
@@ -7655,8 +7735,8 @@ definitions:
                 $ref: '#/definitions/v1VariableSource'
                 description: |-
                     How the variable was created. USER for variables created via the API/CLI,
-                    INFRASTRUCTURE for variables produced by terraform output capture.
-                    Server-populated; not settable via CreateVariable.
+                    INFRASTRUCTURE for variables produced by engine output capture (Terraform
+                    or OpenTofu). Server-populated; not settable via CreateVariable.
         description: |-
             Variable represents a configuration key-value pair scoped to a tenant,
             application, or application+environment. Variables are resolved at deployment
@@ -7678,9 +7758,10 @@ definitions:
 
              - VARIABLE_SOURCE_UNSPECIFIED: Default value. Must not be used.
              - VARIABLE_SOURCE_USER: User-managed variable created via API or CLI.
-             - VARIABLE_SOURCE_INFRASTRUCTURE: System-managed variable produced by infrastructure apply (e.g., Terraform
-            outputs). These variables are written by the output capture pipeline and
-            cannot be created or deleted via the public API.
+             - VARIABLE_SOURCE_INFRASTRUCTURE: System-managed variable produced by a successful infrastructure apply
+            (engine outputs -- `terraform output` / `tofu output`). These variables
+            are written by the output capture pipeline and cannot be created or
+            deleted via the public API.
     v1VariableType:
         type: string
         enum:
@@ -7696,16 +7777,17 @@ definitions:
             string regardless of type.
 
              - VARIABLE_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - VARIABLE_TYPE_STRING: Plain text value. Quoted when rendered into Terraform HCL, passed as-is
-            for Helm and Kustomize. Rendered as a text input in the UI.
-             - VARIABLE_TYPE_NUMBER: Numeric value (integer or decimal). Unquoted when rendered into Terraform
-            HCL. Rendered as a number input in the UI.
-             - VARIABLE_TYPE_BOOLEAN: Boolean value ("true" or "false"). Unquoted when rendered into Terraform
-            HCL. Rendered as a toggle in the UI.
+             - VARIABLE_TYPE_STRING: Plain text value. Quoted when rendered into HCL for an infrastructure
+            engine (Terraform / OpenTofu), passed as-is for Helm and Kustomize.
+            Rendered as a text input in the UI.
+             - VARIABLE_TYPE_NUMBER: Numeric value (integer or decimal). Unquoted when rendered into HCL.
+            Rendered as a number input in the UI.
+             - VARIABLE_TYPE_BOOLEAN: Boolean value ("true" or "false"). Unquoted when rendered into HCL.
+            Rendered as a toggle in the UI.
              - VARIABLE_TYPE_COMPLEX: Structured value (lists, maps, objects). Stored as a JSON-encoded string
             (e.g., '["us-east-1a","us-east-1b"]' or '{"env":"prod","team":"platform"}').
-            Rendered as HCL for Terraform, YAML for Helm, or JSON for other consumers.
-            Rendered as a code editor in the UI.
+            Rendered as HCL for infrastructure engines, YAML for Helm, or JSON for
+            other consumers. Rendered as a code editor in the UI.
     v1Workload:
         type: object
         properties:
@@ -7906,7 +7988,7 @@ definitions:
         description: |-
             WorkloadTarget binds an environment to a workload runtime. Each target
             carries type-specific configuration that references a managed entity
-            (e.g., a Cluster for Kubernetes, a Connection for Cloud Run).
+            (e.g., a Cluster for Kubernetes).
 
             At most one target per WorkloadType is allowed per environment.
 servers:
