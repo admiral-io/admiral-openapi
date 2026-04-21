@@ -8354,8 +8354,9 @@ components:
                     maxLength: 65536
                     minLength: 1
                     description: |-
-                        The shell script to execute. Passed to `sh -c`. The runner closes stdin
-                         (/dev/null) so interactive prompts cannot block execution.
+                        The script body to execute. Passed to the selected interpreter (see
+                         `interpreter`). The runner closes stdin (/dev/null) so interactive
+                         prompts cannot block execution.
                 timeout_seconds:
                     type: integer
                     title: timeout_seconds
@@ -8365,7 +8366,7 @@ components:
                     description: |-
                         Per-script timeout in seconds. If 0, the runner applies its built-in
                          default (currently 300s). A hook that exceeds its timeout is killed
-                         (SIGKILL after grace period) and treated as a failure.
+                         and treated as a failure.
                 name:
                     type: string
                     title: name
@@ -8373,11 +8374,29 @@ components:
                     description: |-
                         Optional human-friendly name used in log lines and error messages
                          (e.g., "vault-login"). Not required to be unique.
+                interpreter:
+                    title: interpreter
+                    description: |-
+                        Which interpreter runs `script`. UNSPECIFIED falls back to the runner's
+                         default (currently bash). Unknown / unsupported values at runtime are
+                         treated as a hook failure.
+                    $ref: '#/components/schemas/admiral.runner.v1.HookInterpreter'
             title: Hook
             additionalProperties: false
             description: |-
-                Hook is a single shell-script hook delivered with a JobBundle. Scripts are
+                Hook is a single script hook delivered with a JobBundle. Scripts are
                  inlined by the server -- the runner never fetches them from elsewhere.
+        admiral.runner.v1.HookInterpreter:
+            type: string
+            title: HookInterpreter
+            enum:
+                - HOOK_INTERPRETER_UNSPECIFIED
+                - HOOK_INTERPRETER_BASH
+            description: |-
+                HookInterpreter selects which language the runner uses to execute a hook's
+                 script body. Deliberately narrow today -- the enum exists primarily as
+                 forward plumbing so non-shell interpreters (Python, Node, etc.) can be
+                 added without a breaking change if real demand emerges.
         admiral.runner.v1.Hooks:
             type: object
             properties:
