@@ -284,6 +284,17 @@ paths:
                     title: application_id
                     format: uuid
                     description: The unique identifier of the application to delete (UUID).
+                - name: force
+                  in: query
+                  description: |-
+                    When true, bypass the children-exist check and cascade-delete all
+                     environments and their deployments (metadata records only).
+                  schema:
+                    type: boolean
+                    title: force
+                    description: |-
+                        When true, bypass the children-exist check and cascade-delete all
+                         environments and their deployments (metadata records only).
             responses:
                 "200":
                     description: Success
@@ -1970,6 +1981,17 @@ paths:
                     title: environment_id
                     format: uuid
                     description: The unique identifier of the environment to delete (UUID).
+                - name: force
+                  in: query
+                  description: |-
+                    When true, bypass the children-exist check and cascade-delete all
+                     deployment records (metadata only).
+                  schema:
+                    type: boolean
+                    title: force
+                    description: |-
+                        When true, bypass the children-exist check and cascade-delete all
+                         deployment records (metadata only).
             responses:
                 "200":
                     description: Success
@@ -4170,6 +4192,12 @@ components:
                     title: application_id
                     format: uuid
                     description: The unique identifier of the application to delete (UUID).
+                force:
+                    type: boolean
+                    title: force
+                    description: |-
+                        When true, bypass the children-exist check and cascade-delete all
+                         environments and their deployments (metadata records only).
             title: DeleteApplicationRequest
             additionalProperties: false
             description: DeleteApplicationRequest identifies an application to delete.
@@ -7352,6 +7380,12 @@ components:
                     title: environment_id
                     format: uuid
                     description: The unique identifier of the environment to delete (UUID).
+                force:
+                    type: boolean
+                    title: force
+                    description: |-
+                        When true, bypass the children-exist check and cascade-delete all
+                         deployment records (metadata only).
             title: DeleteEnvironmentRequest
             additionalProperties: false
             description: DeleteEnvironmentRequest identifies an environment to delete.

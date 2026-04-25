@@ -249,8 +249,11 @@ paths:
                 - ApplicationAPI
         delete:
             summary: |-
-                DeleteApplication permanently deletes an application and all of its
-                associated environments. This action cannot be undone.
+                DeleteApplication permanently deletes an application. Fails with
+                FAILED_PRECONDITION if the application still has environments. Pass
+                force = true to cascade-delete all environments and their deployments
+                (metadata only — no cloud resources are destroyed). This action
+                cannot be undone.
             description: 'Scope: `app:write`'
             operationId: ApplicationAPI_DeleteApplication
             responses:
@@ -268,6 +271,13 @@ paths:
                   in: path
                   required: true
                   type: string
+                - name: force
+                  description: |-
+                    When true, bypass the children-exist check and cascade-delete all
+                    environments and their deployments (metadata records only).
+                  in: query
+                  required: false
+                  type: boolean
             tags:
                 - ApplicationAPI
     /api/v1/clusters:
@@ -1535,11 +1545,11 @@ paths:
                 - EnvironmentAPI
         delete:
             summary: |-
-                DeleteEnvironment permanently deletes an environment. Fails if the
-                environment has an active deployment (last deployment status is SUCCEEDED
-                with resources running). To delete an environment with deployed resources,
-                first run a destroy deployment to tear down all components, then delete
-                the environment record. This action cannot be undone.
+                DeleteEnvironment permanently deletes an environment. Fails with
+                FAILED_PRECONDITION if the environment has any deployments. Pass
+                force = true to cascade-delete all deployment records (metadata
+                only — no cloud resources are destroyed). This action cannot be
+                undone.
             description: 'Scope: `env:write`'
             operationId: EnvironmentAPI_DeleteEnvironment
             responses:
@@ -1557,6 +1567,13 @@ paths:
                   in: path
                   required: true
                   type: string
+                - name: force
+                  description: |-
+                    When true, bypass the children-exist check and cascade-delete all
+                    deployment records (metadata only).
+                  in: query
+                  required: false
+                  type: boolean
             tags:
                 - EnvironmentAPI
     /api/v1/healthcheck:
