@@ -4,6 +4,8 @@ info:
     version: version not set
 tags:
     - name: ApplicationAPI
+    - name: VariableAPI
+    - name: ChangeSetAPI
     - name: ClusterAPI
     - name: ComponentAPI
     - name: CredentialAPI
@@ -14,7 +16,6 @@ tags:
     - name: SourceAPI
     - name: StateAPI
     - name: UserAPI
-    - name: VariableAPI
 consumes:
     - application/json
 produces:
@@ -280,6 +281,366 @@ paths:
                   type: boolean
             tags:
                 - ApplicationAPI
+    /api/v1/changesets:
+        get:
+            summary: ListChangeSets returns a paginated list of change sets.
+            description: |-
+                Common filter fields: `application_id`, `environment_id`, `status`. The
+                returned `ChangeSet` records do not include entries or variable entries
+                -- call GetChangeSet for the full record.
+
+                Scope: `app:read`
+            operationId: ChangeSetAPI_ListChangeSets
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListChangeSetsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                    Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
+                    (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
+                    STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
+
+                    Filterable fields:
+                      - `application_id` -- change sets for a specific application (UUID).
+                      - `environment_id` -- change sets for a specific environment (UUID).
+                      - `status` -- filter by status (OPEN, DEPLOYED, DISCARDED).
+
+                    Example: `field['environment_id'] = '<uuid>' AND field['status'] = 'OPEN'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  description: Maximum number of change sets to return per page.
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  description: Opaque pagination token from a previous response.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - ChangeSetAPI
+        post:
+            summary: |-
+                CreateChangeSet opens a new change set for an (application, environment)
+                pair.
+            description: |-
+                Multiple change sets can be open against the same target simultaneously.
+                Conflicts are detected at deploy time, not at create time.
+
+                Scope: `app:write`
+            operationId: ChangeSetAPI_CreateChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: |-
+                    CreateChangeSetRequest opens a new change set for an (application,
+                    environment) pair.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateChangeSetRequest'
+            tags:
+                - ChangeSetAPI
+    /api/v1/changesets/{change_set.id}:
+        patch:
+            summary: |-
+                UpdateChangeSet updates a change set's mutable metadata.
+                Use `update_mask` to specify which fields to update. Only `title` and
+                `description` are mutable; all other fields are immutable or transitioned
+                via dedicated RPCs.
+            description: |-
+                Rejected when the change set is not OPEN.
+
+                Scope: `app:write`
+            operationId: ChangeSetAPI_UpdateChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdateChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set.id
+                  description: Unique identifier for the change set (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPIUpdateChangeSetBody'
+            tags:
+                - ChangeSetAPI
+    /api/v1/changesets/{change_set_id}:
+        get:
+            summary: |-
+                GetChangeSet retrieves a change set by ID, including all of its component
+                entries and variable entries inline.
+            description: 'Scope: `app:read`'
+            operationId: ChangeSetAPI_GetChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  description: Unique identifier of the change set (UUID).
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ChangeSetAPI
+    /api/v1/changesets/{change_set_id}/copy:
+        post:
+            summary: |-
+                CopyChangeSet creates a new OPEN change set in a target environment by
+                copying every entry and variable entry from the source. The new change
+                set's `copied_from_id` points back to the source for audit (promotion
+                chain). The source change set is not modified.
+            description: |-
+                The target application is the source's application; only the environment
+                can be retargeted. After copying, the resulting change set can be
+                modified (entries added, removed, or rewritten) before being deployed.
+
+                Scope: `app:write`
+            operationId: ChangeSetAPI_CopyChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CopyChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  description: The source change set to copy (UUID). Can be in any status.
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPICopyChangeSetBody'
+            tags:
+                - ChangeSetAPI
+    /api/v1/changesets/{change_set_id}/discard:
+        post:
+            summary: |-
+                DiscardChangeSet abandons an OPEN change set. The record is preserved for
+                audit but no entries can be added or modified. Status becomes DISCARDED
+                (terminal). Rejected when the change set is not OPEN.
+            description: 'Scope: `app:write`'
+            operationId: ChangeSetAPI_DiscardChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DiscardChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  description: Unique identifier of the change set to discard (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPIDiscardChangeSetBody'
+            tags:
+                - ChangeSetAPI
+    /api/v1/changesets/{change_set_id}/entries/{component_slug}:
+        delete:
+            summary: |-
+                RemoveEntry deletes a single component entry from an OPEN change set.
+                Removes the proposal entirely; this does NOT mark the component for
+                destruction. To destroy a component, use SetEntry with `change_type =
+                DESTROY`.
+            description: |-
+                Rejected when the change set is not OPEN.
+
+                Scope: `app:write`
+            operationId: ChangeSetAPI_RemoveEntry
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1RemoveEntryResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  description: The change set (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: component_slug
+                  description: Component slug of the entry to remove.
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ChangeSetAPI
+        put:
+            summary: |-
+                SetEntry creates or replaces an entry for a component slug within the
+                change set. One slug = one entry; calling SetEntry for an existing slug
+                overwrites the prior entry.
+            description: |-
+                The `change_type` field selects the operation:
+                  - CREATE: add a new component. Requires `module_id`. Rejects if a
+                    component with the same slug already exists in the application.
+                  - UPDATE: change an existing component. The slug must match an
+                    existing component in the application. Only non-empty optional
+                    fields are recorded as changes.
+                  - DESTROY: schedule the component for terraform destroy at deploy.
+                  - ORPHAN: detach from management without destroying infrastructure.
+
+                Rejected when the change set is not OPEN.
+
+                Scope: `app:write`
+            operationId: ChangeSetAPI_SetEntry
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1SetEntryResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  description: The change set to add or replace the entry in (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: component_slug
+                  description: Component slug (immutable semantic key). Required.
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPISetEntryBody'
+            tags:
+                - ChangeSetAPI
+    /api/v1/changesets/{change_set_id}/variables/{key}:
+        delete:
+            summary: |-
+                RemoveVariable records the intent to delete a variable on apply. Writes
+                a tombstone variable entry (value absent) so the apply phase removes the
+                key from the target environment.
+            description: |-
+                To withdraw the deletion intent before deploy, call SetVariable for the
+                same key with the desired value (which overwrites the tombstone).
+
+                Rejected when the change set is not OPEN.
+
+                Scope: `app:write`
+            operationId: ChangeSetAPI_RemoveVariable
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1RemoveVariableResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  description: The change set (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: key
+                  description: The variable key to remove on apply.
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ChangeSetAPI
+        put:
+            summary: |-
+                SetVariable creates or replaces a variable entry for a key within the
+                change set. One key = one entry. At deploy time, the variable's value is
+                upserted in the target environment.
+            description: |-
+                To delete a variable on apply, use RemoveVariable -- it writes a
+                tombstone entry on the change set so the apply phase removes the key.
+
+                Rejected when the change set is not OPEN.
+
+                Scope: `app:write`
+            operationId: ChangeSetAPI_SetVariable
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1SetVariableResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  description: The change set (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: key
+                  description: The variable key.
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPISetVariableBody'
+            tags:
+                - ChangeSetAPI
     /api/v1/clusters:
         get:
             summary: ListClusters returns a paginated list of clusters within the caller's tenant.
@@ -3265,6 +3626,137 @@ definitions:
                     The set of fields to update. If unset, all mutable fields are updated.
                     Supported fields: `name`, `description`, `labels`.
         description: UpdateApplicationRequest contains the application fields to update.
+    ChangeSetAPICopyChangeSetBody:
+        type: object
+        properties:
+            environment_id:
+                type: string
+                description: |-
+                    The target environment for the new change set (UUID). Must belong to
+                    the source change set's application.
+            title:
+                type: string
+                description: Optional title override. Defaults to the source's title when empty.
+            description:
+                type: string
+                description: |-
+                    Optional description override. Defaults to the source's description
+                    when empty.
+        description: |-
+            CopyChangeSetRequest creates a new OPEN change set by copying an existing
+            one to a target environment.
+    ChangeSetAPIDiscardChangeSetBody:
+        type: object
+        description: DiscardChangeSetRequest abandons an OPEN change set.
+    ChangeSetAPISetEntryBody:
+        type: object
+        properties:
+            change_type:
+                type: string
+                description: 'The change type: CREATE, UPDATE, DESTROY, or ORPHAN.'
+            module_id:
+                type: string
+                description: |-
+                    The module to deploy (UUID). Required for CREATE; optional for UPDATE.
+                    Not allowed for DESTROY/ORPHAN.
+            version:
+                type: string
+                description: Optional ref override.
+            values_template:
+                type: string
+                description: Values template for module inputs.
+            depends_on:
+                type: array
+                items:
+                    type: string
+                description: Explicit dependencies (component UUIDs). Empty list clears.
+            description:
+                type: string
+                description: Optional description of the proposed change.
+        description: SetEntryRequest creates or replaces a component entry within a change set.
+    ChangeSetAPISetVariableBody:
+        type: object
+        properties:
+            value:
+                type: string
+                description: The value to set on apply. For COMPLEX type, must be valid JSON.
+            type:
+                $ref: '#/definitions/v1VariableType'
+                description: How the value should be interpreted. Defaults to STRING when unspecified.
+            sensitive:
+                type: boolean
+                description: When true, the value is encrypted at rest and masked in API responses.
+        description: SetVariableRequest creates or replaces a variable entry within a change set.
+    ChangeSetAPIUpdateChangeSetBody:
+        type: object
+        properties:
+            change_set:
+                type: object
+                properties:
+                    application_id:
+                        type: string
+                        description: The application this change set targets (UUID).
+                    environment_id:
+                        type: string
+                        description: The environment this change set targets (UUID).
+                    status:
+                        type: string
+                        description: 'Lifecycle status: OPEN, DEPLOYED, DISCARDED.'
+                    copied_from_id:
+                        type: string
+                        description: |-
+                            If this change set was created via CopyChangeSet, the UUID of the source
+                            change set. Forms the promotion chain (e.g., dev -> staging -> prod).
+                            Empty for change sets created directly via CreateChangeSet.
+                    title:
+                        type: string
+                        description: Human-readable title for the change set (e.g., "Bump database version").
+                    description:
+                        type: string
+                        description: Optional longer description of what the change set proposes.
+                    deployment_id:
+                        type: string
+                        description: |-
+                            The deployment that closed this change set (UUID). Populated when status
+                            transitions to DEPLOYED. Empty otherwise.
+                    entries:
+                        type: array
+                        items:
+                            type: object
+                            $ref: '#/definitions/v1ChangeSetEntry'
+                        description: |-
+                            Component entries proposed by this change set. Populated by GetChangeSet;
+                            empty in ListChangeSets responses.
+                    variable_entries:
+                        type: array
+                        items:
+                            type: object
+                            $ref: '#/definitions/v1ChangeSetVariableEntry'
+                        description: |-
+                            Variable entries proposed by this change set. Populated by GetChangeSet;
+                            empty in ListChangeSets responses.
+                    created_by:
+                        $ref: '#/definitions/v1ActorRef'
+                        description: |-
+                            The user or agent that created this change set
+                            (server-populated from token).
+                    created_at:
+                        type: string
+                        format: date-time
+                        description: When the change set was created.
+                    updated_at:
+                        type: string
+                        format: date-time
+                        description: |-
+                            When the change set was last updated (metadata, entries, variable
+                            entries, or status).
+                description: |-
+                    The change set with updated fields. Only fields listed in `update_mask`
+                    are applied.
+            update_mask:
+                type: string
+                description: 'The set of fields to update. Supported fields: `title`, `description`.'
+        description: UpdateChangeSetRequest updates a change set's mutable metadata.
     ClusterAPICreateClusterTokenBody:
         type: object
         properties:
@@ -4511,6 +5003,184 @@ definitions:
                 $ref: '#/definitions/v1Deployment'
                 description: The canceled deployment.
         description: CancelDeploymentResponse contains the updated deployment.
+    v1ChangeSet:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier for the change set (UUID).
+            application_id:
+                type: string
+                description: The application this change set targets (UUID).
+            environment_id:
+                type: string
+                description: The environment this change set targets (UUID).
+            status:
+                type: string
+                description: 'Lifecycle status: OPEN, DEPLOYED, DISCARDED.'
+            copied_from_id:
+                type: string
+                description: |-
+                    If this change set was created via CopyChangeSet, the UUID of the source
+                    change set. Forms the promotion chain (e.g., dev -> staging -> prod).
+                    Empty for change sets created directly via CreateChangeSet.
+            title:
+                type: string
+                description: Human-readable title for the change set (e.g., "Bump database version").
+            description:
+                type: string
+                description: Optional longer description of what the change set proposes.
+            deployment_id:
+                type: string
+                description: |-
+                    The deployment that closed this change set (UUID). Populated when status
+                    transitions to DEPLOYED. Empty otherwise.
+            entries:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ChangeSetEntry'
+                description: |-
+                    Component entries proposed by this change set. Populated by GetChangeSet;
+                    empty in ListChangeSets responses.
+            variable_entries:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ChangeSetVariableEntry'
+                description: |-
+                    Variable entries proposed by this change set. Populated by GetChangeSet;
+                    empty in ListChangeSets responses.
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                description: |-
+                    The user or agent that created this change set
+                    (server-populated from token).
+            created_at:
+                type: string
+                format: date-time
+                description: When the change set was created.
+            updated_at:
+                type: string
+                format: date-time
+                description: |-
+                    When the change set was last updated (metadata, entries, variable
+                    entries, or status).
+        description: |-
+            ChangeSet is a scoped, isolated proposal to mutate the deployed state of an
+            application within a single environment.
+
+            The change set holds two kinds of proposals:
+              - Component entries: per-slug deltas (CREATE/UPDATE/DESTROY/ORPHAN).
+              - Variable entries: per-key set or delete-on-apply.
+
+            The lifecycle has three states: OPEN, DEPLOYED, DISCARDED. Only OPEN change
+            sets can be mutated. DEPLOYED is reached when a deployment referencing the
+            change set succeeds; DISCARDED is reached via DiscardChangeSet.
+    v1ChangeSetEntry:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier for the entry (UUID).
+            change_set_id:
+                type: string
+                description: The change set this entry belongs to (UUID).
+            component_id:
+                type: string
+                description: |-
+                    The component this entry targets (UUID). Absent for CREATE entries
+                    (the component does not exist yet).
+            component_slug:
+                type: string
+                description: |-
+                    Component slug (immutable semantic key). Required for all entries.
+                    For CREATE entries, this is the slug of the component to be created.
+                    For UPDATE/DESTROY/ORPHAN entries, this matches an existing component
+                    in the application.
+            change_type:
+                type: string
+                description: 'The change type: CREATE, UPDATE, DESTROY, or ORPHAN.'
+            module_id:
+                type: string
+                description: |-
+                    The module to deploy (UUID). Required for CREATE; optional for UPDATE
+                    (if changing the module); not allowed for DESTROY/ORPHAN.
+            version:
+                type: string
+                title: |-
+                    Optional ref override (e.g., tag, branch, or commit SHA). For UPDATE
+                    entries, absent means "no change to version."
+            values_template:
+                type: string
+                title: |-
+                    Values template for module inputs. For UPDATE entries, absent means
+                    "no change to values_template."
+            depends_on:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Explicit dependencies (component UUIDs). Whatever the client sends is
+                    recorded; an empty list clears existing dependencies. Not allowed for
+                    DESTROY/ORPHAN entries.
+            description:
+                type: string
+                title: |-
+                    Optional description for the proposed change (e.g., "Bump to v2.1.0
+                    for performance fix"). For UPDATE entries, absent means "no change."
+            created_at:
+                type: string
+                format: date-time
+                description: When the entry was created.
+            updated_at:
+                type: string
+                format: date-time
+                description: When the entry was last replaced.
+        description: |-
+            ChangeSetEntry is a per-component proposal within a change set.
+
+            Patch semantics: optional fields that are absent mean "no change relative
+            to the component's current state at deploy time." Required fields per
+            `change_type`:
+              - CREATE: `module_id` required; `component_id` must be empty.
+              - UPDATE: `component_id` required; at least one optional field set.
+              - DESTROY / ORPHAN: `component_id` required; no patch fields allowed.
+    v1ChangeSetVariableEntry:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier for the variable entry (UUID).
+            change_set_id:
+                type: string
+                description: The change set this entry belongs to (UUID).
+            key:
+                type: string
+                description: The variable key (e.g., "TF_VAR_region", "IMAGE_TAG").
+            value:
+                type: string
+                description: |-
+                    The value to set on apply. Absent means "delete this key on apply"
+                    (tombstone). Masked in responses when `sensitive` is true.
+            type:
+                $ref: '#/definitions/v1VariableType'
+                description: |-
+                    How the value should be interpreted by the rendering engine and
+                    displayed in the UI.
+            sensitive:
+                type: boolean
+                description: When true, the value is encrypted at rest and masked in API responses.
+            created_at:
+                type: string
+                format: date-time
+                description: When the variable entry was created or last replaced.
+        description: |-
+            ChangeSetVariableEntry is a per-key variable proposal within a change set.
+
+            At deploy time, each variable entry is applied to the change set's
+            environment: an entry with `value` set upserts the key, and an entry with
+            `value` absent (a tombstone) removes the key.
     v1ChangeSummary:
         type: object
         properties:
@@ -4972,6 +5642,13 @@ definitions:
                 type: boolean
                 description: Whether the container's readiness probe is passing.
         description: ContainerStatus describes the current state of a single container.
+    v1CopyChangeSetResponse:
+        type: object
+        properties:
+            change_set:
+                $ref: '#/definitions/v1ChangeSet'
+                description: The new change set with `copied_from_id` set to the source.
+        description: CopyChangeSetResponse contains the newly created change set.
     v1CreateApplicationRequest:
         type: object
         properties:
@@ -4996,6 +5673,33 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The created application.
         description: CreateApplicationResponse contains the newly created application.
+    v1CreateChangeSetRequest:
+        type: object
+        properties:
+            application_id:
+                type: string
+                description: The application this change set targets (UUID).
+            environment_id:
+                type: string
+                description: The environment this change set targets (UUID).
+            title:
+                type: string
+                description: Optional human-readable title (e.g., "Bump database version").
+            description:
+                type: string
+                description: Optional longer description of what the change set proposes.
+        description: |-
+            CreateChangeSetRequest opens a new change set for an (application,
+            environment) pair.
+    v1CreateChangeSetResponse:
+        type: object
+        properties:
+            change_set:
+                $ref: '#/definitions/v1ChangeSet'
+                description: |-
+                    The created change set. Status is OPEN; entries and variable entries
+                    are empty.
+        description: CreateChangeSetResponse contains the newly created change set.
     v1CreateClusterRequest:
         type: object
         properties:
@@ -5648,6 +6352,13 @@ definitions:
             environment. Runs the engine's destroy phase (`terraform destroy` /
             `tofu destroy`) for infra components and deletes workload resources
             from the cluster, in reverse dependency order.
+    v1DiscardChangeSetResponse:
+        type: object
+        properties:
+            change_set:
+                $ref: '#/definitions/v1ChangeSet'
+                description: The change set with status set to DISCARDED.
+        description: DiscardChangeSetResponse contains the discarded change set.
     v1Engine:
         type: string
         enum:
@@ -5793,6 +6504,13 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The application record.
         description: GetApplicationResponse contains the application record.
+    v1GetChangeSetResponse:
+        type: object
+        properties:
+            change_set:
+                $ref: '#/definitions/v1ChangeSet'
+                description: The change set, with `entries` and `variable_entries` populated.
+        description: GetChangeSetResponse contains the change set with all entries inline.
     v1GetClusterResponse:
         type: object
         properties:
@@ -6404,6 +7122,22 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListApplicationsResponse contains a page of applications.
+    v1ListChangeSetsResponse:
+        type: object
+        properties:
+            change_sets:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ChangeSet'
+                description: |-
+                    The list of change sets, ordered from newest to oldest. Each record
+                    omits `entries` and `variable_entries` -- call GetChangeSet for the
+                    full record.
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListChangeSetsResponse contains a page of change sets.
     v1ListClusterTokensResponse:
         type: object
         properties:
@@ -6774,6 +7508,16 @@ definitions:
     v1PushStateResponse:
         type: object
         description: PushStateResponse acknowledges the state was stored.
+    v1RemoveEntryResponse:
+        type: object
+        description: RemoveEntryResponse is empty on success.
+    v1RemoveVariableResponse:
+        type: object
+        properties:
+            variable_entry:
+                $ref: '#/definitions/v1ChangeSetVariableEntry'
+                description: The tombstone entry (value absent, marking the key for deletion on apply).
+        description: RemoveVariableResponse contains the tombstone variable entry.
     v1ReportClusterStatusRequest:
         type: object
         properties:
@@ -7278,6 +8022,20 @@ definitions:
                 $ref: '#/definitions/v1ComponentOverride'
                 description: The created or updated override.
         description: SetComponentOverrideResponse contains the override record.
+    v1SetEntryResponse:
+        type: object
+        properties:
+            entry:
+                $ref: '#/definitions/v1ChangeSetEntry'
+                description: The entry as recorded on the change set.
+        description: SetEntryResponse contains the created or replaced entry.
+    v1SetVariableResponse:
+        type: object
+        properties:
+            variable_entry:
+                $ref: '#/definitions/v1ChangeSetVariableEntry'
+                description: The variable entry as recorded on the change set.
+        description: SetVariableResponse contains the created or replaced variable entry.
     v1Source:
         type: object
         properties:
@@ -7653,6 +8411,15 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The updated application.
         description: UpdateApplicationResponse contains the updated application.
+    v1UpdateChangeSetResponse:
+        type: object
+        properties:
+            change_set:
+                $ref: '#/definitions/v1ChangeSet'
+                description: The updated change set.
+        description: |-
+            UpdateChangeSetResponse contains the updated change set (metadata only;
+            entries are not returned -- call GetChangeSet for the full record).
     v1UpdateClusterResponse:
         type: object
         properties:

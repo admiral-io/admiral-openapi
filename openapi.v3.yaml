@@ -302,6 +302,531 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.application.v1.DeleteApplicationResponse'
+    /api/v1/changesets:
+        get:
+            tags:
+                - ChangeSets
+            summary: List change sets
+            description: |-
+                Common filter fields: `application_id`, `environment_id`, `status`. The
+                 returned `ChangeSet` records do not include entries or variable entries
+                 -- call GetChangeSet for the full record.
+
+                 Scope: `app:read`
+            operationId: ChangeSetAPI_ListChangeSets
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                     Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
+                     (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
+                     STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
+
+                     Filterable fields:
+                       - `application_id` -- change sets for a specific application (UUID).
+                       - `environment_id` -- change sets for a specific environment (UUID).
+                       - `status` -- filter by status (OPEN, DEPLOYED, DISCARDED).
+
+                     Example: `field['environment_id'] = '<uuid>' AND field['status'] = 'OPEN'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
+                         (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
+                         STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
+
+                         Filterable fields:
+                           - `application_id` -- change sets for a specific application (UUID).
+                           - `environment_id` -- change sets for a specific environment (UUID).
+                           - `status` -- filter by status (OPEN, DEPLOYED, DISCARDED).
+
+                         Example: `field['environment_id'] = '<uuid>' AND field['status'] = 'OPEN'`
+                - name: page_size
+                  in: query
+                  description: Maximum number of change sets to return per page.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: Maximum number of change sets to return per page.
+                - name: page_token
+                  in: query
+                  description: Opaque pagination token from a previous response.
+                  schema:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.ListChangeSetsResponse'
+        post:
+            tags:
+                - ChangeSets
+            summary: Create a change set
+            description: |-
+                Multiple change sets can be open against the same target simultaneously.
+                 Conflicts are detected at deploy time, not at create time.
+
+                 Scope: `app:write`
+            operationId: ChangeSetAPI_CreateChangeSet
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.changeset.v1.CreateChangeSetRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.CreateChangeSetResponse'
+    /api/v1/changesets/{change_set.id}:
+        patch:
+            tags:
+                - ChangeSets
+            summary: Update a change set
+            description: |-
+                Rejected when the change set is not OPEN.
+
+                 Scope: `app:write`
+            operationId: ChangeSetAPI_UpdateChangeSet
+            parameters:
+                - name: change_set.id
+                  in: path
+                  description: Unique identifier for the change set (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the change set (UUID).
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                change_set:
+                                    title: change_set
+                                    description: |-
+                                        The change set with updated fields. Only fields listed in `update_mask`
+                                         are applied.
+                                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+                                update_mask:
+                                    title: update_mask
+                                    description: 'The set of fields to update. Supported fields: `title`, `description`.'
+                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
+                            title: UpdateChangeSetRequest
+                            required:
+                                - change_set
+                            additionalProperties: false
+                            description: UpdateChangeSetRequest updates a change set's mutable metadata.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.UpdateChangeSetResponse'
+    /api/v1/changesets/{change_set_id}:
+        get:
+            tags:
+                - ChangeSets
+            summary: Retrieve a change set
+            description: 'Scope: `app:read`'
+            operationId: ChangeSetAPI_GetChangeSet
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: Unique identifier of the change set (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: Unique identifier of the change set (UUID).
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.GetChangeSetResponse'
+    /api/v1/changesets/{change_set_id}/copy:
+        post:
+            tags:
+                - ChangeSets
+            summary: Copy a change set to another environment
+            description: |-
+                The target application is the source's application; only the environment
+                 can be retargeted. After copying, the resulting change set can be
+                 modified (entries added, removed, or rewritten) before being deployed.
+
+                 Scope: `app:write`
+            operationId: ChangeSetAPI_CopyChangeSet
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The source change set to copy (UUID). Can be in any status.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The source change set to copy (UUID). Can be in any status.
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                change_set_id:
+                                    type: string
+                                    title: change_set_id
+                                    format: uuid
+                                    description: The source change set to copy (UUID). Can be in any status.
+                                environment_id:
+                                    type: string
+                                    title: environment_id
+                                    format: uuid
+                                    description: |-
+                                        The target environment for the new change set (UUID). Must belong to
+                                         the source change set's application.
+                                title:
+                                    type: string
+                                    title: title
+                                    maxLength: 256
+                                    description: Optional title override. Defaults to the source's title when empty.
+                                description:
+                                    type: string
+                                    title: description
+                                    maxLength: 4096
+                                    description: |-
+                                        Optional description override. Defaults to the source's description
+                                         when empty.
+                            title: CopyChangeSetRequest
+                            additionalProperties: false
+                            description: |-
+                                CopyChangeSetRequest creates a new OPEN change set by copying an existing
+                                 one to a target environment.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.CopyChangeSetResponse'
+    /api/v1/changesets/{change_set_id}/discard:
+        post:
+            tags:
+                - ChangeSets
+            summary: Discard a change set
+            description: 'Scope: `app:write`'
+            operationId: ChangeSetAPI_DiscardChangeSet
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: Unique identifier of the change set to discard (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: Unique identifier of the change set to discard (UUID).
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                change_set_id:
+                                    type: string
+                                    title: change_set_id
+                                    format: uuid
+                                    description: Unique identifier of the change set to discard (UUID).
+                            title: DiscardChangeSetRequest
+                            additionalProperties: false
+                            description: DiscardChangeSetRequest abandons an OPEN change set.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.DiscardChangeSetResponse'
+    /api/v1/changesets/{change_set_id}/entries/{component_slug}:
+        put:
+            tags:
+                - ChangeSets
+            summary: Add or update an entry
+            description: |-
+                The `change_type` field selects the operation:
+                   - CREATE: add a new component. Requires `module_id`. Rejects if a
+                     component with the same slug already exists in the application.
+                   - UPDATE: change an existing component. The slug must match an
+                     existing component in the application. Only non-empty optional
+                     fields are recorded as changes.
+                   - DESTROY: schedule the component for terraform destroy at deploy.
+                   - ORPHAN: detach from management without destroying infrastructure.
+
+                 Rejected when the change set is not OPEN.
+
+                 Scope: `app:write`
+            operationId: ChangeSetAPI_SetEntry
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change set to add or replace the entry in (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set to add or replace the entry in (UUID).
+                - name: component_slug
+                  in: path
+                  description: Component slug (immutable semantic key). Required.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_slug
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: Component slug (immutable semantic key). Required.
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                change_set_id:
+                                    type: string
+                                    title: change_set_id
+                                    format: uuid
+                                    description: The change set to add or replace the entry in (UUID).
+                                component_slug:
+                                    type: string
+                                    title: component_slug
+                                    maxLength: 63
+                                    minLength: 1
+                                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                                    description: Component slug (immutable semantic key). Required.
+                                change_type:
+                                    type: string
+                                    title: change_type
+                                    description: 'The change type: CREATE, UPDATE, DESTROY, or ORPHAN.'
+                                module_id:
+                                    type:
+                                        - string
+                                        - "null"
+                                    title: module_id
+                                    format: uuid
+                                    description: |-
+                                        The module to deploy (UUID). Required for CREATE; optional for UPDATE.
+                                         Not allowed for DESTROY/ORPHAN.
+                                version:
+                                    type:
+                                        - string
+                                        - "null"
+                                    title: version
+                                    maxLength: 256
+                                    description: Optional ref override.
+                                values_template:
+                                    type:
+                                        - string
+                                        - "null"
+                                    title: values_template
+                                    maxLength: 65536
+                                    description: Values template for module inputs.
+                                depends_on:
+                                    type: array
+                                    items:
+                                        type: string
+                                        format: uuid
+                                    title: depends_on
+                                    description: Explicit dependencies (component UUIDs). Empty list clears.
+                                description:
+                                    type:
+                                        - string
+                                        - "null"
+                                    title: description
+                                    maxLength: 1024
+                                    description: Optional description of the proposed change.
+                            title: SetEntryRequest
+                            additionalProperties: false
+                            description: SetEntryRequest creates or replaces a component entry within a change set.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.SetEntryResponse'
+        delete:
+            tags:
+                - ChangeSets
+            summary: Remove an entry
+            description: |-
+                Rejected when the change set is not OPEN.
+
+                 Scope: `app:write`
+            operationId: ChangeSetAPI_RemoveEntry
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change set (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set (UUID).
+                - name: component_slug
+                  in: path
+                  description: Component slug of the entry to remove.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_slug
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: Component slug of the entry to remove.
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.RemoveEntryResponse'
+    /api/v1/changesets/{change_set_id}/variables/{key}:
+        put:
+            tags:
+                - ChangeSets
+            summary: Set a variable
+            description: |-
+                To delete a variable on apply, use RemoveVariable -- it writes a
+                 tombstone entry on the change set so the apply phase removes the key.
+
+                 Rejected when the change set is not OPEN.
+
+                 Scope: `app:write`
+            operationId: ChangeSetAPI_SetVariable
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change set (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set (UUID).
+                - name: key
+                  in: path
+                  description: The variable key.
+                  required: true
+                  schema:
+                    type: string
+                    title: key
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[A-Za-z_][A-Za-z0-9_]{0,62}$
+                    description: The variable key.
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                change_set_id:
+                                    type: string
+                                    title: change_set_id
+                                    format: uuid
+                                    description: The change set (UUID).
+                                value:
+                                    type: string
+                                    title: value
+                                    minLength: 1
+                                    description: The value to set on apply. For COMPLEX type, must be valid JSON.
+                                type:
+                                    title: type
+                                    description: How the value should be interpreted. Defaults to STRING when unspecified.
+                                    $ref: '#/components/schemas/admiral.variable.v1.VariableType'
+                                sensitive:
+                                    type: boolean
+                                    title: sensitive
+                                    description: When true, the value is encrypted at rest and masked in API responses.
+                            title: SetVariableRequest
+                            additionalProperties: false
+                            description: SetVariableRequest creates or replaces a variable entry within a change set.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.SetVariableResponse'
+        delete:
+            tags:
+                - ChangeSets
+            summary: Remove a variable on apply
+            description: |-
+                To withdraw the deletion intent before deploy, call SetVariable for the
+                 same key with the desired value (which overwrites the tombstone).
+
+                 Rejected when the change set is not OPEN.
+
+                 Scope: `app:write`
+            operationId: ChangeSetAPI_RemoveVariable
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change set (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set (UUID).
+                - name: key
+                  in: path
+                  description: The variable key to remove on apply.
+                  required: true
+                  schema:
+                    type: string
+                    title: key
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[A-Za-z_][A-Za-z0-9_]{0,62}$
+                    description: The variable key to remove on apply.
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.changeset.v1.RemoveVariableResponse'
     /api/v1/clusters:
         get:
             tags:
@@ -4306,6 +4831,615 @@ components:
             title: UpdateApplicationResponse
             additionalProperties: false
             description: UpdateApplicationResponse contains the updated application.
+        admiral.changeset.v1.ChangeSet:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the change set (UUID).
+                application_id:
+                    type: string
+                    title: application_id
+                    format: uuid
+                    description: The application this change set targets (UUID).
+                environment_id:
+                    type: string
+                    title: environment_id
+                    format: uuid
+                    description: The environment this change set targets (UUID).
+                status:
+                    type: string
+                    title: status
+                    description: 'Lifecycle status: OPEN, DEPLOYED, DISCARDED.'
+                copied_from_id:
+                    type: string
+                    title: copied_from_id
+                    description: |-
+                        If this change set was created via CopyChangeSet, the UUID of the source
+                         change set. Forms the promotion chain (e.g., dev -> staging -> prod).
+                         Empty for change sets created directly via CreateChangeSet.
+                title:
+                    type: string
+                    title: title
+                    maxLength: 256
+                    description: Human-readable title for the change set (e.g., "Bump database version").
+                description:
+                    type: string
+                    title: description
+                    maxLength: 4096
+                    description: Optional longer description of what the change set proposes.
+                deployment_id:
+                    type: string
+                    title: deployment_id
+                    description: |-
+                        The deployment that closed this change set (UUID). Populated when status
+                         transitions to DEPLOYED. Empty otherwise.
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.changeset.v1.ChangeSetEntry'
+                    title: entries
+                    description: |-
+                        Component entries proposed by this change set. Populated by GetChangeSet;
+                         empty in ListChangeSets responses.
+                variable_entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.changeset.v1.ChangeSetVariableEntry'
+                    title: variable_entries
+                    description: |-
+                        Variable entries proposed by this change set. Populated by GetChangeSet;
+                         empty in ListChangeSets responses.
+                created_by:
+                    title: created_by
+                    description: |-
+                        The user or agent that created this change set
+                         (server-populated from token).
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                created_at:
+                    title: created_at
+                    description: When the change set was created.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                updated_at:
+                    title: updated_at
+                    description: |-
+                        When the change set was last updated (metadata, entries, variable
+                         entries, or status).
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+            title: ChangeSet
+            additionalProperties: false
+            description: |-
+                ChangeSet is a scoped, isolated proposal to mutate the deployed state of an
+                 application within a single environment.
+
+                 The change set holds two kinds of proposals:
+                   - Component entries: per-slug deltas (CREATE/UPDATE/DESTROY/ORPHAN).
+                   - Variable entries: per-key set or delete-on-apply.
+
+                 The lifecycle has three states: OPEN, DEPLOYED, DISCARDED. Only OPEN change
+                 sets can be mutated. DEPLOYED is reached when a deployment referencing the
+                 change set succeeds; DISCARDED is reached via DiscardChangeSet.
+        admiral.changeset.v1.ChangeSetEntry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the entry (UUID).
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set this entry belongs to (UUID).
+                component_id:
+                    type: string
+                    title: component_id
+                    description: |-
+                        The component this entry targets (UUID). Absent for CREATE entries
+                         (the component does not exist yet).
+                component_slug:
+                    type: string
+                    title: component_slug
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        Component slug (immutable semantic key). Required for all entries.
+                         For CREATE entries, this is the slug of the component to be created.
+                         For UPDATE/DESTROY/ORPHAN entries, this matches an existing component
+                         in the application.
+                change_type:
+                    type: string
+                    title: change_type
+                    description: 'The change type: CREATE, UPDATE, DESTROY, or ORPHAN.'
+                module_id:
+                    type:
+                        - string
+                        - "null"
+                    title: module_id
+                    format: uuid
+                    description: |-
+                        The module to deploy (UUID). Required for CREATE; optional for UPDATE
+                         (if changing the module); not allowed for DESTROY/ORPHAN.
+                version:
+                    type:
+                        - string
+                        - "null"
+                    title: version
+                    maxLength: 256
+                    description: |-
+                        Optional ref override (e.g., tag, branch, or commit SHA). For UPDATE
+                         entries, absent means "no change to version."
+                values_template:
+                    type:
+                        - string
+                        - "null"
+                    title: values_template
+                    maxLength: 65536
+                    description: |-
+                        Values template for module inputs. For UPDATE entries, absent means
+                         "no change to values_template."
+                depends_on:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    title: depends_on
+                    description: |-
+                        Explicit dependencies (component UUIDs). Whatever the client sends is
+                         recorded; an empty list clears existing dependencies. Not allowed for
+                         DESTROY/ORPHAN entries.
+                description:
+                    type:
+                        - string
+                        - "null"
+                    title: description
+                    maxLength: 1024
+                    description: |-
+                        Optional description for the proposed change (e.g., "Bump to v2.1.0
+                         for performance fix"). For UPDATE entries, absent means "no change."
+                created_at:
+                    title: created_at
+                    description: When the entry was created.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                updated_at:
+                    title: updated_at
+                    description: When the entry was last replaced.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+            title: ChangeSetEntry
+            additionalProperties: false
+            description: |-
+                ChangeSetEntry is a per-component proposal within a change set.
+
+                 Patch semantics: optional fields that are absent mean "no change relative
+                 to the component's current state at deploy time." Required fields per
+                 `change_type`:
+                   - CREATE: `module_id` required; `component_id` must be empty.
+                   - UPDATE: `component_id` required; at least one optional field set.
+                   - DESTROY / ORPHAN: `component_id` required; no patch fields allowed.
+        admiral.changeset.v1.ChangeSetVariableEntry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the variable entry (UUID).
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set this entry belongs to (UUID).
+                key:
+                    type: string
+                    title: key
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[A-Za-z_][A-Za-z0-9_]{0,62}$
+                    description: The variable key (e.g., "TF_VAR_region", "IMAGE_TAG").
+                value:
+                    type:
+                        - string
+                        - "null"
+                    title: value
+                    description: |-
+                        The value to set on apply. Absent means "delete this key on apply"
+                         (tombstone). Masked in responses when `sensitive` is true.
+                type:
+                    title: type
+                    description: |-
+                        How the value should be interpreted by the rendering engine and
+                         displayed in the UI.
+                    $ref: '#/components/schemas/admiral.variable.v1.VariableType'
+                sensitive:
+                    type: boolean
+                    title: sensitive
+                    description: When true, the value is encrypted at rest and masked in API responses.
+                created_at:
+                    title: created_at
+                    description: When the variable entry was created or last replaced.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+            title: ChangeSetVariableEntry
+            additionalProperties: false
+            description: |-
+                ChangeSetVariableEntry is a per-key variable proposal within a change set.
+
+                 At deploy time, each variable entry is applied to the change set's
+                 environment: an entry with `value` set upserts the key, and an entry with
+                 `value` absent (a tombstone) removes the key.
+        admiral.changeset.v1.CopyChangeSetRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The source change set to copy (UUID). Can be in any status.
+                environment_id:
+                    type: string
+                    title: environment_id
+                    format: uuid
+                    description: |-
+                        The target environment for the new change set (UUID). Must belong to
+                         the source change set's application.
+                title:
+                    type: string
+                    title: title
+                    maxLength: 256
+                    description: Optional title override. Defaults to the source's title when empty.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 4096
+                    description: |-
+                        Optional description override. Defaults to the source's description
+                         when empty.
+            title: CopyChangeSetRequest
+            additionalProperties: false
+            description: |-
+                CopyChangeSetRequest creates a new OPEN change set by copying an existing
+                 one to a target environment.
+        admiral.changeset.v1.CopyChangeSetResponse:
+            type: object
+            properties:
+                change_set:
+                    title: change_set
+                    description: The new change set with `copied_from_id` set to the source.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+            title: CopyChangeSetResponse
+            additionalProperties: false
+            description: CopyChangeSetResponse contains the newly created change set.
+        admiral.changeset.v1.CreateChangeSetRequest:
+            type: object
+            properties:
+                application_id:
+                    type: string
+                    title: application_id
+                    format: uuid
+                    description: The application this change set targets (UUID).
+                environment_id:
+                    type: string
+                    title: environment_id
+                    format: uuid
+                    description: The environment this change set targets (UUID).
+                title:
+                    type: string
+                    title: title
+                    maxLength: 256
+                    description: Optional human-readable title (e.g., "Bump database version").
+                description:
+                    type: string
+                    title: description
+                    maxLength: 4096
+                    description: Optional longer description of what the change set proposes.
+            title: CreateChangeSetRequest
+            additionalProperties: false
+            description: |-
+                CreateChangeSetRequest opens a new change set for an (application,
+                 environment) pair.
+        admiral.changeset.v1.CreateChangeSetResponse:
+            type: object
+            properties:
+                change_set:
+                    title: change_set
+                    description: |-
+                        The created change set. Status is OPEN; entries and variable entries
+                         are empty.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+            title: CreateChangeSetResponse
+            additionalProperties: false
+            description: CreateChangeSetResponse contains the newly created change set.
+        admiral.changeset.v1.DiscardChangeSetRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: Unique identifier of the change set to discard (UUID).
+            title: DiscardChangeSetRequest
+            additionalProperties: false
+            description: DiscardChangeSetRequest abandons an OPEN change set.
+        admiral.changeset.v1.DiscardChangeSetResponse:
+            type: object
+            properties:
+                change_set:
+                    title: change_set
+                    description: The change set with status set to DISCARDED.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+            title: DiscardChangeSetResponse
+            additionalProperties: false
+            description: DiscardChangeSetResponse contains the discarded change set.
+        admiral.changeset.v1.GetChangeSetRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: Unique identifier of the change set (UUID).
+            title: GetChangeSetRequest
+            additionalProperties: false
+            description: GetChangeSetRequest identifies a change set to retrieve.
+        admiral.changeset.v1.GetChangeSetResponse:
+            type: object
+            properties:
+                change_set:
+                    title: change_set
+                    description: The change set, with `entries` and `variable_entries` populated.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+            title: GetChangeSetResponse
+            additionalProperties: false
+            description: GetChangeSetResponse contains the change set with all entries inline.
+        admiral.changeset.v1.ListChangeSetsRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Syntax: `field['name'] = 'value'` with AND/OR/NOT, comparison operators
+                         (=, !=, <, >, <=, >=, ~=), and predicates (IN, BETWEEN, CONTAINS,
+                         STARTS_WITH, ENDS_WITH, IS NULL, EXISTS).
+
+                         Filterable fields:
+                           - `application_id` -- change sets for a specific application (UUID).
+                           - `environment_id` -- change sets for a specific environment (UUID).
+                           - `status` -- filter by status (OPEN, DEPLOYED, DISCARDED).
+
+                         Example: `field['environment_id'] = '<uuid>' AND field['status'] = 'OPEN'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: Maximum number of change sets to return per page.
+                page_token:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            title: ListChangeSetsRequest
+            additionalProperties: false
+            description: ListChangeSetsRequest contains pagination and filter parameters.
+        admiral.changeset.v1.ListChangeSetsResponse:
+            type: object
+            properties:
+                change_sets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+                    title: change_sets
+                    description: |-
+                        The list of change sets, ordered from newest to oldest. Each record
+                         omits `entries` and `variable_entries` -- call GetChangeSet for the
+                         full record.
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                    description: Pagination token for the next page. Empty when there are no more results.
+            title: ListChangeSetsResponse
+            additionalProperties: false
+            description: ListChangeSetsResponse contains a page of change sets.
+        admiral.changeset.v1.RemoveEntryRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set (UUID).
+                component_slug:
+                    type: string
+                    title: component_slug
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: Component slug of the entry to remove.
+            title: RemoveEntryRequest
+            additionalProperties: false
+            description: RemoveEntryRequest deletes a single entry from an OPEN change set.
+        admiral.changeset.v1.RemoveEntryResponse:
+            type: object
+            title: RemoveEntryResponse
+            additionalProperties: false
+            description: RemoveEntryResponse is empty on success.
+        admiral.changeset.v1.RemoveVariableRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set (UUID).
+                key:
+                    type: string
+                    title: key
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[A-Za-z_][A-Za-z0-9_]{0,62}$
+                    description: The variable key to remove on apply.
+            title: RemoveVariableRequest
+            additionalProperties: false
+            description: |-
+                RemoveVariableRequest writes a tombstone variable entry that, when the
+                 change set is deployed, removes the key from the target environment.
+        admiral.changeset.v1.RemoveVariableResponse:
+            type: object
+            properties:
+                variable_entry:
+                    title: variable_entry
+                    description: The tombstone entry (value absent, marking the key for deletion on apply).
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSetVariableEntry'
+            title: RemoveVariableResponse
+            additionalProperties: false
+            description: RemoveVariableResponse contains the tombstone variable entry.
+        admiral.changeset.v1.SetEntryRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set to add or replace the entry in (UUID).
+                component_slug:
+                    type: string
+                    title: component_slug
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: Component slug (immutable semantic key). Required.
+                change_type:
+                    type: string
+                    title: change_type
+                    description: 'The change type: CREATE, UPDATE, DESTROY, or ORPHAN.'
+                module_id:
+                    type:
+                        - string
+                        - "null"
+                    title: module_id
+                    format: uuid
+                    description: |-
+                        The module to deploy (UUID). Required for CREATE; optional for UPDATE.
+                         Not allowed for DESTROY/ORPHAN.
+                version:
+                    type:
+                        - string
+                        - "null"
+                    title: version
+                    maxLength: 256
+                    description: Optional ref override.
+                values_template:
+                    type:
+                        - string
+                        - "null"
+                    title: values_template
+                    maxLength: 65536
+                    description: Values template for module inputs.
+                depends_on:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    title: depends_on
+                    description: Explicit dependencies (component UUIDs). Empty list clears.
+                description:
+                    type:
+                        - string
+                        - "null"
+                    title: description
+                    maxLength: 1024
+                    description: Optional description of the proposed change.
+            title: SetEntryRequest
+            additionalProperties: false
+            description: SetEntryRequest creates or replaces a component entry within a change set.
+        admiral.changeset.v1.SetEntryResponse:
+            type: object
+            properties:
+                entry:
+                    title: entry
+                    description: The entry as recorded on the change set.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSetEntry'
+            title: SetEntryResponse
+            additionalProperties: false
+            description: SetEntryResponse contains the created or replaced entry.
+        admiral.changeset.v1.SetVariableRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    format: uuid
+                    description: The change set (UUID).
+                key:
+                    type: string
+                    title: key
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[A-Za-z_][A-Za-z0-9_]{0,62}$
+                    description: The variable key.
+                value:
+                    type: string
+                    title: value
+                    minLength: 1
+                    description: The value to set on apply. For COMPLEX type, must be valid JSON.
+                type:
+                    title: type
+                    description: How the value should be interpreted. Defaults to STRING when unspecified.
+                    $ref: '#/components/schemas/admiral.variable.v1.VariableType'
+                sensitive:
+                    type: boolean
+                    title: sensitive
+                    description: When true, the value is encrypted at rest and masked in API responses.
+            title: SetVariableRequest
+            additionalProperties: false
+            description: SetVariableRequest creates or replaces a variable entry within a change set.
+        admiral.changeset.v1.SetVariableResponse:
+            type: object
+            properties:
+                variable_entry:
+                    title: variable_entry
+                    description: The variable entry as recorded on the change set.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSetVariableEntry'
+            title: SetVariableResponse
+            additionalProperties: false
+            description: SetVariableResponse contains the created or replaced variable entry.
+        admiral.changeset.v1.UpdateChangeSetRequest:
+            type: object
+            properties:
+                change_set:
+                    title: change_set
+                    description: |-
+                        The change set with updated fields. Only fields listed in `update_mask`
+                         are applied.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+                update_mask:
+                    title: update_mask
+                    description: 'The set of fields to update. Supported fields: `title`, `description`.'
+                    $ref: '#/components/schemas/google.protobuf.FieldMask'
+            title: UpdateChangeSetRequest
+            required:
+                - change_set
+            additionalProperties: false
+            description: UpdateChangeSetRequest updates a change set's mutable metadata.
+        admiral.changeset.v1.UpdateChangeSetResponse:
+            type: object
+            properties:
+                change_set:
+                    title: change_set
+                    description: The updated change set.
+                    $ref: '#/components/schemas/admiral.changeset.v1.ChangeSet'
+            title: UpdateChangeSetResponse
+            additionalProperties: false
+            description: |-
+                UpdateChangeSetResponse contains the updated change set (metadata only;
+                 entries are not returned -- call GetChangeSet for the full record).
         admiral.cluster.v1.Cluster:
             type: object
             properties:
