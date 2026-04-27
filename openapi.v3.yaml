@@ -5648,10 +5648,19 @@ components:
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                     description: |-
-                        Human-readable name for this component within the application
-                         (e.g., "vpc", "redis", "api-server"). Unique within the application.
-                         Lowercase alphanumeric and hyphens only (1-63 chars). This name is used
-                         in template expressions: `{{ .component.<name>.<output> }}`.
+                        Mutable display label for this component within the application
+                         (e.g., "Primary VPC", "Redis Cache"). Unique within the application.
+                slug:
+                    type: string
+                    title: slug
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        Immutable semantic key for this component within the application
+                         (e.g., "vpc", "redis", "api-server"). Used in template expressions:
+                         `{{ .output.<slug>.<output> }}`, variable namespacing, and dependency
+                         tracking. Defaults to name at creation if not provided.
                 description:
                     type: string
                     title: description
@@ -5666,6 +5675,14 @@ components:
                          the referenced module's type when the component is created, but stored
                          explicitly for filtering and to determine execution behavior.
                     $ref: '#/components/schemas/admiral.component.v1.ComponentKind'
+                desired_state:
+                    type: string
+                    title: desired_state
+                    description: The desired lifecycle state of this component.
+                deletion_protection:
+                    type: boolean
+                    title: deletion_protection
+                    description: When true, DESTROY operations are rejected for this component.
                 module_id:
                     type: string
                     title: module_id
@@ -5962,9 +5979,13 @@ components:
                     maxLength: 63
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: Display name for this component. Must be unique within the application.
+                slug:
+                    type: string
+                    title: slug
                     description: |-
-                        Human-readable name for this component. Must be unique within the
-                         application. This name is used in template expressions.
+                        Immutable semantic key. Defaults to name if not provided.
+                         Used in template expressions: `{{ .output.<slug>.<output> }}`.
                 description:
                     type: string
                     title: description
@@ -6860,6 +6881,12 @@ components:
                         If this deployment was created as a rollback from a prior deployment,
                          this field contains the source deployment's UUID. Empty for normal
                          deployments.
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    description: |-
+                        The changeset that was deployed (UUID). Absent for pre-changeset
+                         deployments and reconcile (no-changeset) deployments.
                 revision_summary:
                     title: revision_summary
                     description: Summary counts for quick status display.
@@ -6905,7 +6932,9 @@ components:
                 - DEPLOYMENT_STATUS_UNSPECIFIED
                 - DEPLOYMENT_STATUS_PENDING
                 - DEPLOYMENT_STATUS_QUEUED
-                - DEPLOYMENT_STATUS_RUNNING
+                - DEPLOYMENT_STATUS_PLANNING
+                - DEPLOYMENT_STATUS_PLANNED
+                - DEPLOYMENT_STATUS_APPLYING
                 - DEPLOYMENT_STATUS_SUCCEEDED
                 - DEPLOYMENT_STATUS_PARTIALLY_FAILED
                 - DEPLOYMENT_STATUS_FAILED
@@ -7105,10 +7134,10 @@ components:
                     title: component_id
                     format: uuid
                     description: The component this revision is for (UUID).
-                component_name:
+                component_slug:
                     type: string
-                    title: component_name
-                    description: Component name at the time of deployment (denormalized for display).
+                    title: component_slug
+                    description: Component slug at the time of deployment (immutable semantic key).
                 kind:
                     title: kind
                     description: Component kind at the time of deployment (after override resolution).
@@ -7117,6 +7146,18 @@ components:
                     title: status
                     description: Lifecycle status of this revision.
                     $ref: '#/components/schemas/admiral.deployment.v1.RevisionStatus'
+                change_type:
+                    type: string
+                    title: change_type
+                    description: |-
+                        What type of change this revision represents relative to the previously
+                         deployed state (CREATE, UPDATE, DESTROY, RECREATE, IMPORT, NO_CHANGE).
+                previous_revision_id:
+                    type: string
+                    title: previous_revision_id
+                    description: |-
+                        The last succeeded revision for this (component, environment) at the
+                         time this revision was created. Null for CREATE revisions.
                 source_id:
                     type: string
                     title: source_id
