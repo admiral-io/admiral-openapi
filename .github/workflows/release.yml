@@ -1,0 +1,41 @@
+name: Release
+
+# Triggered by sync commits pushed from admiral-protos:
+#   - push to master  → admiral-protos tag-triggered cascade. semantic-release
+#                        cuts a stable release tag (vX.Y.Z).
+#   - push to next    → admiral-protos master-triggered "rolling RC" cascade.
+#                        semantic-release cuts a pre-release tag
+#                        (vX.Y.Z-rc.N).
+#
+# Branch-specific behavior lives in .releaserc.json.
+
+on:
+  push:
+    branches:
+      - master
+      - next
+    paths:
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.json'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 22
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --yes semantic-release
