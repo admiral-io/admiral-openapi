@@ -1,0 +1,112 @@
+{
+  "scopes": [
+    {
+      "name": "agent:deploy",
+      "description": "Fetch revision bundles and report revision results."
+    },
+    {
+      "name": "agent:exec",
+      "description": "Agent runtime job execution — heartbeat, claim jobs, fetch job bundles, and report job results."
+    },
+    {
+      "name": "agent:read",
+      "description": "Read agents, agent tokens, jobs, workloads, and workload events."
+    },
+    {
+      "name": "agent:status",
+      "description": "Report agent status, workload status, and workload metrics."
+    },
+    {
+      "name": "agent:write",
+      "description": "Create, update, and delete agents; manage agent tokens and identity bindings.",
+      "implies": [
+        "agent:read"
+      ]
+    },
+    {
+      "name": "app:read",
+      "description": "Read applications, change sets, and change set diffs."
+    },
+    {
+      "name": "app:write",
+      "description": "Create, update, and delete applications; manage change sets and their entries and variables.",
+      "implies": [
+        "app:read"
+      ]
+    },
+    {
+      "name": "catalog:read",
+      "description": "Read catalog items and resolve their content."
+    },
+    {
+      "name": "catalog:write",
+      "description": "Create, update, and delete catalog items.",
+      "implies": [
+        "catalog:read"
+      ]
+    },
+    {
+      "name": "credential:read",
+      "description": "Read credentials."
+    },
+    {
+      "name": "credential:write",
+      "description": "Create, update, and delete credentials.",
+      "implies": [
+        "credential:read"
+      ]
+    },
+    {
+      "name": "env:read",
+      "description": "Read environments and their components."
+    },
+    {
+      "name": "env:write",
+      "description": "Create, update, and delete environments.",
+      "implies": [
+        "env:read"
+      ]
+    },
+    {
+      "name": "run:read",
+      "description": "Read runs and revisions."
+    },
+    {
+      "name": "run:write",
+      "description": "Create, apply, and cancel runs; retry revisions.",
+      "implies": [
+        "run:read"
+      ]
+    },
+    {
+      "name": "source:read",
+      "description": "Read sources and source versions."
+    },
+    {
+      "name": "source:write",
+      "description": "Create, update, delete, and test sources.",
+      "implies": [
+        "source:read"
+      ]
+    },
+    {
+      "name": "token:read",
+      "description": "Read personal access tokens."
+    },
+    {
+      "name": "token:write",
+      "description": "Create, update, and revoke personal access tokens.",
+      "implies": [
+        "token:read"
+      ]
+    },
+    {
+      "name": "user:read",
+      "description": "Read user profiles."
+    },
+    {
+      "name": "var:read",
+      "description": "Read resolved environment variables, including secret values."
+    }
+  ]
+}

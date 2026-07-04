@@ -17,7 +17,274 @@ consumes:
 produces:
     - application/json
 paths:
-    /api/v1/agents:
+    /v1/agent/heartbeat:
+        post:
+            summary: |-
+                Heartbeat reports that a TERRAFORM agent is alive and includes current capacity
+                metrics. The server uses heartbeat recency to derive health status. The agent
+                is identified by the SAT's binding; no agent_id is required.
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_Heartbeat
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1HeartbeatResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: |-
+                    HeartbeatRequest contains a TERRAFORM agent's alive signal and current capacity.
+                    The agent is identified by the SAT's binding; no agent_id is required.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1HeartbeatRequest'
+            tags:
+                - AgentAPI
+    /v1/agent/jobs/claim:
+        post:
+            summary: |-
+                ClaimJob polls for the next job assigned to this TERRAFORM agent. Returns the job
+                metadata if work is available, or an empty response if no jobs are pending.
+                The agent is identified by the SAT's binding; no agent_id is required.
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_ClaimJob
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ClaimJobResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: |-
+                    ClaimJobRequest is sent by a TERRAFORM agent to poll for available work. The
+                    agent is identified by the SAT's binding; no agent_id is required.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1ClaimJobRequest'
+            tags:
+                - AgentAPI
+    /v1/agent/jobs/{job_id}/bundle:
+        get:
+            summary: |-
+                GetJobBundle fetches the rendered artifacts for a claimed job. Separated from
+                ClaimJob to keep the claim response lightweight. The bundle contains
+                everything the agent needs to execute: rendered infrastructure files,
+                resolved variables, provider/backend configuration, the engine and version,
+                and lifecycle hooks.
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_GetJobBundle
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetJobBundleResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: job_id
+                  description: The job to fetch the bundle for (UUID).
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - AgentAPI
+    /v1/agent/jobs/{job_id}/result:
+        post:
+            summary: |-
+                ReportJobResult reports the outcome of a completed job. The server
+                transitions the parent Revision status accordingly (e.g., PLANNING->APPLYING,
+                APPLYING->SUCCEEDED/FAILED).
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_ReportJobResult
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ReportJobResultResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: job_id
+                  description: The job being reported on (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AgentAPIReportJobResultBody'
+            tags:
+                - AgentAPI
+    /v1/agent/revisions/{revision_id}/bundle:
+        get:
+            summary: |-
+                GetRevisionBundle fetches the rendered manifest bundle for a workload
+                revision. The KUBERNETES agent calls this when it detects a new or updated
+                revision (advertised via ReportAgentStatus's pending_revision_ids). The
+                bundle contains pre-rendered Kubernetes manifests ready for server-side apply.
+            description: |-
+                The agent is identified by the SAT's binding. Returns PERMISSION_DENIED if
+                the revision's target agent does not match the SAT binding. Returns NOT_FOUND
+                if the revision does not exist or has been canceled.
+
+                Scope: `agent:deploy` | Token types: `sat`
+            operationId: AgentAPI_GetRevisionBundle
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetRevisionBundleResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: revision_id
+                  description: The revision to fetch the bundle for (UUID).
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - AgentAPI
+    /v1/agent/revisions/{revision_id}/result:
+        post:
+            summary: |-
+                ReportRevisionResult reports the outcome of applying a workload revision to
+                the cluster. The server transitions the parent Revision status accordingly
+                (APPLYING -> SUCCEEDED or FAILED).
+            description: 'Scope: `agent:deploy` | Token types: `sat`'
+            operationId: AgentAPI_ReportRevisionResult
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ReportRevisionResultResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: revision_id
+                  description: The revision being reported on (UUID).
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AgentAPIReportRevisionResultBody'
+            tags:
+                - AgentAPI
+    /v1/agent/status:
+        post:
+            summary: |-
+                ReportAgentStatus receives a combined telemetry snapshot from a KUBERNETES
+                agent. The payload includes cluster-level metrics, per-workload status, and
+                Kubernetes events. Admiral splits this into storage tiers on receipt and
+                piggybacks pending workload revisions on the response. The agent is identified
+                by the SAT's binding; no agent_id is required.
+            description: |-
+                (Successor to the former ClusterAPI.ReportClusterStatus.)
+
+                Scope: `agent:status` | Token types: `sat`
+            operationId: AgentAPI_ReportAgentStatus
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ReportAgentStatusResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: |-
+                    ReportAgentStatusRequest contains a combined telemetry payload from a KUBERNETES
+                    agent. Admiral splits this into storage tiers: current snapshot, time-series
+                    metrics, and events. The agent is identified by the SAT's binding; the optional
+                    cluster_uid lets the server verify the token is still bound to the same physical
+                    cluster (trust-on-first-use).
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1ReportAgentStatusRequest'
+            tags:
+                - AgentAPI
+    /v1/agent/workloads/metrics:
+        post:
+            summary: |-
+                ReportWorkloadMetrics receives a batch of per-pod CPU/memory samples from a
+                KUBERNETES agent. Admiral aggregates them pod -> workload -> cluster
+                server-side. The agent is identified by the SAT's binding; no agent_id is
+                required.
+            description: 'Scope: `agent:status` | Token types: `sat`'
+            operationId: AgentAPI_ReportWorkloadMetrics
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ReportWorkloadMetricsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: |-
+                    ReportWorkloadMetricsRequest contains a batch of per-pod resource samples from a
+                    KUBERNETES agent. The agent is identified by the SAT's binding.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1ReportWorkloadMetricsRequest'
+            tags:
+                - AgentAPI
+    /v1/agent/workloads/status:
+        post:
+            summary: |-
+                ReportWorkloadStatus receives workload-only telemetry from a KUBERNETES agent,
+                for incremental updates between full status pushes. The agent is identified
+                by the SAT's binding; no agent_id is required.
+            description: 'Scope: `agent:status` | Token types: `sat`'
+            operationId: AgentAPI_ReportWorkloadStatus
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ReportWorkloadStatusResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: |-
+                    ReportWorkloadStatusRequest contains incremental workload telemetry from a
+                    KUBERNETES agent. The agent is identified by the SAT's binding.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1ReportWorkloadStatusRequest'
+            tags:
+                - AgentAPI
+    /v1/agents:
         get:
             summary: |-
                 ListAgents returns a paginated list of agents within the caller's tenant.
@@ -96,7 +363,7 @@ paths:
                     $ref: '#/definitions/v1CreateAgentRequest'
             tags:
                 - AgentAPI
-    /api/v1/agents/tokens/{token_id}:
+    /v1/agents/tokens/{token_id}:
         get:
             summary: |-
                 GetAgentToken retrieves a single SAT by ID. Returns metadata only; the token
@@ -122,7 +389,7 @@ paths:
                   type: string
             tags:
                 - AgentAPI
-    /api/v1/agents/tokens/{token_id}/revoke:
+    /v1/agents/tokens/{token_id}/revoke:
         post:
             summary: |-
                 RevokeAgentToken permanently revokes an SAT bound to this agent. The agent
@@ -154,7 +421,7 @@ paths:
                     $ref: '#/definitions/AgentAPIRevokeAgentTokenBody'
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent.id}:
+    /v1/agents/{agent.id}:
         patch:
             summary: |-
                 UpdateAgent updates an agent's mutable fields.
@@ -184,7 +451,7 @@ paths:
                     $ref: '#/definitions/AgentAPIUpdateAgentBody'
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}:
+    /v1/agents/{agent_id}:
         get:
             summary: GetAgent retrieves an agent by ID.
             description: |-
@@ -236,7 +503,7 @@ paths:
                   type: string
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}/clear-identity-binding:
+    /v1/agents/{agent_id}/clear-identity-binding:
         post:
             summary: |-
                 ClearAgentIdentityBinding opens a bounded grace window during which the next
@@ -271,7 +538,7 @@ paths:
                     $ref: '#/definitions/AgentAPIClearAgentIdentityBindingBody'
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}/events:
+    /v1/agents/{agent_id}/events:
         get:
             summary: |-
                 ListWorkloadEvents returns a paginated list of Kubernetes events observed for
@@ -321,7 +588,7 @@ paths:
                   type: string
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}/jobs:
+    /v1/agents/{agent_id}/jobs:
         get:
             summary: |-
                 ListAgentJobs returns a paginated list of jobs assigned to a TERRAFORM agent.
@@ -370,7 +637,7 @@ paths:
                   type: string
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}/status:
+    /v1/agents/{agent_id}/status:
         get:
             summary: |-
                 GetAgentStatus retrieves the current telemetry snapshot for an agent.
@@ -400,7 +667,7 @@ paths:
                   type: string
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}/tokens:
+    /v1/agents/{agent_id}/tokens:
         get:
             summary: |-
                 ListAgentTokens returns a paginated list of SATs bound to the specified
@@ -482,7 +749,7 @@ paths:
                     $ref: '#/definitions/AgentAPICreateAgentTokenBody'
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}/workloads:
+    /v1/agents/{agent_id}/workloads:
         get:
             summary: |-
                 ListWorkloads returns a paginated list of workloads running on a KUBERNETES
@@ -532,7 +799,7 @@ paths:
                   type: string
             tags:
                 - AgentAPI
-    /api/v1/agents/{agent_id}/workloads/{workload_id}:
+    /v1/agents/{agent_id}/workloads/{workload_id}:
         get:
             summary: |-
                 GetWorkload returns a single workload with its full detail: the rich snapshot
@@ -562,7 +829,7 @@ paths:
                   type: string
             tags:
                 - AgentAPI
-    /api/v1/applications:
+    /v1/applications:
         get:
             summary: |-
                 ListApplications returns a paginated list of applications within the
@@ -629,7 +896,7 @@ paths:
                     $ref: '#/definitions/v1CreateApplicationRequest'
             tags:
                 - ApplicationAPI
-    /api/v1/applications/{application.id}:
+    /v1/applications/{application.id}:
         patch:
             summary: |-
                 UpdateApplication updates an application's mutable fields.
@@ -658,7 +925,7 @@ paths:
                     $ref: '#/definitions/ApplicationAPIUpdateApplicationBody'
             tags:
                 - ApplicationAPI
-    /api/v1/applications/{application_id}:
+    /v1/applications/{application_id}:
         get:
             summary: GetApplication retrieves an application by ID.
             description: 'Scope: `app:read`'
@@ -713,7 +980,7 @@ paths:
                   type: boolean
             tags:
                 - ApplicationAPI
-    /api/v1/catalog-items:
+    /v1/catalog-items:
         get:
             summary: |-
                 ListCatalogItems returns a paginated list of catalog items within the
@@ -786,7 +1053,7 @@ paths:
                     $ref: '#/definitions/v1CreateCatalogItemRequest'
             tags:
                 - CatalogAPI
-    /api/v1/catalog-items/{catalog_item.id}:
+    /v1/catalog-items/{catalog_item.id}:
         patch:
             summary: |-
                 UpdateCatalogItem updates a catalog item's mutable fields.
@@ -815,7 +1082,7 @@ paths:
                     $ref: '#/definitions/CatalogAPIUpdateCatalogItemBody'
             tags:
                 - CatalogAPI
-    /api/v1/catalog-items/{catalog_item_id}:
+    /v1/catalog-items/{catalog_item_id}:
         get:
             summary: GetCatalogItem retrieves a catalog item by ID.
             description: 'Scope: `catalog:read`'
@@ -861,7 +1128,7 @@ paths:
                   type: string
             tags:
                 - CatalogAPI
-    /api/v1/catalog-items/{catalog_item_id}/resolve:
+    /v1/catalog-items/{catalog_item_id}/resolve:
         post:
             summary: |-
                 ResolveCatalogItem fetches the item via its Source and returns the resolved
@@ -895,7 +1162,7 @@ paths:
                     $ref: '#/definitions/CatalogAPIResolveCatalogItemBody'
             tags:
                 - CatalogAPI
-    /api/v1/changesets:
+    /v1/changesets:
         get:
             summary: ListChangeSets returns a paginated list of change sets.
             description: |-
@@ -974,7 +1241,7 @@ paths:
                     $ref: '#/definitions/v1CreateChangeSetRequest'
             tags:
                 - ChangeSetAPI
-    /api/v1/changesets/{change_set.id}:
+    /v1/changesets/{change_set.id}:
         patch:
             summary: |-
                 UpdateChangeSet updates a change set's mutable metadata.
@@ -1008,7 +1275,7 @@ paths:
                     $ref: '#/definitions/ChangeSetAPIUpdateChangeSetBody'
             tags:
                 - ChangeSetAPI
-    /api/v1/changesets/{change_set_id}:
+    /v1/changesets/{change_set_id}:
         get:
             summary: |-
                 GetChangeSet retrieves a change set by ID, including all of its component
@@ -1034,7 +1301,7 @@ paths:
                   type: string
             tags:
                 - ChangeSetAPI
-    /api/v1/changesets/{change_set_id}/copy:
+    /v1/changesets/{change_set_id}/copy:
         post:
             summary: |-
                 CopyChangeSet creates a new OPEN change set in a target environment by
@@ -1072,7 +1339,7 @@ paths:
                     $ref: '#/definitions/ChangeSetAPICopyChangeSetBody'
             tags:
                 - ChangeSetAPI
-    /api/v1/changesets/{change_set_id}/diff:
+    /v1/changesets/{change_set_id}/diff:
         get:
             summary: |-
                 DiffChangeSet computes a structural diff for an OPEN change set: the
@@ -1110,7 +1377,7 @@ paths:
                   type: string
             tags:
                 - ChangeSetAPI
-    /api/v1/changesets/{change_set_id}/discard:
+    /v1/changesets/{change_set_id}/discard:
         post:
             summary: |-
                 DiscardChangeSet abandons an OPEN change set. The record is preserved for
@@ -1142,7 +1409,7 @@ paths:
                     $ref: '#/definitions/ChangeSetAPIDiscardChangeSetBody'
             tags:
                 - ChangeSetAPI
-    /api/v1/changesets/{change_set_id}/entries/{component_name}:
+    /v1/changesets/{change_set_id}/entries/{component_name}:
         delete:
             summary: |-
                 RemoveEntry deletes a single component entry from an OPEN change set.
@@ -1226,7 +1493,7 @@ paths:
                     $ref: '#/definitions/ChangeSetAPISetEntryBody'
             tags:
                 - ChangeSetAPI
-    /api/v1/changesets/{change_set_id}/variables/{key}:
+    /v1/changesets/{change_set_id}/variables/{key}:
         delete:
             summary: |-
                 RemoveVariable records the intent to delete a variable on apply. Writes
@@ -1306,7 +1573,7 @@ paths:
                     $ref: '#/definitions/ChangeSetAPISetVariableBody'
             tags:
                 - ChangeSetAPI
-    /api/v1/credentials:
+    /v1/credentials:
         get:
             summary: |-
                 ListCredentials returns a paginated list of credentials within the caller's
@@ -1378,7 +1645,7 @@ paths:
                     $ref: '#/definitions/v1CreateCredentialRequest'
             tags:
                 - CredentialAPI
-    /api/v1/credentials/{credential.id}:
+    /v1/credentials/{credential.id}:
         patch:
             summary: |-
                 UpdateCredential updates a credential's mutable fields.
@@ -1412,7 +1679,7 @@ paths:
                     $ref: '#/definitions/CredentialAPIUpdateCredentialBody'
             tags:
                 - CredentialAPI
-    /api/v1/credentials/{credential_id}:
+    /v1/credentials/{credential_id}:
         get:
             summary: GetCredential retrieves a credential by ID.
             description: |-
@@ -1464,7 +1731,7 @@ paths:
                   type: string
             tags:
                 - CredentialAPI
-    /api/v1/environments:
+    /v1/environments:
         get:
             summary: |-
                 ListEnvironments returns a paginated list of environments. Use the filter
@@ -1532,7 +1799,7 @@ paths:
                     $ref: '#/definitions/v1CreateEnvironmentRequest'
             tags:
                 - EnvironmentAPI
-    /api/v1/environments/{environment.id}:
+    /v1/environments/{environment.id}:
         patch:
             summary: |-
                 UpdateEnvironment updates an environment's mutable fields.
@@ -1561,7 +1828,7 @@ paths:
                     $ref: '#/definitions/EnvironmentAPIUpdateEnvironmentBody'
             tags:
                 - EnvironmentAPI
-    /api/v1/environments/{environment_id}:
+    /v1/environments/{environment_id}:
         get:
             summary: GetEnvironment retrieves an environment by ID.
             description: 'Scope: `env:read`'
@@ -1615,7 +1882,7 @@ paths:
                   type: boolean
             tags:
                 - EnvironmentAPI
-    /api/v1/environments/{environment_id}/components:
+    /v1/environments/{environment_id}/components:
         get:
             summary: |-
                 ListEnvironmentComponents returns the components currently deployed to
@@ -1647,7 +1914,7 @@ paths:
                   type: string
             tags:
                 - EnvironmentAPI
-    /api/v1/environments/{environment_id}/variables:
+    /v1/environments/{environment_id}/variables:
         get:
             summary: |-
                 ListEnvironmentVariables returns a paginated list of variables scoped
@@ -1704,25 +1971,7 @@ paths:
                   type: string
             tags:
                 - EnvironmentAPI
-    /api/v1/healthcheck:
-        get:
-            summary: |-
-                Healthcheck verifies that the service is running and healthy.
-                Returns an empty response on success. Use this endpoint for load balancer
-                health checks and monitoring systems.
-            operationId: HealthcheckAPI_Healthcheck
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1HealthcheckResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            tags:
-                - HealthcheckAPI
-    /api/v1/runs:
+    /v1/runs:
         get:
             summary: ListRuns returns a paginated list of runs.
             description: |-
@@ -1802,7 +2051,7 @@ paths:
                     $ref: '#/definitions/v1CreateRunRequest'
             tags:
                 - RunAPI
-    /api/v1/runs/{run_id}:
+    /v1/runs/{run_id}:
         get:
             summary: |-
                 GetRun retrieves a run by ID, including its composite status derived
@@ -1826,7 +2075,7 @@ paths:
                   type: string
             tags:
                 - RunAPI
-    /api/v1/runs/{run_id}/apply:
+    /v1/runs/{run_id}/apply:
         post:
             summary: |-
                 ApplyRun transitions a run from plan phase to apply phase. Revisions
@@ -1857,7 +2106,7 @@ paths:
                     $ref: '#/definitions/RunAPIApplyRunBody'
             tags:
                 - RunAPI
-    /api/v1/runs/{run_id}/cancel:
+    /v1/runs/{run_id}/cancel:
         post:
             summary: |-
                 CancelRun cancels an in-progress run. Stops pending and queued
@@ -1891,7 +2140,7 @@ paths:
                     $ref: '#/definitions/RunAPICancelRunBody'
             tags:
                 - RunAPI
-    /api/v1/runs/{run_id}/revisions:
+    /v1/runs/{run_id}/revisions:
         get:
             summary: ListRevisions returns all component revisions for a run.
             description: 'Scope: `run:read`'
@@ -1926,7 +2175,7 @@ paths:
                   type: string
             tags:
                 - RunAPI
-    /api/v1/runs/{run_id}/revisions/{revision_id}:
+    /v1/runs/{run_id}/revisions/{revision_id}:
         get:
             summary: GetRevision retrieves a single component revision within a run.
             description: 'Scope: `run:read`'
@@ -1953,7 +2202,7 @@ paths:
                   type: string
             tags:
                 - RunAPI
-    /api/v1/runs/{run_id}/revisions/{revision_id}/retry:
+    /v1/runs/{run_id}/revisions/{revision_id}/retry:
         post:
             summary: |-
                 RetryRevision retries a failed component revision. A new execution
@@ -1988,7 +2237,7 @@ paths:
                     $ref: '#/definitions/RunAPIRetryRevisionBody'
             tags:
                 - RunAPI
-    /api/v1/sources:
+    /v1/sources:
         get:
             summary: |-
                 ListSources returns a paginated list of sources within the caller's tenant.
@@ -2060,7 +2309,7 @@ paths:
                     $ref: '#/definitions/v1CreateSourceRequest'
             tags:
                 - SourceAPI
-    /api/v1/sources/{source.id}:
+    /v1/sources/{source.id}:
         patch:
             summary: |-
                 UpdateSource updates a source's mutable fields.
@@ -2089,7 +2338,7 @@ paths:
                     $ref: '#/definitions/SourceAPIUpdateSourceBody'
             tags:
                 - SourceAPI
-    /api/v1/sources/{source_id}:
+    /v1/sources/{source_id}:
         get:
             summary: GetSource retrieves a source by ID.
             description: 'Scope: `source:read`'
@@ -2137,7 +2386,7 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /api/v1/sources/{source_id}/test:
+    /v1/sources/{source_id}/test:
         post:
             summary: |-
                 TestSource validates the attached credential against the source URL by
@@ -2175,7 +2424,7 @@ paths:
                     $ref: '#/definitions/SourceAPITestSourceBody'
             tags:
                 - SourceAPI
-    /api/v1/sources/{source_id}/versions:
+    /v1/sources/{source_id}/versions:
         get:
             summary: |-
                 ListSourceVersions queries the external system for available versions of
@@ -2222,7 +2471,7 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /api/v1/user/me:
+    /v1/user/me:
         get:
             summary: |-
                 GetMe retrieves the profile of the currently authenticated user.
@@ -2240,7 +2489,7 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             tags:
                 - UserAPI
-    /api/v1/user/tokens:
+    /v1/user/tokens:
         get:
             summary: |-
                 ListPersonalAccessTokens returns a paginated list of the authenticated
@@ -2310,7 +2559,7 @@ paths:
                     $ref: '#/definitions/v1CreatePersonalAccessTokenRequest'
             tags:
                 - UserAPI
-    /api/v1/user/tokens/{token_id}:
+    /v1/user/tokens/{token_id}:
         get:
             summary: |-
                 GetPersonalAccessToken retrieves a single PAT by ID.
@@ -2363,7 +2612,7 @@ paths:
                     $ref: '#/definitions/UserAPIUpdatePersonalAccessTokenBody'
             tags:
                 - UserAPI
-    /api/v1/user/tokens/{token_id}/revoke:
+    /v1/user/tokens/{token_id}/revoke:
         post:
             summary: |-
                 RevokePersonalAccessToken permanently revokes a PAT. The token becomes
@@ -2392,7 +2641,7 @@ paths:
                     $ref: '#/definitions/UserAPIRevokePersonalAccessTokenBody'
             tags:
                 - UserAPI
-    /api/v1/users/{user_id}:
+    /v1/users/{user_id}:
         get:
             summary: GetUser retrieves a user's profile by ID.
             description: 'Scope: `user:read`'
