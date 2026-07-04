@@ -4,7 +4,255 @@ info:
     description: The Admiral REST API for managing applications, infrastructure, and runs. See https://admiral.io/docs for complete documentation.
     version: v1
 paths:
-    /api/v1/agents:
+    /v1/agent/heartbeat:
+        post:
+            tags:
+                - Infra Agent
+            summary: Send agent heartbeat
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_Heartbeat
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.agent.v1.HeartbeatRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.HeartbeatResponse'
+    /v1/agent/jobs/claim:
+        post:
+            tags:
+                - Infra Agent
+            summary: Claim a job
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_ClaimJob
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.agent.v1.ClaimJobRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.ClaimJobResponse'
+    /v1/agent/jobs/{job_id}/bundle:
+        get:
+            tags:
+                - Infra Agent
+            summary: Retrieve a job bundle
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_GetJobBundle
+            parameters:
+                - name: job_id
+                  in: path
+                  description: The job to fetch the bundle for (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: job_id
+                    format: uuid
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.GetJobBundleResponse'
+    /v1/agent/jobs/{job_id}/result:
+        post:
+            tags:
+                - Infra Agent
+            summary: Report job result
+            description: 'Scope: `agent:exec` | Token types: `sat`'
+            operationId: AgentAPI_ReportJobResult
+            parameters:
+                - name: job_id
+                  in: path
+                  description: The job being reported on (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: job_id
+                    format: uuid
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                job_id:
+                                    type: string
+                                    title: job_id
+                                    format: uuid
+                                    description: The job being reported on (UUID).
+                                result:
+                                    title: result
+                                    description: |-
+                                        The execution report with status, normalized summary, outputs, transcript,
+                                         and error information.
+                                    $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
+                            title: ReportJobResultRequest
+                            required:
+                                - job_id
+                                - result
+                            additionalProperties: false
+                            description: ReportJobResultRequest contains the outcome of a completed job.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportJobResultResponse'
+    /v1/agent/revisions/{revision_id}/bundle:
+        get:
+            tags:
+                - Workload Agent
+            summary: Retrieve a revision bundle
+            description: |-
+                The agent is identified by the SAT's binding. Returns PERMISSION_DENIED if
+                 the revision's target agent does not match the SAT binding. Returns NOT_FOUND
+                 if the revision does not exist or has been canceled.
+
+                 Scope: `agent:deploy` | Token types: `sat`
+            operationId: AgentAPI_GetRevisionBundle
+            parameters:
+                - name: revision_id
+                  in: path
+                  description: The revision to fetch the bundle for (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: revision_id
+                    format: uuid
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.GetRevisionBundleResponse'
+    /v1/agent/revisions/{revision_id}/result:
+        post:
+            tags:
+                - Workload Agent
+            summary: Report revision result
+            description: 'Scope: `agent:deploy` | Token types: `sat`'
+            operationId: AgentAPI_ReportRevisionResult
+            parameters:
+                - name: revision_id
+                  in: path
+                  description: The revision being reported on (UUID).
+                  required: true
+                  schema:
+                    type: string
+                    title: revision_id
+                    format: uuid
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                revision_id:
+                                    type: string
+                                    title: revision_id
+                                    format: uuid
+                                    description: The revision being reported on (UUID).
+                                result:
+                                    title: result
+                                    description: The result of applying the revision.
+                                    $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
+                            title: ReportRevisionResultRequest
+                            required:
+                                - revision_id
+                                - result
+                            additionalProperties: false
+                            description: |-
+                                ReportRevisionResultRequest contains the outcome of applying a workload revision
+                                 to the cluster.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportRevisionResultResponse'
+    /v1/agent/status:
+        post:
+            tags:
+                - Workload Agent
+            summary: Report agent status
+            description: |-
+                (Successor to the former ClusterAPI.ReportClusterStatus.)
+
+                 Scope: `agent:status` | Token types: `sat`
+            operationId: AgentAPI_ReportAgentStatus
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.agent.v1.ReportAgentStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportAgentStatusResponse'
+    /v1/agent/workloads/metrics:
+        post:
+            tags:
+                - Workload Agent
+            summary: Report workload metrics
+            description: 'Scope: `agent:status` | Token types: `sat`'
+            operationId: AgentAPI_ReportWorkloadMetrics
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadMetricsRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadMetricsResponse'
+    /v1/agent/workloads/status:
+        post:
+            tags:
+                - Workload Agent
+            summary: Report workload status
+            description: 'Scope: `agent:status` | Token types: `sat`'
+            operationId: AgentAPI_ReportWorkloadStatus
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadStatusResponse'
+    /v1/agents:
         get:
             tags:
                 - Agents
@@ -79,7 +327,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.CreateAgentResponse'
-    /api/v1/agents/tokens/{token_id}:
+    /v1/agents/tokens/{token_id}:
         get:
             tags:
                 - Agent Tokens
@@ -102,7 +350,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.GetAgentTokenResponse'
-    /api/v1/agents/tokens/{token_id}/revoke:
+    /v1/agents/tokens/{token_id}/revoke:
         post:
             tags:
                 - Agent Tokens
@@ -144,7 +392,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.RevokeAgentTokenResponse'
-    /api/v1/agents/{agent.id}:
+    /v1/agents/{agent.id}:
         patch:
             tags:
                 - Agents
@@ -193,7 +441,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.UpdateAgentResponse'
-    /api/v1/agents/{agent_id}:
+    /v1/agents/{agent_id}:
         get:
             tags:
                 - Agents
@@ -244,7 +492,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.DeleteAgentResponse'
-    /api/v1/agents/{agent_id}/clear-identity-binding:
+    /v1/agents/{agent_id}/clear-identity-binding:
         post:
             tags:
                 - Agents
@@ -298,7 +546,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.ClearAgentIdentityBindingResponse'
-    /api/v1/agents/{agent_id}/events:
+    /v1/agents/{agent_id}/events:
         get:
             tags:
                 - Agents
@@ -353,7 +601,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.ListWorkloadEventsResponse'
-    /api/v1/agents/{agent_id}/jobs:
+    /v1/agents/{agent_id}/jobs:
         get:
             tags:
                 - Agents
@@ -407,7 +655,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.ListAgentJobsResponse'
-    /api/v1/agents/{agent_id}/status:
+    /v1/agents/{agent_id}/status:
         get:
             tags:
                 - Agents
@@ -434,7 +682,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.GetAgentStatusResponse'
-    /api/v1/agents/{agent_id}/tokens:
+    /v1/agents/{agent_id}/tokens:
         get:
             tags:
                 - Agent Tokens
@@ -548,7 +796,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.CreateAgentTokenResponse'
-    /api/v1/agents/{agent_id}/workloads:
+    /v1/agents/{agent_id}/workloads:
         get:
             tags:
                 - Agents
@@ -603,7 +851,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.ListWorkloadsResponse'
-    /api/v1/agents/{agent_id}/workloads/{workload_id}:
+    /v1/agents/{agent_id}/workloads/{workload_id}:
         get:
             tags:
                 - Agents
@@ -634,7 +882,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.GetWorkloadResponse'
-    /api/v1/applications:
+    /v1/applications:
         get:
             tags:
                 - Applications
@@ -700,7 +948,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.application.v1.CreateApplicationResponse'
-    /api/v1/applications/{application.id}:
+    /v1/applications/{application.id}:
         patch:
             tags:
                 - Applications
@@ -749,7 +997,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.application.v1.UpdateApplicationResponse'
-    /api/v1/applications/{application_id}:
+    /v1/applications/{application_id}:
         get:
             tags:
                 - Applications
@@ -802,7 +1050,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.application.v1.DeleteApplicationResponse'
-    /api/v1/catalog-items:
+    /v1/catalog-items:
         get:
             tags:
                 - Catalog
@@ -874,7 +1122,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.catalog.v1.CreateCatalogItemResponse'
-    /api/v1/catalog-items/{catalog_item.id}:
+    /v1/catalog-items/{catalog_item.id}:
         patch:
             tags:
                 - Catalog
@@ -924,7 +1172,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.catalog.v1.UpdateCatalogItemResponse'
-    /api/v1/catalog-items/{catalog_item_id}:
+    /v1/catalog-items/{catalog_item_id}:
         get:
             tags:
                 - Catalog
@@ -969,7 +1217,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.catalog.v1.DeleteCatalogItemResponse'
-    /api/v1/catalog-items/{catalog_item_id}/resolve:
+    /v1/catalog-items/{catalog_item_id}/resolve:
         post:
             tags:
                 - Catalog
@@ -1021,7 +1269,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.catalog.v1.ResolveCatalogItemResponse'
-    /api/v1/changesets:
+    /v1/changesets:
         get:
             tags:
                 - ChangeSets
@@ -1097,7 +1345,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.CreateChangeSetResponse'
-    /api/v1/changesets/{change_set.id}:
+    /v1/changesets/{change_set.id}:
         patch:
             tags:
                 - ChangeSets
@@ -1149,7 +1397,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.UpdateChangeSetResponse'
-    /api/v1/changesets/{change_set_id}:
+    /v1/changesets/{change_set_id}:
         get:
             tags:
                 - ChangeSets
@@ -1174,7 +1422,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.GetChangeSetResponse'
-    /api/v1/changesets/{change_set_id}/copy:
+    /v1/changesets/{change_set_id}/copy:
         post:
             tags:
                 - ChangeSets
@@ -1245,7 +1493,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.CopyChangeSetResponse'
-    /api/v1/changesets/{change_set_id}/diff:
+    /v1/changesets/{change_set_id}/diff:
         get:
             tags:
                 - ChangeSets
@@ -1279,7 +1527,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.DiffChangeSetResponse'
-    /api/v1/changesets/{change_set_id}/discard:
+    /v1/changesets/{change_set_id}/discard:
         post:
             tags:
                 - ChangeSets
@@ -1323,7 +1571,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.DiscardChangeSetResponse'
-    /api/v1/changesets/{change_set_id}/entries/{component_name}:
+    /v1/changesets/{change_set_id}/entries/{component_name}:
         put:
             tags:
                 - ChangeSets
@@ -1485,7 +1733,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.RemoveEntryResponse'
-    /api/v1/changesets/{change_set_id}/variables/{key}:
+    /v1/changesets/{change_set_id}/variables/{key}:
         put:
             tags:
                 - ChangeSets
@@ -1599,7 +1847,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.RemoveVariableResponse'
-    /api/v1/credentials:
+    /v1/credentials:
         get:
             tags:
                 - Credentials
@@ -1670,7 +1918,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.credential.v1.CreateCredentialResponse'
-    /api/v1/credentials/{credential.id}:
+    /v1/credentials/{credential.id}:
         patch:
             tags:
                 - Credentials
@@ -1727,7 +1975,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.credential.v1.UpdateCredentialResponse'
-    /api/v1/credentials/{credential_id}:
+    /v1/credentials/{credential_id}:
         get:
             tags:
                 - Credentials
@@ -1778,7 +2026,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.credential.v1.DeleteCredentialResponse'
-    /api/v1/environments:
+    /v1/environments:
         get:
             tags:
                 - Environments
@@ -1845,7 +2093,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.environment.v1.CreateEnvironmentResponse'
-    /api/v1/environments/{environment.id}:
+    /v1/environments/{environment.id}:
         patch:
             tags:
                 - Environments
@@ -1894,7 +2142,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.environment.v1.UpdateEnvironmentResponse'
-    /api/v1/environments/{environment_id}:
+    /v1/environments/{environment_id}:
         get:
             tags:
                 - Environments
@@ -1947,7 +2195,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.environment.v1.DeleteEnvironmentResponse'
-    /api/v1/environments/{environment_id}/components:
+    /v1/environments/{environment_id}/components:
         get:
             tags:
                 - Environments
@@ -1975,7 +2223,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.environment.v1.ListEnvironmentComponentsResponse'
-    /api/v1/environments/{environment_id}/variables:
+    /v1/environments/{environment_id}/variables:
         get:
             tags:
                 - Environments
@@ -2035,24 +2283,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.environment.v1.ListEnvironmentVariablesResponse'
-    /api/v1/healthcheck:
-        get:
-            tags:
-                - Health
-            summary: Check service health
-            description: |-
-                Healthcheck verifies that the service is running and healthy.
-                 Returns an empty response on success. Use this endpoint for load balancer
-                 health checks and monitoring systems.
-            operationId: HealthcheckAPI_Healthcheck
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.healthcheck.v1.HealthcheckResponse'
-    /api/v1/runs:
+    /v1/runs:
         get:
             tags:
                 - Runs
@@ -2133,7 +2364,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.CreateRunResponse'
-    /api/v1/runs/{run_id}:
+    /v1/runs/{run_id}:
         get:
             tags:
                 - Runs
@@ -2156,7 +2387,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.GetRunResponse'
-    /api/v1/runs/{run_id}/apply:
+    /v1/runs/{run_id}/apply:
         post:
             tags:
                 - Runs
@@ -2201,7 +2432,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.ApplyRunResponse'
-    /api/v1/runs/{run_id}/cancel:
+    /v1/runs/{run_id}/cancel:
         post:
             tags:
                 - Runs
@@ -2246,7 +2477,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.CancelRunResponse'
-    /api/v1/runs/{run_id}/revisions:
+    /v1/runs/{run_id}/revisions:
         get:
             tags:
                 - Run Revisions
@@ -2286,7 +2517,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.ListRevisionsResponse'
-    /api/v1/runs/{run_id}/revisions/{revision_id}:
+    /v1/runs/{run_id}/revisions/{revision_id}:
         get:
             tags:
                 - Run Revisions
@@ -2317,7 +2548,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.GetRevisionResponse'
-    /api/v1/runs/{run_id}/revisions/{revision_id}/retry:
+    /v1/runs/{run_id}/revisions/{revision_id}/retry:
         post:
             tags:
                 - Run Revisions
@@ -2371,7 +2602,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.RetryRevisionResponse'
-    /api/v1/sources:
+    /v1/sources:
         get:
             tags:
                 - Sources
@@ -2442,7 +2673,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.source.v1.CreateSourceResponse'
-    /api/v1/sources/{source.id}:
+    /v1/sources/{source.id}:
         patch:
             tags:
                 - Sources
@@ -2491,7 +2722,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.source.v1.UpdateSourceResponse'
-    /api/v1/sources/{source_id}:
+    /v1/sources/{source_id}:
         get:
             tags:
                 - Sources
@@ -2538,7 +2769,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.source.v1.DeleteSourceResponse'
-    /api/v1/sources/{source_id}/test:
+    /v1/sources/{source_id}/test:
         post:
             tags:
                 - Sources
@@ -2586,7 +2817,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.source.v1.TestSourceResponse'
-    /api/v1/sources/{source_id}/versions:
+    /v1/sources/{source_id}/versions:
         get:
             tags:
                 - Sources
@@ -2636,7 +2867,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.source.v1.ListSourceVersionsResponse'
-    /api/v1/user/me:
+    /v1/user/me:
         get:
             tags:
                 - User
@@ -2650,7 +2881,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.user.v1.GetMeResponse'
-    /api/v1/user/tokens:
+    /v1/user/tokens:
         get:
             tags:
                 - Personal Access Tokens
@@ -2716,7 +2947,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.user.v1.CreatePersonalAccessTokenResponse'
-    /api/v1/user/tokens/{token_id}:
+    /v1/user/tokens/{token_id}:
         get:
             tags:
                 - Personal Access Tokens
@@ -2804,7 +3035,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.user.v1.UpdatePersonalAccessTokenResponse'
-    /api/v1/user/tokens/{token_id}/revoke:
+    /v1/user/tokens/{token_id}/revoke:
         post:
             tags:
                 - Personal Access Tokens
@@ -2844,7 +3075,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.user.v1.RevokePersonalAccessTokenResponse'
-    /api/v1/users/{user_id}:
+    /v1/users/{user_id}:
         get:
             tags:
                 - User
