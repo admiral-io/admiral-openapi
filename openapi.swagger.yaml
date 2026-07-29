@@ -5,11 +5,14 @@ info:
 tags:
     - name: RunAPI
     - name: AgentAPI
+    - name: AgentRuntimeAPI
     - name: ApplicationAPI
+    - name: AuthenticationAPI
     - name: CatalogAPI
     - name: ChangeSetAPI
     - name: CredentialAPI
     - name: EnvironmentAPI
+    - name: HealthcheckAPI
     - name: SourceAPI
     - name: UserAPI
 consumes:
@@ -17,273 +20,6 @@ consumes:
 produces:
     - application/json
 paths:
-    /v1/agent/heartbeat:
-        post:
-            summary: |-
-                Heartbeat reports that a TERRAFORM agent is alive and includes current capacity
-                metrics. The server uses heartbeat recency to derive health status. The agent
-                is identified by the SAT's binding; no agent_id is required.
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_Heartbeat
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1HeartbeatResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: |-
-                    HeartbeatRequest contains a TERRAFORM agent's alive signal and current capacity.
-                    The agent is identified by the SAT's binding; no agent_id is required.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1HeartbeatRequest'
-            tags:
-                - AgentAPI
-    /v1/agent/jobs/claim:
-        post:
-            summary: |-
-                ClaimJob polls for the next job assigned to this TERRAFORM agent. Returns the job
-                metadata if work is available, or an empty response if no jobs are pending.
-                The agent is identified by the SAT's binding; no agent_id is required.
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_ClaimJob
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ClaimJobResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: |-
-                    ClaimJobRequest is sent by a TERRAFORM agent to poll for available work. The
-                    agent is identified by the SAT's binding; no agent_id is required.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1ClaimJobRequest'
-            tags:
-                - AgentAPI
-    /v1/agent/jobs/{job_id}/bundle:
-        get:
-            summary: |-
-                GetJobBundle fetches the rendered artifacts for a claimed job. Separated from
-                ClaimJob to keep the claim response lightweight. The bundle contains
-                everything the agent needs to execute: rendered infrastructure files,
-                resolved variables, provider/backend configuration, the engine and version,
-                and lifecycle hooks.
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_GetJobBundle
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetJobBundleResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: job_id
-                  description: The job to fetch the bundle for (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - AgentAPI
-    /v1/agent/jobs/{job_id}/result:
-        post:
-            summary: |-
-                ReportJobResult reports the outcome of a completed job. The server
-                transitions the parent Revision status accordingly (e.g., PLANNING->APPLYING,
-                APPLYING->SUCCEEDED/FAILED).
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_ReportJobResult
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ReportJobResultResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: job_id
-                  description: The job being reported on (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/AgentAPIReportJobResultBody'
-            tags:
-                - AgentAPI
-    /v1/agent/revisions/{revision_id}/bundle:
-        get:
-            summary: |-
-                GetRevisionBundle fetches the rendered manifest bundle for a workload
-                revision. The KUBERNETES agent calls this when it detects a new or updated
-                revision (advertised via ReportAgentStatus's pending_revision_ids). The
-                bundle contains pre-rendered Kubernetes manifests ready for server-side apply.
-            description: |-
-                The agent is identified by the SAT's binding. Returns PERMISSION_DENIED if
-                the revision's target agent does not match the SAT binding. Returns NOT_FOUND
-                if the revision does not exist or has been canceled.
-
-                Scope: `agent:deploy` | Token types: `sat`
-            operationId: AgentAPI_GetRevisionBundle
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetRevisionBundleResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: revision_id
-                  description: The revision to fetch the bundle for (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - AgentAPI
-    /v1/agent/revisions/{revision_id}/result:
-        post:
-            summary: |-
-                ReportRevisionResult reports the outcome of applying a workload revision to
-                the cluster. The server transitions the parent Revision status accordingly
-                (APPLYING -> SUCCEEDED or FAILED).
-            description: 'Scope: `agent:deploy` | Token types: `sat`'
-            operationId: AgentAPI_ReportRevisionResult
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ReportRevisionResultResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: revision_id
-                  description: The revision being reported on (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/AgentAPIReportRevisionResultBody'
-            tags:
-                - AgentAPI
-    /v1/agent/status:
-        post:
-            summary: |-
-                ReportAgentStatus receives a combined telemetry snapshot from a KUBERNETES
-                agent. The payload includes cluster-level metrics, per-workload status, and
-                Kubernetes events. Admiral splits this into storage tiers on receipt and
-                piggybacks pending workload revisions on the response. The agent is identified
-                by the SAT's binding; no agent_id is required.
-            description: |-
-                (Successor to the former ClusterAPI.ReportClusterStatus.)
-
-                Scope: `agent:status` | Token types: `sat`
-            operationId: AgentAPI_ReportAgentStatus
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ReportAgentStatusResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: |-
-                    ReportAgentStatusRequest contains a combined telemetry payload from a KUBERNETES
-                    agent. Admiral splits this into storage tiers: current snapshot, time-series
-                    metrics, and events. The agent is identified by the SAT's binding; the optional
-                    cluster_uid lets the server verify the token is still bound to the same physical
-                    cluster (trust-on-first-use).
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1ReportAgentStatusRequest'
-            tags:
-                - AgentAPI
-    /v1/agent/workloads/metrics:
-        post:
-            summary: |-
-                ReportWorkloadMetrics receives a batch of per-pod CPU/memory samples from a
-                KUBERNETES agent. Admiral aggregates them pod -> workload -> cluster
-                server-side. The agent is identified by the SAT's binding; no agent_id is
-                required.
-            description: 'Scope: `agent:status` | Token types: `sat`'
-            operationId: AgentAPI_ReportWorkloadMetrics
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ReportWorkloadMetricsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: |-
-                    ReportWorkloadMetricsRequest contains a batch of per-pod resource samples from a
-                    KUBERNETES agent. The agent is identified by the SAT's binding.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1ReportWorkloadMetricsRequest'
-            tags:
-                - AgentAPI
-    /v1/agent/workloads/status:
-        post:
-            summary: |-
-                ReportWorkloadStatus receives workload-only telemetry from a KUBERNETES agent,
-                for incremental updates between full status pushes. The agent is identified
-                by the SAT's binding; no agent_id is required.
-            description: 'Scope: `agent:status` | Token types: `sat`'
-            operationId: AgentAPI_ReportWorkloadStatus
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ReportWorkloadStatusResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: |-
-                    ReportWorkloadStatusRequest contains incremental workload telemetry from a
-                    KUBERNETES agent. The agent is identified by the SAT's binding.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1ReportWorkloadStatusRequest'
-            tags:
-                - AgentAPI
     /v1/agents:
         get:
             summary: |-
@@ -333,6 +69,9 @@ paths:
                 - AgentAPI
         post:
             summary: |-
+                ---------------------------------------------------------------------------
+                Admin CRUD
+                ---------------------------------------------------------------------------
                 CreateAgent creates a new agent record within the caller's tenant and
                 generates an initial Service Access Token (SAT). The agent starts in PENDING
                 health status until it begins reporting.
@@ -591,6 +330,9 @@ paths:
     /v1/agents/{agent_id}/jobs:
         get:
             summary: |-
+                ---------------------------------------------------------------------------
+                Read-only observability. Messages: jobs.proto, workloads.proto.
+                ---------------------------------------------------------------------------
                 ListAgentJobs returns a paginated list of jobs assigned to a TERRAFORM agent.
                 Provides admin read-only visibility into agent workload.
             description: 'Scope: `agent:read`'
@@ -717,6 +459,9 @@ paths:
                 - AgentAPI
         post:
             summary: |-
+                ---------------------------------------------------------------------------
+                Agent tokens
+                ---------------------------------------------------------------------------
                 CreateAgentToken creates a new Service Access Token (SAT) bound to the
                 specified agent. Scopes are auto-assigned from the agent's kind and cannot
                 be overridden. The response includes the raw token secret, shown exactly once.
@@ -2780,28 +2525,6 @@ definitions:
             an agent.
         required:
             - name
-    AgentAPIReportJobResultBody:
-        type: object
-        properties:
-            result:
-                $ref: '#/definitions/v1ExecutionReport'
-                description: |-
-                    The execution report with status, normalized summary, outputs, transcript,
-                    and error information.
-        description: ReportJobResultRequest contains the outcome of a completed job.
-        required:
-            - result
-    AgentAPIReportRevisionResultBody:
-        type: object
-        properties:
-            result:
-                $ref: '#/definitions/v1ExecutionReport'
-                description: The result of applying the revision.
-        description: |-
-            ReportRevisionResultRequest contains the outcome of applying a workload revision
-            to the cluster.
-        required:
-            - result
     AgentAPIRevokeAgentTokenBody:
         type: object
         description: |-
@@ -2876,6 +2599,28 @@ definitions:
         description: UpdateAgentRequest contains the agent fields to update.
         required:
             - agent
+    AgentRuntimeAPIReportJobResultBody:
+        type: object
+        properties:
+            result:
+                $ref: '#/definitions/v1ExecutionReport'
+                description: |-
+                    The execution report with status, normalized summary, outputs, transcript,
+                    and error information.
+        description: ReportJobResultRequest contains the outcome of a completed job.
+        required:
+            - result
+    AgentRuntimeAPIReportRevisionResultBody:
+        type: object
+        properties:
+            result:
+                $ref: '#/definitions/v1ExecutionReport'
+                description: The result of applying the revision.
+        description: |-
+            ReportRevisionResultRequest contains the outcome of applying a workload revision
+            to the cluster.
+        required:
+            - result
     ApplicationAPIUpdateApplicationBody:
         type: object
         properties:

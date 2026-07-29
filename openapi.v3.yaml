@@ -4,254 +4,6 @@ info:
     description: The Admiral REST API for managing applications, infrastructure, and runs. See https://admiral.io/docs for complete documentation.
     version: v1
 paths:
-    /v1/agent/heartbeat:
-        post:
-            tags:
-                - Infra Agent
-            summary: Send agent heartbeat
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_Heartbeat
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.agent.v1.HeartbeatRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.HeartbeatResponse'
-    /v1/agent/jobs/claim:
-        post:
-            tags:
-                - Infra Agent
-            summary: Claim a job
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_ClaimJob
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.agent.v1.ClaimJobRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ClaimJobResponse'
-    /v1/agent/jobs/{job_id}/bundle:
-        get:
-            tags:
-                - Infra Agent
-            summary: Retrieve a job bundle
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_GetJobBundle
-            parameters:
-                - name: job_id
-                  in: path
-                  description: The job to fetch the bundle for (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: job_id
-                    format: uuid
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.GetJobBundleResponse'
-    /v1/agent/jobs/{job_id}/result:
-        post:
-            tags:
-                - Infra Agent
-            summary: Report job result
-            description: 'Scope: `agent:exec` | Token types: `sat`'
-            operationId: AgentAPI_ReportJobResult
-            parameters:
-                - name: job_id
-                  in: path
-                  description: The job being reported on (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: job_id
-                    format: uuid
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                job_id:
-                                    type: string
-                                    title: job_id
-                                    format: uuid
-                                    description: The job being reported on (UUID).
-                                result:
-                                    title: result
-                                    description: |-
-                                        The execution report with status, normalized summary, outputs, transcript,
-                                         and error information.
-                                    $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
-                            title: ReportJobResultRequest
-                            required:
-                                - job_id
-                                - result
-                            additionalProperties: false
-                            description: ReportJobResultRequest contains the outcome of a completed job.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportJobResultResponse'
-    /v1/agent/revisions/{revision_id}/bundle:
-        get:
-            tags:
-                - Workload Agent
-            summary: Retrieve a revision bundle
-            description: |-
-                The agent is identified by the SAT's binding. Returns PERMISSION_DENIED if
-                 the revision's target agent does not match the SAT binding. Returns NOT_FOUND
-                 if the revision does not exist or has been canceled.
-
-                 Scope: `agent:deploy` | Token types: `sat`
-            operationId: AgentAPI_GetRevisionBundle
-            parameters:
-                - name: revision_id
-                  in: path
-                  description: The revision to fetch the bundle for (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: revision_id
-                    format: uuid
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.GetRevisionBundleResponse'
-    /v1/agent/revisions/{revision_id}/result:
-        post:
-            tags:
-                - Workload Agent
-            summary: Report revision result
-            description: 'Scope: `agent:deploy` | Token types: `sat`'
-            operationId: AgentAPI_ReportRevisionResult
-            parameters:
-                - name: revision_id
-                  in: path
-                  description: The revision being reported on (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: revision_id
-                    format: uuid
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                revision_id:
-                                    type: string
-                                    title: revision_id
-                                    format: uuid
-                                    description: The revision being reported on (UUID).
-                                result:
-                                    title: result
-                                    description: The result of applying the revision.
-                                    $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
-                            title: ReportRevisionResultRequest
-                            required:
-                                - revision_id
-                                - result
-                            additionalProperties: false
-                            description: |-
-                                ReportRevisionResultRequest contains the outcome of applying a workload revision
-                                 to the cluster.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportRevisionResultResponse'
-    /v1/agent/status:
-        post:
-            tags:
-                - Workload Agent
-            summary: Report agent status
-            description: |-
-                (Successor to the former ClusterAPI.ReportClusterStatus.)
-
-                 Scope: `agent:status` | Token types: `sat`
-            operationId: AgentAPI_ReportAgentStatus
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.agent.v1.ReportAgentStatusRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportAgentStatusResponse'
-    /v1/agent/workloads/metrics:
-        post:
-            tags:
-                - Workload Agent
-            summary: Report workload metrics
-            description: 'Scope: `agent:status` | Token types: `sat`'
-            operationId: AgentAPI_ReportWorkloadMetrics
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadMetricsRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadMetricsResponse'
-    /v1/agent/workloads/status:
-        post:
-            tags:
-                - Workload Agent
-            summary: Report workload status
-            description: 'Scope: `agent:status` | Token types: `sat`'
-            operationId: AgentAPI_ReportWorkloadStatus
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadStatusRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ReportWorkloadStatusResponse'
     /v1/agents:
         get:
             tags:
@@ -5383,6 +5135,19 @@ components:
                 Application represents a deployable unit within a tenant. An application
                  groups manifests, dependencies, and environment configuration into a single
                  entity that Admiral orchestrates across environments.
+            example:
+                id: "a1b2c3d4-5678-9abc-def0-1234567890ab"
+                name: "inventory-api"
+                description: "Core inventory management service for tracking warehouse stock levels and fulfillment."
+                labels:
+                    team: "logistics"
+                    tier: "critical"
+                created_by:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                created_at: "2025-09-15T10:30:00Z"
+                updated_at: "2025-11-02T14:22:00Z"
         admiral.api.application.v1.Application.LabelsEntry:
             type: object
             properties:
@@ -5573,64 +5338,6 @@ components:
             title: UpdateApplicationResponse
             additionalProperties: false
             description: UpdateApplicationResponse contains the updated application.
-        admiral.api.authentication.v1.CallbackRequest:
-            type: object
-            properties:
-                code:
-                    type: string
-                    title: code
-                    maxLength: 4096
-                    description: The authorization code from the IdP.
-                state:
-                    type: string
-                    title: state
-                    maxLength: 8192
-                    description: The state nonce (signed JWT) from the login request.
-                error:
-                    type: string
-                    title: error
-                    maxLength: 256
-                    description: OAuth error code (set by IdP on failure).
-                error_description:
-                    type: string
-                    title: error_description
-                    maxLength: 2048
-                    description: Human-readable error description from the IdP.
-            title: CallbackRequest
-            additionalProperties: false
-            description: CallbackRequest contains the OAuth2 callback parameters from the IdP.
-        admiral.api.authentication.v1.CallbackResponse:
-            type: object
-            title: CallbackResponse
-            additionalProperties: false
-            description: |-
-                CallbackResponse is empty on success. The server sets a session cookie
-                 and redirects the browser to the original redirect_url.
-        admiral.api.authentication.v1.LoginRequest:
-            type: object
-            properties:
-                redirect_url:
-                    type: string
-                    title: redirect_url
-                    maxLength: 2048
-                    pattern: ^(/([^/\\].*)?)?$
-                    description: |-
-                        Relative path to redirect to after successful authentication. Must begin
-                         with "/" and must not be protocol-relative ("//host") or absolute (no
-                         scheme or host). Empty redirects to "/". Baked into the signed state nonce.
-            title: LoginRequest
-            additionalProperties: false
-            description: LoginRequest contains parameters for initiating the OAuth2 flow.
-        admiral.api.authentication.v1.LoginResponse:
-            type: object
-            properties:
-                auth_url:
-                    type: string
-                    title: auth_url
-                    description: The IdP authorization URL. The client should redirect the browser here.
-            title: LoginResponse
-            additionalProperties: false
-            description: LoginResponse contains the IdP authorization URL for the client to redirect to.
         admiral.api.catalog.v1.CatalogItem:
             type: object
             properties:
@@ -7170,6 +6877,27 @@ components:
                  components declare outputs explicitly. Other components consume these via
                  template expressions. The run engine resolves this DAG to determine
                  execution order.
+            example:
+                id: "d4e5f6a7-8901-2bcd-ef34-567890123456"
+                application_id: "a1b2c3d4-5678-9abc-def0-1234567890ab"
+                environment_id: "e5f6a7b8-9012-3cde-f456-789012345678"
+                name: "api-server"
+                description: "Main API server deployed via Helm chart."
+                kind: "COMPONENT_KIND_WORKLOAD"
+                ref: "2.4.1"
+                values_template: "{\"replicaCount\": \"{{ .var.REPLICA_COUNT }}\", \"image.tag\": \"{{ .var.IMAGE_TAG }}\"}"
+                depends_on:
+                    - "vpc"
+                    - "redis"
+                target:
+                    agent_id: "1f2e3d4c-5b6a-7980-1234-567890abcdef"
+                    namespace: "inventory-staging"
+                created_by:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                created_at: "2025-09-16T09:00:00Z"
+                updated_at: "2025-10-28T11:30:00Z"
         admiral.api.component.v1.ComponentInput:
             type: object
             properties:
@@ -7837,6 +7565,22 @@ components:
                 Environment represents a named deployment target for an application
                  (e.g., dev, staging, prod). Each environment carries its own configuration
                  and variables; promotion between environments is explicit.
+            example:
+                id: "e5f6a7b8-9012-3cde-f456-789012345678"
+                application_id: "a1b2c3d4-5678-9abc-def0-1234567890ab"
+                name: "staging"
+                description: "Shared staging environment for QA validation before production promotion."
+                labels:
+                    region: "us-east-1"
+                    tier: "staging"
+                has_pending_changes: true
+                last_deployed_at: "2025-11-01T09:15:00Z"
+                created_by:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                created_at: "2025-09-15T11:00:00Z"
+                updated_at: "2025-11-02T14:30:00Z"
         admiral.api.environment.v1.Environment.LabelsEntry:
             type: object
             properties:
@@ -8081,13 +7825,6 @@ components:
             title: UpdateEnvironmentResponse
             additionalProperties: false
             description: UpdateEnvironmentResponse contains the updated environment.
-        admiral.api.healthcheck.v1.HealthcheckRequest:
-            type: object
-            title: HealthcheckRequest
-            additionalProperties: false
-            description: |-
-                HealthcheckRequest is the request message for Healthcheck.
-                 No parameters are required.
         admiral.api.healthcheck.v1.HealthcheckResponse:
             type: object
             title: HealthcheckResponse
@@ -8901,6 +8638,22 @@ components:
                  `completed_at` fields are server-maintained as revisions progress;
                  everything else is fixed at creation time. To change what is deployed,
                  create a new run.
+            example:
+                id: "7e8f9a0b-1c2d-3e4f-5a6b-7c8d9e0f1a2b"
+                display_id: "run-3k7m9p2q4rvw"
+                application_id: "a1b2c3d4-5678-9abc-def0-1234567890ab"
+                environment_id: "e5f6a7b8-9012-3cde-f456-789012345678"
+                status: "RUN_STATUS_SUCCEEDED"
+                message: "Deploy v2.4.1 with updated ingress rules"
+                triggered_by:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                revision_summary:
+                    total: 3
+                    succeeded: 3
+                created_at: "2025-11-20T14:00:00Z"
+                completed_at: "2025-11-20T14:12:00Z"
         admiral.api.run.v1.RunStatus:
             type: string
             title: RunStatus
@@ -9277,6 +9030,26 @@ components:
                  into deployment snapshots.
 
                  Sources are tenant-scoped.
+            example:
+                id: "f6a7b8c9-0123-4def-5678-901234567890"
+                name: "nginx-ingress"
+                description: "NGINX Ingress Controller Helm chart from the official repository."
+                type: "SOURCE_TYPE_HELM"
+                url: "https://kubernetes.github.io/ingress-nginx"
+                source_config:
+                    helm:
+                        chart_name: "ingress-nginx"
+                labels:
+                    category: "networking"
+                    team: "platform"
+                last_test_status: "SOURCE_TEST_STATUS_SUCCESS"
+                last_tested_at: "2025-11-01T08:00:00Z"
+                created_by:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                created_at: "2025-08-01T12:00:00Z"
+                updated_at: "2025-10-20T09:00:00Z"
         admiral.api.source.v1.Source.LabelsEntry:
             type: object
             properties:
@@ -9772,6 +9545,15 @@ components:
             title: User
             additionalProperties: false
             description: User represents a user's profile information.
+            example:
+                id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                email: "alex.chen@example.com"
+                display_name: "Alex Chen"
+                given_name: "Alex"
+                family_name: "Chen"
+                avatar_url: "https://avatars.example.com/alex-chen.jpg"
+                created_at: "2025-06-01T09:00:00Z"
+                updated_at: "2025-11-15T11:00:00Z"
         admiral.api.variable.v1.Variable:
             type: object
             properties:
@@ -9864,6 +9646,22 @@ components:
                  / RemoveVariable). They are read via EnvironmentAPI.ListEnvironmentVariables.
 
                  Sensitive variables have their values masked in API responses.
+            example:
+                id: "1a2b3c4d-5e6f-7890-abcd-ef0123456789"
+                key: "DATABASE_URL"
+                value: "postgresql://db.internal:5432/inventory"
+                sensitive: false
+                type: "VARIABLE_TYPE_STRING"
+                description: "Primary database connection string for the inventory service."
+                application_id: "a1b2c3d4-5678-9abc-def0-1234567890ab"
+                environment_id: "e5f6a7b8-9012-3cde-f456-789012345678"
+                source: "VARIABLE_SOURCE_USER"
+                created_by:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                created_at: "2025-09-16T12:00:00Z"
+                updated_at: "2025-10-30T15:00:00Z"
         admiral.api.variable.v1.VariableSource:
             type: string
             title: VariableSource
