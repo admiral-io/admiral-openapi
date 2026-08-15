@@ -4,17 +4,181 @@ info:
     version: v1
 tags:
     - name: RunAPI
+      description: |-
+        RunAPI manages runs and their component revisions.
+
+        A run represents a single execution against an application+environment.
+        When triggered, Admiral resolves all components for the
+        application+environment combination (applying overrides), builds a
+        dependency graph, and renders each component into an immutable revision.
+
+        Infrastructure revisions follow a plan -> apply lifecycle, executed by a
+        terraform-semantic engine (Terraform or OpenTofu) on the component's
+        assigned TERRAFORM agent. Workload revisions (Helm, Kustomize, manifests)
+        are applied to the target cluster by the component's KUBERNETES agent. The
+        run engine executes the dependency graph in order: independent components
+        run in parallel, dependent components wait for their upstream to succeed.
+
+        To roll back to a prior known-good state, create a new run with
+        `source_run_id` set to a previous successful run. This re-plans and
+        re-applies the prior configuration against the current infrastructure
+        state, going through the same plan/approve/apply cycle.
     - name: AgentAPI
+      description: |-
+        AgentAPI is the management surface for execution agents: their lifecycle,
+        their Service Access Tokens, and read-only visibility into the work they
+        have done. It is the human-facing half of the agent contract, called with a
+        PAT from the CLI, Terraform provider, or web app.
+
+        The execution protocol the agents themselves speak lives in AgentRuntimeAPI
+        (runtime.proto). That half is SAT-only, excluded from the public OpenAPI
+        surface, and changes with the agent binaries. Keeping the two apart means the
+        documented management contract is not versioned against the churn of job
+        bundles, hooks, and engines.
+
+        Both agent kinds are managed here and share one identity, lifecycle, and
+        token model:
+
+          - TERRAFORM agents are the execution plane for infrastructure operations
+            (plan, apply, destroy) run by a terraform-semantic engine (Terraform or
+            OpenTofu, selected per job via JobBundle.engine).
+
+          - KUBERNETES agents are the control plane for Kubernetes clusters,
+            reporting workload telemetry and applying rendered manifest revisions.
+
+        Administrators create an agent via CreateAgent (passing the kind), which
+        returns a Service Access Token (SAT) for deploying the agent binary. Once the
+        agent boots and begins reporting through AgentRuntimeAPI, the server
+        transitions its health from PENDING to HEALTHY.
+
+        Management routes follow /v1/agents/... (plural, with IDs); the runtime
+        protocol uses /v1/agent/... (singular, no ID; derived from the SAT binding).
+
+        Message definitions live in companion files: jobs.proto (TERRAFORM execution)
+        and workloads.proto (KUBERNETES telemetry and revision delivery).
+
+        This service is the unified successor to the former RunnerAPI (admiral.runner.v1)
+        and ClusterAPI (admiral.cluster.v1).
     - name: AgentRuntimeAPI
+      description: |-
+        AgentRuntimeAPI is the execution protocol first-party agents speak while
+        running work. It is SAT-only: every RPC requires a Service Access Token bound
+        to a specific agent, and the agent is identified by that binding rather than
+        by an agent_id in the request.
+
+        This is deliberately separate from AgentAPI (agent.proto), which is the
+        human-facing management surface — creating agents, minting tokens, and
+        reading job/workload history with a PAT. The two have different audiences,
+        different token types, and very different rates of change: the runtime
+        protocol evolves with the agent binaries (job bundles, hooks, engines) and is
+        excluded from the public OpenAPI surface, while the management API is a
+        documented contract.
+
+        Agent-facing routes use /v1/agent/... (singular, no ID; derived from the SAT
+        binding); management routes use /v1/agents/... (plural, with IDs).
+
+        Both agent kinds are served here. TERRAFORM agents pull work: ClaimJob ->
+        GetJobBundle -> execute -> ReportJobResult. KUBERNETES agents push telemetry
+        (ReportAgentStatus) and pull rendered manifest bundles for workload revisions
+        (GetRevisionBundle -> apply -> ReportRevisionResult).
     - name: ApplicationAPI
+      description: |-
+        ApplicationAPI manages applications within a tenant.
+
+        An application is the fundamental unit in Admiral. It groups deployment
+        manifests, infrastructure dependencies, environment configuration, and
+        relationships into a single entity that can be deployed across multiple
+        environments. Applications are defined once and promoted explicitly between
+        environments.
     - name: AuthenticationAPI
+      description: |-
+        AuthenticationAPI handles the OAuth2/OIDC authentication flow for browser
+        sessions. Non-browser consumers (CLI, agents) authenticate with pre-created
+        access tokens in the Authorization header and do not use these endpoints.
+
+        All RPCs in this service are public (no authentication required). Login
+        initiates the flow; Callback completes it and establishes a session cookie.
     - name: CatalogAPI
+      description: |-
+        CatalogAPI manages the catalog: named, reusable references to a slice of
+        content within a Source at a specific ref. One Source can back many catalog
+        items (different refs, different subtrees).
+
+        A catalog item binds a Source to a specific ref (branch, tag, version) and
+        optional root (subdirectory within the fetched tree) and path (working
+        directory within root for execution). Catalog items are the first layer that
+        actually consumes backend.Fetch for real work.
+
+        The API includes a resolve operation (ResolveCatalogItem) that fetches the
+        item via its Source and returns the resolved revision and content digest
+        without streaming content. Content delivery to agents is a separate concern.
     - name: ChangeSetAPI
+      description: |-
+        ChangeSetAPI manages change sets: scoped, isolated proposals to mutate the
+        deployed state of an application within a single environment.
+
+        A change set bundles component changes (add a component, change a version,
+        destroy a component) and variable changes (set or remove a key) into one
+        reviewable, deployable unit. Multiple change sets can be open simultaneously
+        for the same application+environment by different authors. They isolate
+        the editing phase so concurrent work does not collide.
+
+        Change sets are immutable once they leave OPEN status. Mutations
+        (SetEntry, RemoveEntry, SetVariable, RemoveVariable, UpdateChangeSet,
+        DiscardChangeSet) all reject when the change set is DEPLOYED or DISCARDED.
+
+        Lifecycle: OPEN -> DEPLOYED (via deploy) or OPEN -> DISCARDED (explicit
+        abandon). No backtracking.
     - name: CredentialAPI
+      description: |-
+        CredentialAPI manages stored credentials for accessing external systems.
+
+        A credential stores the authentication configuration needed to reach a remote
+        system: a Git host, Helm repository, OCI registry, or Terraform registry.
+        Credentials are tenant-scoped and referenced by sources when fetching
+        artifacts.
+
+        Sensitive fields (tokens, keys, secrets) are write-only: they are accepted on
+        create/update but never returned in API responses. GET and List operations
+        return credential metadata only.
+
+        Connectivity validation (testing whether the credential can actually reach a
+        remote system) is performed at the Source level, where the credential is
+        paired with a target URL.
     - name: EnvironmentAPI
+      description: |-
+        EnvironmentAPI manages environments within an application.
+
+        An environment is a named deployment target (e.g., dev, staging, prod) for an
+        application. Each environment carries its own configuration and variables.
+        Promotion between environments is explicit; Admiral never auto-promotes.
     - name: HealthcheckAPI
+      description: |-
+        HealthcheckAPI provides health check operations for monitoring service
+        availability. All RPCs in this service are public (no authentication
+        required), suitable for load balancer probes.
     - name: SourceAPI
+      description: |-
+        SourceAPI manages source definitions: pointers to external artifacts that
+        Admiral fetches, inspects, and renders into immutable deployment snapshots.
+
+        A source represents a fetchable artifact at a specific location: a Terraform
+        module in a registry, a Helm chart in an OCI registry, Kubernetes manifests
+        in a Git repository, etc. Sources reference a credential for authentication
+        and are referenced by application components for deployment.
+
+        The API includes a discovery operation (ListSourceVersions) that queries
+        external systems in real time. Input and output discovery is not a Source
+        concern: for Git sources, inputs and outputs are a property of a specific
+        (subpath, ref), not of the repo as a whole.
     - name: UserAPI
+      description: |-
+        UserAPI provides operations for user profile retrieval and Personal Access
+        Token (PAT) management.
+
+        PATs allow users to authenticate with the Admiral API from scripts, CI
+        pipelines, and other programmatic contexts. Each PAT has user-selected
+        scopes and an optional expiration.
 consumes:
     - application/json
 produces:
