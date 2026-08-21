@@ -90,6 +90,17 @@
       ]
     },
     {
+      "name": "tenant:read",
+      "description": "Read the caller's own tenant -- name, slug, and status."
+    },
+    {
+      "name": "tenant:write",
+      "description": "Update the caller's own tenant's settings, and close it -- suspending or deleting the tenant you own. Which of those you may actually do is decided per tenant, not by holding this.",
+      "implies": [
+        "tenant:read"
+      ]
+    },
+    {
       "name": "token:read",
       "description": "Read personal access tokens."
     },
@@ -102,7 +113,14 @@
     },
     {
       "name": "user:read",
-      "description": "Read user profiles."
+      "description": "Read user profiles within your own tenant."
+    },
+    {
+      "name": "user:write",
+      "description": "Create users and manage their access -- suspending, reactivating, or offboarding them. Reach is decided per tenant rather than by holding this, so the same scope covers adding someone to your own tenant and an operator acting across the platform.",
+      "implies": [
+        "user:read"
+      ]
     },
     {
       "name": "var:read",

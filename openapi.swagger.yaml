@@ -56,9 +56,6 @@ tags:
 
         Message definitions live in companion files: jobs.proto (TERRAFORM execution)
         and workloads.proto (KUBERNETES telemetry and revision delivery).
-
-        This service is the unified successor to the former RunnerAPI (admiral.runner.v1)
-        and ClusterAPI (admiral.cluster.v1).
     - name: AgentRuntimeAPI
       description: |-
         AgentRuntimeAPI is the execution protocol first-party agents speak while
@@ -90,14 +87,6 @@ tags:
         relationships into a single entity that can be deployed across multiple
         environments. Applications are defined once and promoted explicitly between
         environments.
-    - name: AuthenticationAPI
-      description: |-
-        AuthenticationAPI handles the OAuth2/OIDC authentication flow for browser
-        sessions. Non-browser consumers (CLI, agents) authenticate with pre-created
-        access tokens in the Authorization header and do not use these endpoints.
-
-        All RPCs in this service are public (no authentication required). Login
-        initiates the flow; Callback completes it and establishes a session cookie.
     - name: CatalogAPI
       description: |-
         CatalogAPI manages the catalog: named, reusable references to a slice of
@@ -106,8 +95,7 @@ tags:
 
         A catalog item binds a Source to a specific ref (branch, tag, version) and
         optional root (subdirectory within the fetched tree) and path (working
-        directory within root for execution). Catalog items are the first layer that
-        actually consumes backend.Fetch for real work.
+        directory within root for execution).
 
         The API includes a resolve operation (ResolveCatalogItem) that fetches the
         item via its Source and returns the resolved revision and content digest
@@ -171,6 +159,18 @@ tags:
         external systems in real time. Input and output discovery is not a Source
         concern: for Git sources, inputs and outputs are a property of a specific
         (subpath, ref), not of the repo as a whole.
+    - name: TenantAPI
+      description: |-
+        TenantAPI exposes the caller's OWN tenant.
+
+        Deliberately narrow. A tenant is an account boundary, not a resource a caller
+        browses: there is no list, no create, and no delete here. Provisioning,
+        suspension, and deletion are administrative operations and are not part of
+        this API.
+
+        No request names a tenant. The caller's tenant comes from their token, so
+        there is no id to pass and none to get wrong -- and no shape in which a caller
+        could name someone else's.
     - name: UserAPI
       description: |-
         UserAPI provides operations for user profile retrieval and Personal Access
@@ -2380,6 +2380,51 @@ paths:
                   type: string
             tags:
                 - SourceAPI
+    /v1/tenant:
+        get:
+            summary: GetTenant returns the caller's own tenant.
+            description: 'Scope: `tenant:read`'
+            operationId: TenantAPI_GetTenant
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetTenantResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            tags:
+                - TenantAPI
+        patch:
+            summary: UpdateTenant updates the caller's own tenant's mutable settings.
+            description: |-
+                Only `display_name` and `labels` are mutable. `slug` is part of the
+                account's identity and `status` is set by lifecycle operations, neither of
+                which a tenant performs on itself.
+
+                Scope: `tenant:write`
+            operationId: TenantAPI_UpdateTenant
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdateTenantResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: |-
+                    UpdateTenantRequest carries only the mutable fields. The tenant is the
+                    caller's own, so there is no id here.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1UpdateTenantRequest'
+            tags:
+                - TenantAPI
     /v1/user/me:
         get:
             summary: |-
@@ -2977,10 +3022,10 @@ definitions:
                 description: Optional description of the proposed change.
             target:
                 $ref: '#/definitions/v1ComponentTarget'
-                description: |-
+                title: |-
                     Resolved placement for the component, by kind. Required for CREATE (the
                     component needs a placement); for UPDATE, absent means "no change to
-                    placement." Replaces the former per-environment target defaults.
+                    placement."
         description: SetEntryRequest creates or replaces a component entry within a change set.
         required:
             - change_type
@@ -3060,7 +3105,7 @@ definitions:
                         type: string
                         description: |-
                             Typed display identifier of the form `cs-<12-char-suffix>` (e.g.,
-                            `cs-3k7m9p2q4rvw`). Server-generated, indexed, and stable. Prefer this
+                            `cs-3k7m9p2q4rvw`). Server-generated and stable. Prefer this
                             over `id` for user-facing references; lookups accept either form.
                         readOnly: true
                     application_name:
@@ -3545,7 +3590,8 @@ definitions:
                     type: string
                 description: |-
                     The scopes granted to this token. For PATs, these are user-selected.
-                    For SATs, these are auto-assigned based on the resource type.
+                    For SATs, these are auto-assigned from the service account's profile and
+                    cannot be chosen by the caller.
             status:
                 $ref: '#/definitions/v1AccessTokenStatus'
                 description: Current lifecycle status of the token.
@@ -3555,8 +3601,9 @@ definitions:
             binding_id:
                 type: string
                 description: |-
-                    The ID of the resource this token is bound to (UUID): the user ID for
-                    PATs, the agent ID for SATs.
+                    The ID of the resource this token is bound to (UUID): the user ID for PATs,
+                    the service account ID for SATs. Tokens minted from this credential carry it
+                    as their `sub`.
             expires_at:
                 type: string
                 format: date-time
@@ -3586,7 +3633,7 @@ definitions:
               - **Personal Access Tokens (PATs)**: bound to a user, created by that
                 user via UserAPI. Scopes are user-selected at creation time. Intended
                 for CLI, CI, and human-driven automation.
-              - **Service Access Tokens (SATs)**: bound to an agent, created by
+              - **Service Access Tokens (SATs)**: bound to a service account, created by
                 administrators via AgentAPI. Scopes are auto-assigned from the agent's
                 kind. Intended for long-lived agents that authenticate as the agent
                 itself.
@@ -3597,8 +3644,8 @@ definitions:
             `token_prefix` is safe to log and display.
 
             Token CRUD is managed by each parent resource's API:
-              - PATs: UserAPI  (/api/v1/user/tokens)
-              - SATs: AgentAPI (/api/v1/agents/{id}/tokens)
+              - PATs: UserAPI  (/v1/user/tokens)
+              - SATs: AgentAPI (/v1/agents/{id}/tokens)
 
             IDP-issued JWTs (OAuth2/OIDC sessions) are not represented here; they are
             resolved by separate middleware.
@@ -3894,20 +3941,15 @@ definitions:
         enum:
             - BINDING_TYPE_UNSPECIFIED
             - BINDING_TYPE_USER
-            - BINDING_TYPE_AGENT
+            - BINDING_TYPE_SERVICE_ACCOUNT
         default: BINDING_TYPE_UNSPECIFIED
         description: |-
             BindingType identifies the kind of resource an access token is bound to.
 
              - BINDING_TYPE_UNSPECIFIED: Default value. Must not be used.
              - BINDING_TYPE_USER: Token is bound to a user (PATs).
-             - BINDING_TYPE_AGENT: Token is bound to an agent (SATs). The agent's kind (TERRAFORM or
-            KUBERNETES) is carried on the agent itself.
-    v1CallbackResponse:
-        type: object
-        description: |-
-            CallbackResponse is empty on success. The server sets a session cookie
-            and redirects the browser to the original redirect_url.
+             - BINDING_TYPE_SERVICE_ACCOUNT: Token is bound to a service account (SATs). An agent has a service account;
+            which agent, if any, is resolved from the service account record.
     v1CancelRunResponse:
         type: object
         properties:
@@ -4110,7 +4152,7 @@ definitions:
                 type: string
                 description: |-
                     Typed display identifier of the form `cs-<12-char-suffix>` (e.g.,
-                    `cs-3k7m9p2q4rvw`). Server-generated, indexed, and stable. Prefer this
+                    `cs-3k7m9p2q4rvw`). Server-generated and stable. Prefer this
                     over `id` for user-facing references; lookups accept either form.
                 readOnly: true
             application_name:
@@ -4246,7 +4288,7 @@ definitions:
                 description: |-
                     Resolved placement for the component: the agent it deploys on (plus a
                     namespace for WORKLOAD components). Copied onto the component at deploy
-                    time; the environment is no longer the source of truth for placement.
+                    time, and the component is the source of truth for placement at runtime.
         description: |-
             ChangeSetEntry is a per-component proposal within a change set.
 
@@ -5160,9 +5202,8 @@ definitions:
                     layer. JSON-encoded.
         description: |-
             ExecutionReport is the executor-agnostic outcome of one revision phase --
-            the single report shape every executor maps its native result onto. It
-            supersedes the terraform-shaped JobResult and the kubernetes RevisionResult:
-            the TERRAFORM and KUBERNETES agents both report via this message.
+            the single report shape every executor maps its native result onto. The
+            TERRAFORM and KUBERNETES agents both report via this message.
     v1ExecutionStatus:
         type: string
         enum:
@@ -5295,6 +5336,11 @@ definitions:
                 $ref: '#/definitions/v1Source'
                 description: The retrieved source.
         description: GetSourceResponse contains the source record.
+    v1GetTenantResponse:
+        type: object
+        properties:
+            tenant:
+                $ref: '#/definitions/v1Tenant'
     v1GetUserResponse:
         type: object
         properties:
@@ -5386,8 +5432,8 @@ definitions:
             HookInterpreter selects which language the agent uses to execute a hook's
             script body. Deliberately narrow today; the enum exists primarily as forward
             plumbing so non-shell interpreters (Python, Node, etc.) can be added without a
-            breaking change. Server-side SetDefaults() applies HOOK_INTERPRETER_BASH when a
-            hook is created with the field unset; UNSPECIFIED on the wire is rejected.
+            breaking change. A hook created with the field unset defaults to
+            HOOK_INTERPRETER_BASH; UNSPECIFIED on the wire is rejected.
 
              - HOOK_INTERPRETER_UNSPECIFIED: Default value. Must not be used.
              - HOOK_INTERPRETER_BASH: Script is executed via `bash -c`. Requires bash in the agent image.
@@ -5685,8 +5731,6 @@ definitions:
             KubernetesAgentStatus contains cluster-level telemetry for a KUBERNETES agent,
             as reported via ReportAgentStatus. Used in both the push payload and the read
             response (GetAgentStatusResponse).
-
-            (Successor to the former admiral.cluster.v1.ClusterStatus.)
     v1ListAgentJobsResponse:
         type: object
         properties:
@@ -5912,13 +5956,6 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListWorkloadsResponse contains a page of workloads.
-    v1LoginResponse:
-        type: object
-        properties:
-            auth_url:
-                type: string
-                description: The IdP authorization URL. The client should redirect the browser here.
-        description: LoginResponse contains the IdP authorization URL for the client to redirect to.
     v1ObjectReference:
         type: object
         properties:
@@ -6782,10 +6819,10 @@ definitions:
             - SOURCE_TYPE_HTTP
         default: SOURCE_TYPE_UNSPECIFIED
         description: |-
-            SourceType identifies the fetch protocol: how Admiral's Fetcher layer
-            retrieves content from the source URL. Types are carved by wire protocol,
-            not by content semantics. "This is a Terraform module" vs "this is a Helm
-            chart" is a Catalog/Component concern, not a Source concern.
+            SourceType identifies the fetch protocol: how Admiral retrieves content from
+            the source URL. Types are carved by wire protocol, not by content semantics.
+            "This is a Terraform module" vs "this is a Helm chart" is a Catalog/Component
+            concern, not a Source concern.
 
              - SOURCE_TYPE_UNSPECIFIED: Default value. Must not be used.
              - SOURCE_TYPE_GIT: Git repository over smart HTTP(S) or SSH. Any repo regardless of what
@@ -6859,6 +6896,57 @@ definitions:
              - SYNC_STATE_IGNORED: The operator paused reconciliation of this resource (admiral.io/reconcile =
             disabled), so the agent does not apply or prune it. Drift is not a failure
             here; the resource is intentionally under manual control.
+    v1Tenant:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier (UUID).
+                readOnly: true
+            slug:
+                type: string
+                description: URL-safe identifier, unique across Admiral. Fixed at creation.
+                readOnly: true
+            display_name:
+                type: string
+                description: Human-readable name.
+            status:
+                $ref: '#/definitions/v1TenantStatus'
+                description: Lifecycle state.
+                readOnly: true
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+                description: Free-form labels for the customer's own use.
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+            updated_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: |-
+            Tenant is the account as its own members see it: its identity, its lifecycle
+            state, and the settings they control. Operational detail about how the
+            account is run is not part of this view.
+    v1TenantStatus:
+        type: string
+        enum:
+            - TENANT_STATUS_UNSPECIFIED
+            - TENANT_STATUS_PENDING
+            - TENANT_STATUS_ACTIVE
+            - TENANT_STATUS_SUSPENDED
+        default: TENANT_STATUS_UNSPECIFIED
+        description: |-
+            TenantStatus is the account's lifecycle state. A caller sees it but cannot
+            set it: suspension and reactivation are imposed, not requested.
+
+             - TENANT_STATUS_UNSPECIFIED: Default value. Must not be used.
+             - TENANT_STATUS_PENDING: Provisioning has not finished; the tenant is not yet serving.
+             - TENANT_STATUS_ACTIVE: Normal operation.
+             - TENANT_STATUS_SUSPENDED: Access is withheld, typically for billing or abuse. Data is retained.
     v1TerraformAgentStatus:
         type: object
         properties:
@@ -6887,8 +6975,6 @@ definitions:
             TerraformAgentStatus contains capacity and telemetry metrics for a TERRAFORM
             agent, as reported via Heartbeat. Used in both the push payload
             (HeartbeatRequest) and the read response (GetAgentStatusResponse).
-
-            (Successor to the former admiral.runner.v1.RunnerStatus.)
     v1TerraformConfig:
         type: object
         properties:
@@ -6932,12 +7018,11 @@ definitions:
         description: |-
             TokenType identifies the category of an access token issued by Admiral's token system.
             IDP-issued JWTs (OAuth2/OIDC sessions) are NOT represented here. They are
-            resolved by separate middleware and can be referenced as "session" in
-            AuthRule.allowed_token_types when needed.
+            resolved by separate middleware.
 
              - TOKEN_TYPE_UNSPECIFIED: Default value. Must not be used.
              - TOKEN_TYPE_PAT: Personal Access Token, bound to a user.
-             - TOKEN_TYPE_SAT: Service Access Token, bound to an agent.
+             - TOKEN_TYPE_SAT: Service Access Token, bound to a service account.
     v1UpdateAgentResponse:
         type: object
         properties:
@@ -6996,6 +7081,30 @@ definitions:
                 $ref: '#/definitions/v1Source'
                 description: The updated source.
         description: UpdateSourceResponse contains the updated source.
+    v1UpdateTenantRequest:
+        type: object
+        properties:
+            display_name:
+                type: string
+                description: New display name. Omit to leave unchanged.
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+                description: Replaces all labels when present. Omit to leave unchanged.
+            update_mask:
+                type: string
+                description: |-
+                    Which fields to apply. Present for forward compatibility as the mutable
+                    surface grows.
+        description: |-
+            UpdateTenantRequest carries only the mutable fields. The tenant is the
+            caller's own, so there is no id here.
+    v1UpdateTenantResponse:
+        type: object
+        properties:
+            tenant:
+                $ref: '#/definitions/v1Tenant'
     v1User:
         type: object
         properties:
