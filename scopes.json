@@ -102,11 +102,15 @@
     },
     {
       "name": "token:read",
-      "description": "Read personal access tokens."
+      "description": "Read your own API keys."
+    },
+    {
+      "name": "token:resolve",
+      "description": "Resolve a presented API key into the credential it identifies."
     },
     {
       "name": "token:write",
-      "description": "Create, update, and revoke personal access tokens.",
+      "description": "Create, update, and revoke your own API keys.",
       "implies": [
         "token:read"
       ]

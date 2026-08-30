@@ -59,10 +59,10 @@ paths:
             summary: Create an agent
             description: |-
                 The request's `kind` selects the agent's execution plane (TERRAFORM or KUBERNETES)
-                 and determines the SAT's auto-assigned scopes. The kind is immutable.
+                 and determines the key's auto-assigned scopes. The kind is immutable.
 
-                 The response includes a `plain_text_token`: the raw SAT secret shown
-                 exactly once. Deploy this token to the agent binary for authentication.
+                 The response includes a `plain_text_key`: the raw API key secret shown
+                 exactly once. Deploy this key to the agent binary for authentication.
 
                  Scope: `agent:write`
             operationId: AgentAPI_CreateAgent
@@ -85,11 +85,11 @@ paths:
                 - Agent Tokens
             summary: Retrieve an agent token
             description: 'Scope: `agent:read`'
-            operationId: AgentAPI_GetAgentToken
+            operationId: AgentAPI_GetApiKey
             parameters:
                 - name: token_id
                   in: path
-                  description: The unique identifier of the token (UUID).
+                  description: The unique identifier of the key (UUID).
                   required: true
                   schema:
                     type: string
@@ -101,18 +101,18 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.GetAgentTokenResponse'
+                                $ref: '#/components/schemas/admiral.api.agent.v1.GetApiKeyResponse'
     /v1/agents/tokens/{token_id}/revoke:
         post:
             tags:
                 - Agent Tokens
             summary: Revoke an agent token
             description: 'Scope: `agent:write`'
-            operationId: AgentAPI_RevokeAgentToken
+            operationId: AgentAPI_RevokeApiKey
             parameters:
                 - name: token_id
                   in: path
-                  description: The unique identifier of the token to revoke (UUID).
+                  description: The unique identifier of the key to revoke (UUID).
                   required: true
                   schema:
                     type: string
@@ -128,14 +128,14 @@ paths:
                                     type: string
                                     title: token_id
                                     format: uuid
-                                    description: The unique identifier of the token to revoke (UUID).
-                            title: RevokeAgentTokenRequest
+                                    description: The unique identifier of the key to revoke (UUID).
+                            title: RevokeApiKeyRequest
                             required:
                                 - token_id
                             additionalProperties: false
                             description: |-
-                                RevokeAgentTokenRequest identifies an agent SAT to revoke. Token IDs are
-                                 globally unique; the server resolves the parent agent from the token ID.
+                                RevokeApiKeyRequest identifies an agent API key to revoke. Key IDs are
+                                 globally unique; the server resolves the parent agent from the key ID.
                 required: true
             responses:
                 "200":
@@ -143,7 +143,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.RevokeAgentTokenResponse'
+                                $ref: '#/components/schemas/admiral.api.agent.v1.RevokeApiKeyResponse'
     /v1/agents/{agent.id}:
         patch:
             tags:
@@ -230,8 +230,8 @@ paths:
                 - name: agent_id
                   in: path
                   description: |-
-                    The unique identifier of the agent to delete (UUID). All associated service
-                     access tokens will be revoked.
+                    The unique identifier of the agent to delete (UUID). All API keys bound to
+                     its service account are revoked.
                   required: true
                   schema:
                     type: string
@@ -440,11 +440,11 @@ paths:
                 - Agent Tokens
             summary: List agent tokens
             description: 'Scope: `agent:read`'
-            operationId: AgentAPI_ListAgentTokens
+            operationId: AgentAPI_ListApiKeys
             parameters:
                 - name: agent_id
                   in: path
-                  description: The agent to list tokens for (UUID).
+                  description: The agent to list keys for (UUID).
                   required: true
                   schema:
                     type: string
@@ -457,8 +457,8 @@ paths:
                      API documentation for the full operator and predicate reference).
 
                      Filterable fields:
-                       - `name`: filter by token name.
-                       - `status`: filter by token status (ACTIVE, REVOKED).
+                       - `name`: filter by key name.
+                       - `status`: filter by key status (ACTIVE, REVOKED).
                   schema:
                     type: string
                     title: filter
@@ -466,7 +466,7 @@ paths:
                 - name: page_size
                   in: query
                   description: |-
-                    Maximum number of tokens to return per page. Defaults to 50 when omitted or
+                    Maximum number of keys to return per page. Defaults to 50 when omitted or
                      0; must not exceed 100.
                   schema:
                     type: integer
@@ -486,22 +486,22 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ListAgentTokensResponse'
+                                $ref: '#/components/schemas/admiral.api.agent.v1.ListApiKeysResponse'
         post:
             tags:
                 - Agent Tokens
             summary: Create an agent token
             description: |-
-                Use this to create additional SATs for an existing agent (e.g., for
-                 zero-downtime token rotation). The initial SAT is created automatically by
+                Use this to create additional API keys for an existing agent (e.g., for
+                 zero-downtime key rotation). The initial key is created automatically by
                  CreateAgent.
 
                  Scope: `agent:write`
-            operationId: AgentAPI_CreateAgentToken
+            operationId: AgentAPI_CreateApiKey
             parameters:
                 - name: agent_id
                   in: path
-                  description: The agent to bind this token to (UUID).
+                  description: The agent to bind this key to (UUID).
                   required: true
                   schema:
                     type: string
@@ -517,7 +517,7 @@ paths:
                                     type: string
                                     title: agent_id
                                     format: uuid
-                                    description: The agent to bind this token to (UUID).
+                                    description: The agent to bind this key to (UUID).
                                 name:
                                     type: string
                                     title: name
@@ -525,20 +525,20 @@ paths:
                                     minLength: 1
                                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                                     description: |-
-                                        URL-safe, human-readable identifier for the token (e.g., "prod-agent-key").
-                                         Unique within the agent's tokens. Lowercase alphanumeric and hyphens only,
+                                        URL-safe, human-readable identifier for the key (e.g., "prod-agent-key").
+                                         Unique within the agent's keys. Lowercase alphanumeric and hyphens only,
                                          must start with a letter and end with an alphanumeric character (1-63 chars).
                                 expires_at:
                                     title: expires_at
-                                    description: Optional expiration time. If unset, the token does not expire.
+                                    description: Optional expiration time. If unset, the key does not expire.
                                     $ref: '#/components/schemas/google.protobuf.Timestamp'
-                            title: CreateAgentTokenRequest
+                            title: CreateApiKeyRequest
                             required:
                                 - agent_id
                                 - name
                             additionalProperties: false
                             description: |-
-                                CreateAgentTokenRequest contains the parameters for creating a new SAT bound to
+                                CreateApiKeyRequest contains the parameters for creating a new API key bound to
                                  an agent.
                 required: true
             responses:
@@ -547,7 +547,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.CreateAgentTokenResponse'
+                                $ref: '#/components/schemas/admiral.api.agent.v1.CreateApiKeyResponse'
     /v1/agents/{agent_id}/workloads:
         get:
             tags:
@@ -2662,7 +2662,7 @@ paths:
             tags:
                 - User
             summary: Retrieve current user profile
-            description: 'Scope: any authenticated token (no specific scope required).'
+            description: 'Scope: any authenticated key (no specific scope required).'
             operationId: UserAPI_GetMe
             responses:
                 "200":
@@ -2677,7 +2677,7 @@ paths:
                 - Personal Access Tokens
             summary: List personal access tokens
             description: 'Scope: `token:read`'
-            operationId: UserAPI_ListPersonalAccessTokens
+            operationId: UserAPI_ListApiKeys
             parameters:
                 - name: filter
                   in: query
@@ -2686,8 +2686,8 @@ paths:
                      API documentation for the full operator and predicate reference).
 
                      Filterable fields:
-                       - `name`: filter by token name.
-                       - `status`: filter by token status (ACTIVE, REVOKED).
+                       - `name`: filter by key name.
+                       - `status`: filter by key status (ACTIVE, REVOKED).
 
                      Example: `field['status'] = 'ACTIVE'`
                   schema:
@@ -2697,7 +2697,7 @@ paths:
                 - name: page_size
                   in: query
                   description: |-
-                    Maximum number of tokens to return per page. Defaults to 50 when omitted
+                    Maximum number of keys to return per page. Defaults to 50 when omitted
                      or 0; must not exceed 100.
                   schema:
                     type: integer
@@ -2717,18 +2717,18 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.user.v1.ListPersonalAccessTokensResponse'
+                                $ref: '#/components/schemas/admiral.api.user.v1.ListApiKeysResponse'
         post:
             tags:
                 - Personal Access Tokens
             summary: Create a personal access token
             description: 'Scope: `token:write`'
-            operationId: UserAPI_CreatePersonalAccessToken
+            operationId: UserAPI_CreateApiKey
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/admiral.api.user.v1.CreatePersonalAccessTokenRequest'
+                            $ref: '#/components/schemas/admiral.api.user.v1.CreateApiKeyRequest'
                 required: true
             responses:
                 "200":
@@ -2736,18 +2736,18 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.user.v1.CreatePersonalAccessTokenResponse'
+                                $ref: '#/components/schemas/admiral.api.user.v1.CreateApiKeyResponse'
     /v1/user/tokens/{token_id}:
         get:
             tags:
                 - Personal Access Tokens
             summary: Retrieve a personal access token
             description: 'Scope: `token:read`'
-            operationId: UserAPI_GetPersonalAccessToken
+            operationId: UserAPI_GetApiKey
             parameters:
                 - name: token_id
                   in: path
-                  description: The unique identifier of the token (UUID).
+                  description: The unique identifier of the key (UUID).
                   required: true
                   schema:
                     type: string
@@ -2759,17 +2759,17 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.user.v1.GetPersonalAccessTokenResponse'
+                                $ref: '#/components/schemas/admiral.api.user.v1.GetApiKeyResponse'
         patch:
             tags:
                 - Personal Access Tokens
             summary: Update a personal access token
             description: 'Scope: `token:write`'
-            operationId: UserAPI_UpdatePersonalAccessToken
+            operationId: UserAPI_UpdateApiKey
             parameters:
                 - name: token_id
                   in: path
-                  description: The unique identifier of the token to update (UUID).
+                  description: The unique identifier of the key to update (UUID).
                   required: true
                   schema:
                     type: string
@@ -2785,7 +2785,7 @@ paths:
                                     type: string
                                     title: token_id
                                     format: uuid
-                                    description: The unique identifier of the token to update (UUID).
+                                    description: The unique identifier of the key to update (UUID).
                                 name:
                                     type:
                                         - string
@@ -2795,7 +2795,7 @@ paths:
                                     minLength: 1
                                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                                     description: |-
-                                        New name for the token. Must follow the same naming rules as creation.
+                                        New name for the key. Must follow the same naming rules as creation.
                                          Omit to leave the name unchanged.
                                 scopes:
                                     type: array
@@ -2806,16 +2806,16 @@ paths:
                                     title: scopes
                                     maxItems: 255
                                     description: |-
-                                        New scopes for the token. Replaces all existing scopes.
+                                        New scopes for the key. Replaces all existing scopes.
                                          The server enforces that issued scopes are a subset of the caller's own
-                                         scopes. A token cannot grant more access than the user holds.
+                                         scopes. A key cannot grant more access than the user holds.
                                          Omit to leave scopes unchanged.
-                            title: UpdatePersonalAccessTokenRequest
+                            title: UpdateApiKeyRequest
                             required:
                                 - token_id
                             additionalProperties: false
                             description: |-
-                                UpdatePersonalAccessTokenRequest contains the fields to update on a PAT.
+                                UpdateApiKeyRequest contains the fields to update on an API key.
                                  Only provided fields are updated; omitted fields remain unchanged.
                 required: true
             responses:
@@ -2824,18 +2824,18 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.user.v1.UpdatePersonalAccessTokenResponse'
+                                $ref: '#/components/schemas/admiral.api.user.v1.UpdateApiKeyResponse'
     /v1/user/tokens/{token_id}/revoke:
         post:
             tags:
                 - Personal Access Tokens
             summary: Revoke a personal access token
             description: 'Scope: `token:write`'
-            operationId: UserAPI_RevokePersonalAccessToken
+            operationId: UserAPI_RevokeApiKey
             parameters:
                 - name: token_id
                   in: path
-                  description: The unique identifier of the token to revoke (UUID).
+                  description: The unique identifier of the key to revoke (UUID).
                   required: true
                   schema:
                     type: string
@@ -2851,12 +2851,12 @@ paths:
                                     type: string
                                     title: token_id
                                     format: uuid
-                                    description: The unique identifier of the token to revoke (UUID).
-                            title: RevokePersonalAccessTokenRequest
+                                    description: The unique identifier of the key to revoke (UUID).
+                            title: RevokeApiKeyRequest
                             required:
                                 - token_id
                             additionalProperties: false
-                            description: RevokePersonalAccessTokenRequest identifies a PAT to revoke.
+                            description: RevokeApiKeyRequest identifies an API key to revoke.
                 required: true
             responses:
                 "200":
@@ -2864,7 +2864,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.user.v1.RevokePersonalAccessTokenResponse'
+                                $ref: '#/components/schemas/admiral.api.user.v1.RevokeApiKeyResponse'
     /v1/users/{user_id}:
         get:
             tags:
@@ -3049,13 +3049,13 @@ components:
                     title: cluster_uid
                     description: |-
                         (KUBERNETES only) The Kubernetes kube-system namespace UID, bound at agent
-                         registration using a first-write-wins strategy. Used to detect when a token
+                         registration using a first-write-wins strategy. Used to detect when a key
                          is accidentally deployed to a different physical cluster. Empty for TERRAFORM
                          agents.
                     readOnly: true
                 created_by:
                     title: created_by
-                    description: The user or agent who created this agent (server-populated from token).
+                    description: The user or agent who created this agent (server-populated from key).
                     readOnly: true
                     $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
@@ -3259,7 +3259,7 @@ components:
                     title: kind
                     description: |-
                         The execution plane this agent serves (TERRAFORM or KUBERNETES). Selects the
-                         SAT's auto-assigned scopes and is immutable.
+                         key's auto-assigned scopes and is immutable.
                     $ref: '#/components/schemas/admiral.api.agent.v1.AgentKind'
                 name:
                     type: string
@@ -3309,24 +3309,24 @@ components:
                     title: agent
                     description: The created agent. Health status will be PENDING until it begins reporting.
                     $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
-                plain_text_token:
+                plain_text_key:
                     type: string
-                    title: plain_text_token
+                    title: plain_text_key
                     description: |-
-                        The raw Service Access Token secret (e.g., "adms_pL2mN5oQ8rS1..."). Shown
-                         exactly once and cannot be retrieved again. Deploy this token to the agent
-                         binary for authentication. For additional tokens, use CreateAgentToken.
+                        The raw API key secret (e.g., "adms_pL2mN5oQ8rS1..."). Shown exactly once
+                         and cannot be retrieved again. Deploy this key to the agent binary for
+                         authentication. For additional keys, use CreateApiKey.
             title: CreateAgentResponse
             additionalProperties: false
-            description: CreateAgentResponse contains the newly created agent and its initial SAT.
-        admiral.api.agent.v1.CreateAgentTokenRequest:
+            description: CreateAgentResponse contains the newly created agent and its initial API key.
+        admiral.api.agent.v1.CreateApiKeyRequest:
             type: object
             properties:
                 agent_id:
                     type: string
                     title: agent_id
                     format: uuid
-                    description: The agent to bind this token to (UUID).
+                    description: The agent to bind this key to (UUID).
                 name:
                     type: string
                     title: name
@@ -3334,35 +3334,35 @@ components:
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                     description: |-
-                        URL-safe, human-readable identifier for the token (e.g., "prod-agent-key").
-                         Unique within the agent's tokens. Lowercase alphanumeric and hyphens only,
+                        URL-safe, human-readable identifier for the key (e.g., "prod-agent-key").
+                         Unique within the agent's keys. Lowercase alphanumeric and hyphens only,
                          must start with a letter and end with an alphanumeric character (1-63 chars).
                 expires_at:
                     title: expires_at
-                    description: Optional expiration time. If unset, the token does not expire.
+                    description: Optional expiration time. If unset, the key does not expire.
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
-            title: CreateAgentTokenRequest
+            title: CreateApiKeyRequest
             required:
                 - agent_id
                 - name
             additionalProperties: false
             description: |-
-                CreateAgentTokenRequest contains the parameters for creating a new SAT bound to
+                CreateApiKeyRequest contains the parameters for creating a new API key bound to
                  an agent.
-        admiral.api.agent.v1.CreateAgentTokenResponse:
+        admiral.api.agent.v1.CreateApiKeyResponse:
             type: object
             properties:
-                access_token:
-                    title: access_token
-                    description: The created token metadata. Scopes are auto-assigned from the agent's kind.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-                plain_text_token:
+                api_key:
+                    title: api_key
+                    description: The created key metadata. Scopes are auto-assigned from the agent's kind.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+                plain_text_key:
                     type: string
-                    title: plain_text_token
-                    description: The raw token secret. Shown exactly once and cannot be retrieved again.
-            title: CreateAgentTokenResponse
+                    title: plain_text_key
+                    description: The raw secret. Shown exactly once and cannot be retrieved again.
+            title: CreateApiKeyResponse
             additionalProperties: false
-            description: CreateAgentTokenResponse contains the newly created SAT.
+            description: CreateApiKeyResponse contains the newly created API key.
         admiral.api.agent.v1.DeleteAgentRequest:
             type: object
             properties:
@@ -3371,8 +3371,8 @@ components:
                     title: agent_id
                     format: uuid
                     description: |-
-                        The unique identifier of the agent to delete (UUID). All associated service
-                         access tokens will be revoked.
+                        The unique identifier of the agent to delete (UUID). All API keys bound to
+                         its service account are revoked.
             title: DeleteAgentRequest
             required:
                 - agent_id
@@ -3469,31 +3469,31 @@ components:
                 GetAgentStatusResponse contains the server-derived health status and the latest
                  kind-specific status snapshot. If the agent has not reported yet, health_status
                  will be PENDING and status will be absent.
-        admiral.api.agent.v1.GetAgentTokenRequest:
+        admiral.api.agent.v1.GetApiKeyRequest:
             type: object
             properties:
                 token_id:
                     type: string
                     title: token_id
                     format: uuid
-                    description: The unique identifier of the token (UUID).
-            title: GetAgentTokenRequest
+                    description: The unique identifier of the key (UUID).
+            title: GetApiKeyRequest
             required:
                 - token_id
             additionalProperties: false
             description: |-
-                GetAgentTokenRequest identifies an agent SAT to retrieve. Token IDs are globally
-                 unique; the server resolves the parent agent from the token ID.
-        admiral.api.agent.v1.GetAgentTokenResponse:
+                GetApiKeyRequest identifies an agent API key to retrieve. Key IDs are globally
+                 unique; the server resolves the parent agent from the key ID.
+        admiral.api.agent.v1.GetApiKeyResponse:
             type: object
             properties:
-                access_token:
-                    title: access_token
-                    description: The token metadata. The token secret is never included.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-            title: GetAgentTokenResponse
+                api_key:
+                    title: api_key
+                    description: The key metadata. The key secret is never included.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+            title: GetApiKeyResponse
             additionalProperties: false
-            description: GetAgentTokenResponse contains the requested agent SAT metadata.
+            description: GetApiKeyResponse contains the requested agent API key metadata.
         admiral.api.agent.v1.GetJobBundleRequest:
             type: object
             properties:
@@ -4069,59 +4069,6 @@ components:
             title: ListAgentJobsResponse
             additionalProperties: false
             description: ListAgentJobsResponse contains a page of jobs.
-        admiral.api.agent.v1.ListAgentTokensRequest:
-            type: object
-            properties:
-                agent_id:
-                    type: string
-                    title: agent_id
-                    format: uuid
-                    description: The agent to list tokens for (UUID).
-                filter:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                         API documentation for the full operator and predicate reference).
-
-                         Filterable fields:
-                           - `name`: filter by token name.
-                           - `status`: filter by token status (ACTIVE, REVOKED).
-                page_size:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                    description: |-
-                        Maximum number of tokens to return per page. Defaults to 50 when omitted or
-                         0; must not exceed 100.
-                page_token:
-                    type: string
-                    title: page_token
-                    description: Opaque pagination token from a previous response.
-            title: ListAgentTokensRequest
-            required:
-                - agent_id
-            additionalProperties: false
-            description: ListAgentTokensRequest contains pagination and filter parameters.
-        admiral.api.agent.v1.ListAgentTokensResponse:
-            type: object
-            properties:
-                access_tokens:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-                    title: access_tokens
-                    description: The list of tokens. Token secrets are never included.
-                next_page_token:
-                    type: string
-                    title: next_page_token
-                    description: Pagination token for the next page. Empty when there are no more results.
-            title: ListAgentTokensResponse
-            additionalProperties: false
-            description: ListAgentTokensResponse contains a page of agent SAT metadata.
         admiral.api.agent.v1.ListAgentsRequest:
             type: object
             properties:
@@ -4172,6 +4119,59 @@ components:
             title: ListAgentsResponse
             additionalProperties: false
             description: ListAgentsResponse contains a page of agents.
+        admiral.api.agent.v1.ListApiKeysRequest:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    title: agent_id
+                    format: uuid
+                    description: The agent to list keys for (UUID).
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                         API documentation for the full operator and predicate reference).
+
+                         Filterable fields:
+                           - `name`: filter by key name.
+                           - `status`: filter by key status (ACTIVE, REVOKED).
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: |-
+                        Maximum number of keys to return per page. Defaults to 50 when omitted or
+                         0; must not exceed 100.
+                page_token:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            title: ListApiKeysRequest
+            required:
+                - agent_id
+            additionalProperties: false
+            description: ListApiKeysRequest contains pagination and filter parameters.
+        admiral.api.agent.v1.ListApiKeysResponse:
+            type: object
+            properties:
+                api_keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+                    title: api_keys
+                    description: The list of keys. Secrets are never included.
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                    description: Pagination token for the next page. Empty when there are no more results.
+            title: ListApiKeysResponse
+            additionalProperties: false
+            description: ListApiKeysResponse contains a page of agent API key metadata.
         admiral.api.agent.v1.ListWorkloadEventsRequest:
             type: object
             properties:
@@ -4591,31 +4591,31 @@ components:
             description: |-
                 RevisionBundle contains pre-rendered Kubernetes manifests for a workload
                  revision, ready for server-side apply by a KUBERNETES agent.
-        admiral.api.agent.v1.RevokeAgentTokenRequest:
+        admiral.api.agent.v1.RevokeApiKeyRequest:
             type: object
             properties:
                 token_id:
                     type: string
                     title: token_id
                     format: uuid
-                    description: The unique identifier of the token to revoke (UUID).
-            title: RevokeAgentTokenRequest
+                    description: The unique identifier of the key to revoke (UUID).
+            title: RevokeApiKeyRequest
             required:
                 - token_id
             additionalProperties: false
             description: |-
-                RevokeAgentTokenRequest identifies an agent SAT to revoke. Token IDs are
-                 globally unique; the server resolves the parent agent from the token ID.
-        admiral.api.agent.v1.RevokeAgentTokenResponse:
+                RevokeApiKeyRequest identifies an agent API key to revoke. Key IDs are
+                 globally unique; the server resolves the parent agent from the key ID.
+        admiral.api.agent.v1.RevokeApiKeyResponse:
             type: object
             properties:
-                access_token:
-                    title: access_token
-                    description: The token metadata with updated status.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-            title: RevokeAgentTokenResponse
+                api_key:
+                    title: api_key
+                    description: The key metadata with updated status.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+            title: RevokeApiKeyResponse
             additionalProperties: false
-            description: RevokeAgentTokenResponse contains the revoked agent SAT metadata.
+            description: RevokeApiKeyResponse contains the revoked agent API key metadata.
         admiral.api.agent.v1.SyncState:
             type: string
             title: SyncState
@@ -9417,7 +9417,7 @@ components:
                     $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
             title: UpdateTenantResponse
             additionalProperties: false
-        admiral.api.user.v1.CreatePersonalAccessTokenRequest:
+        admiral.api.user.v1.CreateApiKeyRequest:
             type: object
             properties:
                 name:
@@ -9427,7 +9427,7 @@ components:
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                     description: |-
-                        URL-safe, human-readable identifier for the token (e.g., "postman-testing").
+                        URL-safe, human-readable identifier for the key (e.g., "postman-testing").
                          Unique per user within the tenant. Lowercase alphanumeric and hyphens only,
                          must start with a letter and end with an alphanumeric character (1-63 chars).
                 scopes:
@@ -9439,36 +9439,59 @@ components:
                     title: scopes
                     maxItems: 255
                     description: |-
-                        The scopes to grant this token. Must be valid scopes allowed for PATs.
+                        The scopes to grant this key. Must be scopes assignable to a user-bound key.
                          The server enforces that issued scopes are a subset of the caller's own
-                         scopes. A token cannot grant more access than the user holds.
+                         scopes. A key cannot grant more access than the user holds.
                 expires_at:
                     title: expires_at
                     description: |-
-                        Optional expiration time. If unset, the token does not expire.
+                        Optional expiration time. If unset, the key does not expire.
                          Tenant policies may enforce a maximum lifetime.
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
-            title: CreatePersonalAccessTokenRequest
+            title: CreateApiKeyRequest
             required:
                 - name
             additionalProperties: false
-            description: CreatePersonalAccessTokenRequest contains the parameters for creating a new PAT.
-        admiral.api.user.v1.CreatePersonalAccessTokenResponse:
+            description: CreateApiKeyRequest contains the parameters for creating a new API key.
+        admiral.api.user.v1.CreateApiKeyResponse:
             type: object
             properties:
-                access_token:
-                    title: access_token
-                    description: The created token metadata.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-                plain_text_token:
+                api_key:
+                    title: api_key
+                    description: The created key metadata.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+                plain_text_key:
                     type: string
-                    title: plain_text_token
+                    title: plain_text_key
                     description: |-
-                        The raw token secret (e.g., "admp_7kH3mNqR2xFb..."). This value is
+                        The raw secret (e.g., "admp_7kH3mNqR2xFb..."). This value is
                          shown exactly once and cannot be retrieved again. Store it securely.
-            title: CreatePersonalAccessTokenResponse
+            title: CreateApiKeyResponse
             additionalProperties: false
-            description: CreatePersonalAccessTokenResponse contains the newly created PAT.
+            description: CreateApiKeyResponse contains the newly created API key.
+        admiral.api.user.v1.GetApiKeyRequest:
+            type: object
+            properties:
+                token_id:
+                    type: string
+                    title: token_id
+                    format: uuid
+                    description: The unique identifier of the key (UUID).
+            title: GetApiKeyRequest
+            required:
+                - token_id
+            additionalProperties: false
+            description: GetApiKeyRequest identifies an API key to retrieve.
+        admiral.api.user.v1.GetApiKeyResponse:
+            type: object
+            properties:
+                api_key:
+                    title: api_key
+                    description: The key metadata. The key secret is never included.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+            title: GetApiKeyResponse
+            additionalProperties: false
+            description: GetApiKeyResponse contains the requested API key metadata.
         admiral.api.user.v1.GetMeRequest:
             type: object
             title: GetMeRequest
@@ -9486,29 +9509,6 @@ components:
             title: GetMeResponse
             additionalProperties: false
             description: GetMeResponse contains the authenticated user's profile.
-        admiral.api.user.v1.GetPersonalAccessTokenRequest:
-            type: object
-            properties:
-                token_id:
-                    type: string
-                    title: token_id
-                    format: uuid
-                    description: The unique identifier of the token (UUID).
-            title: GetPersonalAccessTokenRequest
-            required:
-                - token_id
-            additionalProperties: false
-            description: GetPersonalAccessTokenRequest identifies a PAT to retrieve.
-        admiral.api.user.v1.GetPersonalAccessTokenResponse:
-            type: object
-            properties:
-                access_token:
-                    title: access_token
-                    description: The token metadata. The token secret is never included.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-            title: GetPersonalAccessTokenResponse
-            additionalProperties: false
-            description: GetPersonalAccessTokenResponse contains the requested PAT metadata.
         admiral.api.user.v1.GetUserRequest:
             type: object
             properties:
@@ -9532,7 +9532,7 @@ components:
             title: GetUserResponse
             additionalProperties: false
             description: GetUserResponse contains the requested user's profile.
-        admiral.api.user.v1.ListPersonalAccessTokensRequest:
+        admiral.api.user.v1.ListApiKeysRequest:
             type: object
             properties:
                 filter:
@@ -9544,8 +9544,8 @@ components:
                          API documentation for the full operator and predicate reference).
 
                          Filterable fields:
-                           - `name`: filter by token name.
-                           - `status`: filter by token status (ACTIVE, REVOKED).
+                           - `name`: filter by key name.
+                           - `status`: filter by key status (ACTIVE, REVOKED).
 
                          Example: `field['status'] = 'ACTIVE'`
                 page_size:
@@ -9555,62 +9555,62 @@ components:
                     minimum: 0
                     format: int32
                     description: |-
-                        Maximum number of tokens to return per page. Defaults to 50 when omitted
+                        Maximum number of keys to return per page. Defaults to 50 when omitted
                          or 0; must not exceed 100.
                 page_token:
                     type: string
                     title: page_token
                     description: Opaque pagination token from a previous response.
-            title: ListPersonalAccessTokensRequest
+            title: ListApiKeysRequest
             additionalProperties: false
-            description: ListPersonalAccessTokensRequest contains pagination and filter parameters.
-        admiral.api.user.v1.ListPersonalAccessTokensResponse:
+            description: ListApiKeysRequest contains pagination and filter parameters.
+        admiral.api.user.v1.ListApiKeysResponse:
             type: object
             properties:
-                access_tokens:
+                api_keys:
                     type: array
                     items:
-                        $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-                    title: access_tokens
-                    description: The list of tokens. Token secrets are never included.
+                        $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+                    title: api_keys
+                    description: The list of keys. Secrets are never included.
                 next_page_token:
                     type: string
                     title: next_page_token
                     description: Pagination token for the next page. Empty when there are no more results.
-            title: ListPersonalAccessTokensResponse
+            title: ListApiKeysResponse
             additionalProperties: false
-            description: ListPersonalAccessTokensResponse contains a page of PAT metadata.
-        admiral.api.user.v1.RevokePersonalAccessTokenRequest:
+            description: ListApiKeysResponse contains a page of API key metadata.
+        admiral.api.user.v1.RevokeApiKeyRequest:
             type: object
             properties:
                 token_id:
                     type: string
                     title: token_id
                     format: uuid
-                    description: The unique identifier of the token to revoke (UUID).
-            title: RevokePersonalAccessTokenRequest
+                    description: The unique identifier of the key to revoke (UUID).
+            title: RevokeApiKeyRequest
             required:
                 - token_id
             additionalProperties: false
-            description: RevokePersonalAccessTokenRequest identifies a PAT to revoke.
-        admiral.api.user.v1.RevokePersonalAccessTokenResponse:
+            description: RevokeApiKeyRequest identifies an API key to revoke.
+        admiral.api.user.v1.RevokeApiKeyResponse:
             type: object
             properties:
-                access_token:
-                    title: access_token
-                    description: The token metadata with updated status.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-            title: RevokePersonalAccessTokenResponse
+                api_key:
+                    title: api_key
+                    description: The key metadata with updated status.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+            title: RevokeApiKeyResponse
             additionalProperties: false
-            description: RevokePersonalAccessTokenResponse contains the revoked PAT metadata.
-        admiral.api.user.v1.UpdatePersonalAccessTokenRequest:
+            description: RevokeApiKeyResponse contains the revoked API key metadata.
+        admiral.api.user.v1.UpdateApiKeyRequest:
             type: object
             properties:
                 token_id:
                     type: string
                     title: token_id
                     format: uuid
-                    description: The unique identifier of the token to update (UUID).
+                    description: The unique identifier of the key to update (UUID).
                 name:
                     type:
                         - string
@@ -9620,7 +9620,7 @@ components:
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                     description: |-
-                        New name for the token. Must follow the same naming rules as creation.
+                        New name for the key. Must follow the same naming rules as creation.
                          Omit to leave the name unchanged.
                 scopes:
                     type: array
@@ -9631,27 +9631,27 @@ components:
                     title: scopes
                     maxItems: 255
                     description: |-
-                        New scopes for the token. Replaces all existing scopes.
+                        New scopes for the key. Replaces all existing scopes.
                          The server enforces that issued scopes are a subset of the caller's own
-                         scopes. A token cannot grant more access than the user holds.
+                         scopes. A key cannot grant more access than the user holds.
                          Omit to leave scopes unchanged.
-            title: UpdatePersonalAccessTokenRequest
+            title: UpdateApiKeyRequest
             required:
                 - token_id
             additionalProperties: false
             description: |-
-                UpdatePersonalAccessTokenRequest contains the fields to update on a PAT.
+                UpdateApiKeyRequest contains the fields to update on an API key.
                  Only provided fields are updated; omitted fields remain unchanged.
-        admiral.api.user.v1.UpdatePersonalAccessTokenResponse:
+        admiral.api.user.v1.UpdateApiKeyResponse:
             type: object
             properties:
-                access_token:
-                    title: access_token
-                    description: The updated token metadata.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessToken'
-            title: UpdatePersonalAccessTokenResponse
+                api_key:
+                    title: api_key
+                    description: The updated key metadata.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
+            title: UpdateApiKeyResponse
             additionalProperties: false
-            description: UpdatePersonalAccessTokenResponse contains the updated PAT metadata.
+            description: UpdateApiKeyResponse contains the updated API key metadata.
         admiral.api.user.v1.User:
             type: object
             properties:
@@ -9841,136 +9841,6 @@ components:
                 VariableType indicates how the variable value should be interpreted by the
                  rendering engine and displayed in the UI. The value is always stored as a
                  string regardless of type.
-        admiral.common.v1.AccessToken:
-            type: object
-            properties:
-                id:
-                    type: string
-                    title: id
-                    format: uuid
-                    description: Unique identifier for the token (UUID).
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier for the token (e.g., "ci-deploy-key").
-                         Unique within the parent resource. Lowercase alphanumeric and hyphens only,
-                         must start with a letter and end with an alphanumeric character (1-63 chars).
-                token_prefix:
-                    type: string
-                    title: token_prefix
-                    description: |-
-                        Non-secret prefix of the token value. The five-character brand
-                         (`admp_` for PATs, `adms_` for SATs) followed by a short sample of
-                         characters from the secret body (e.g., "adms_pL2m"). URL-safe and safe
-                         to log and display. Use for incident response and audit trails without
-                         exposing the secret.
-                token_type:
-                    title: token_type
-                    description: The category of this token.
-                    $ref: '#/components/schemas/admiral.common.v1.TokenType'
-                scopes:
-                    type: array
-                    items:
-                        type: string
-                    title: scopes
-                    description: |-
-                        The scopes granted to this token. For PATs, these are user-selected.
-                         For SATs, these are auto-assigned from the service account's profile and
-                         cannot be chosen by the caller.
-                status:
-                    title: status
-                    description: Current lifecycle status of the token.
-                    $ref: '#/components/schemas/admiral.common.v1.AccessTokenStatus'
-                binding_type:
-                    title: binding_type
-                    description: The kind of resource this token is bound to.
-                    $ref: '#/components/schemas/admiral.common.v1.BindingType'
-                binding_id:
-                    type: string
-                    title: binding_id
-                    description: |-
-                        The ID of the resource this token is bound to (UUID): the user ID for PATs,
-                         the service account ID for SATs. Tokens minted from this credential carry it
-                         as their `sub`.
-                expires_at:
-                    title: expires_at
-                    description: When the token expires. If unset, the token does not expire.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
-                last_used_at:
-                    title: last_used_at
-                    description: When the token was last used to authenticate an API request.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
-                revoked_at:
-                    title: revoked_at
-                    description: When the token was revoked. Only set when status is REVOKED.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
-                created_by:
-                    title: created_by
-                    description: |-
-                        The user who created this token. For PATs, this is the token owner.
-                         For SATs, this is the administrator who issued the token.
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                created_at:
-                    title: created_at
-                    description: When the token was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
-            title: AccessToken
-            additionalProperties: false
-            description: |-
-                AccessToken contains metadata for an opaque access token issued by Admiral.
-
-                 Admiral issues two kinds of tokens, distinguished by `token_type`:
-
-                   - **Personal Access Tokens (PATs)**: bound to a user, created by that
-                     user via UserAPI. Scopes are user-selected at creation time. Intended
-                     for CLI, CI, and human-driven automation.
-                   - **Service Access Tokens (SATs)**: bound to a service account, created by
-                     administrators via AgentAPI. Scopes are auto-assigned from the agent's
-                     kind. Intended for long-lived agents that authenticate as the agent
-                     itself.
-
-                 The raw token secret is returned exactly once, in the `plain_text_token`
-                 field of the Create response. This message carries only metadata; the
-                 original secret is never retrievable after creation. The non-secret
-                 `token_prefix` is safe to log and display.
-
-                 Token CRUD is managed by each parent resource's API:
-                   - PATs: UserAPI  (/v1/user/tokens)
-                   - SATs: AgentAPI (/v1/agents/{id}/tokens)
-
-                 IDP-issued JWTs (OAuth2/OIDC sessions) are not represented here; they are
-                 resolved by separate middleware.
-            example:
-                id: "9f8e7d6c-5b4a-3210-fedc-ba0987654321"
-                name: "ci-deploy-key"
-                token_prefix: "admp_pL2m"
-                token_type: "TOKEN_TYPE_PAT"
-                scopes:
-                    - "run:write"
-                    - "app:read"
-                    - "env:read"
-                status: "ACCESS_TOKEN_STATUS_ACTIVE"
-                binding_type: "BINDING_TYPE_USER"
-                binding_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
-                created_by:
-                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
-                    display_name: "Alex Chen"
-                    email: "alex.chen@example.com"
-                expires_at: "2026-06-01T00:00:00Z"
-                last_used_at: "2025-11-20T14:30:00Z"
-                created_at: "2025-09-01T10:00:00Z"
-        admiral.common.v1.AccessTokenStatus:
-            type: string
-            title: AccessTokenStatus
-            enum:
-                - ACCESS_TOKEN_STATUS_UNSPECIFIED
-                - ACCESS_TOKEN_STATUS_ACTIVE
-                - ACCESS_TOKEN_STATUS_REVOKED
-            description: AccessTokenStatus represents the lifecycle state of an access token.
         admiral.common.v1.ActorRef:
             type: object
             properties:
@@ -9992,6 +9862,143 @@ components:
                 ActorRef is a lightweight reference to the user or agent that performed an action.
                  Server-populated on all resource responses. Clients should never send this;
                  use the plain string `created_by` UUID on request messages instead.
+        admiral.common.v1.ApiKey:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    format: uuid
+                    description: Unique identifier for the key (UUID).
+                tenant_id:
+                    type: string
+                    title: tenant_id
+                    format: uuid
+                    description: |-
+                        The tenant this key belongs to (UUID), and the `tid` of every access token
+                         minted from it.
+
+                         Load-bearing on the resolve path and an echo everywhere else: resolving a
+                         raw key is the one lookup that has no tenant in hand and must return one,
+                         where every lifecycle call already knows the tenant from the caller. The
+                         key belongs to one tenant for its whole life, so the two can never disagree.
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier for the key (e.g., "ci-deploy-key").
+                         Unique within the parent resource. Lowercase alphanumeric and hyphens only,
+                         must start with a letter and end with an alphanumeric character (1-63 chars).
+                key_prefix:
+                    type: string
+                    title: key_prefix
+                    description: |-
+                        Non-secret prefix of the key. The five-character brand (`admp_` when bound
+                         to a user, `adms_` when bound to a service account) followed by a short
+                         sample of characters from the secret body (e.g., "adms_pL2m"). URL-safe and
+                         safe to log and display. Use for incident response and audit trails without
+                         exposing the secret.
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    title: scopes
+                    description: |-
+                        The scopes granted to this key, and the ceiling on any access token minted
+                         from it. A mint request may narrow them and may never widen them.
+                status:
+                    title: status
+                    description: Current lifecycle status of the key.
+                    $ref: '#/components/schemas/admiral.common.v1.ApiKeyStatus'
+                binding_type:
+                    title: binding_type
+                    description: The kind of resource this key is bound to.
+                    $ref: '#/components/schemas/admiral.common.v1.BindingType'
+                binding_id:
+                    type: string
+                    title: binding_id
+                    description: |-
+                        The ID of the resource this key is bound to (UUID): a user id or a service
+                         account id, per `binding_type`. Access tokens minted from this key carry it
+                         as their `sub`.
+                expires_at:
+                    title: expires_at
+                    description: When the key expires. If unset, the key does not expire.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                last_used_at:
+                    title: last_used_at
+                    description: |-
+                        When this key was last exchanged for an access token.
+
+                         NOT the time of the last API request made with it: minted tokens are cached
+                         and reused for their lifetime, so a key in continuous use is exchanged only
+                         when the token minted from it runs out. Reads as "still in use", at a
+                         granularity of the access-token lifetime, which is the question this field
+                         exists to answer before revoking one.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                revoked_at:
+                    title: revoked_at
+                    description: When the key was revoked. Only set when status is REVOKED.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                created_by:
+                    title: created_by
+                    description: |-
+                        The user who created this key. When bound to a user, this is the key's
+                         owner; when bound to a service account, the administrator who issued it.
+                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                created_at:
+                    title: created_at
+                    description: When the key was created.
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+            title: ApiKey
+            additionalProperties: false
+            description: |-
+                ApiKey contains metadata for an opaque, long-lived credential issued by
+                 Admiral and presented by a caller to authenticate.
+
+                 A key is bound to exactly one subject for its whole life -- see
+                 `binding_type` and `binding_id` -- and to exactly one tenant. Presenting one
+                 is exchanged for a short-lived access token whose `sub` is the binding and
+                 whose scopes are bounded by this key's.
+
+                 The raw secret is returned exactly once, in the `plain_text_key` field of the
+                 Create response. This message carries only metadata; the secret is never
+                 retrievable afterwards. The non-secret `key_prefix` is safe to log and
+                 display.
+
+                 Key lifecycle is managed by each parent resource's API:
+                   - user-bound:            UserAPI  (/v1/user/tokens)
+                   - service-account-bound: AgentAPI (/v1/agents/{id}/tokens)
+            example:
+                id: "9f8e7d6c-5b4a-3210-fedc-ba0987654321"
+                name: "ci-deploy-key"
+                key_prefix: "admp_pL2m"
+                scopes:
+                    - "run:write"
+                    - "app:read"
+                    - "env:read"
+                status: "API_KEY_STATUS_ACTIVE"
+                binding_type: "BINDING_TYPE_USER"
+                binding_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                tenant_id: "2047b6c4-434b-424d-8987-5532eaca2f0e"
+                created_by:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                expires_at: "2026-06-01T00:00:00Z"
+                last_used_at: "2025-11-20T14:30:00Z"
+                created_at: "2025-09-01T10:00:00Z"
+        admiral.common.v1.ApiKeyStatus:
+            type: string
+            title: ApiKeyStatus
+            enum:
+                - API_KEY_STATUS_UNSPECIFIED
+                - API_KEY_STATUS_ACTIVE
+                - API_KEY_STATUS_REVOKED
+            description: ApiKeyStatus represents the lifecycle state of an API key.
         admiral.common.v1.BindingType:
             type: string
             title: BindingType
@@ -9999,18 +10006,14 @@ components:
                 - BINDING_TYPE_UNSPECIFIED
                 - BINDING_TYPE_USER
                 - BINDING_TYPE_SERVICE_ACCOUNT
-            description: BindingType identifies the kind of resource an access token is bound to.
-        admiral.common.v1.TokenType:
-            type: string
-            title: TokenType
-            enum:
-                - TOKEN_TYPE_UNSPECIFIED
-                - TOKEN_TYPE_PAT
-                - TOKEN_TYPE_SAT
             description: |-
-                TokenType identifies the category of an access token issued by Admiral's token system.
-                 IDP-issued JWTs (OAuth2/OIDC sessions) are NOT represented here. They are
-                 resolved by separate middleware.
+                BindingType identifies the kind of resource an API key is bound to.
+
+                 This is the ONLY discriminator the contract carries. What a key is bound to
+                 decides the subject it authenticates as, and every other distinction that used
+                 to be modelled separately -- which surface created it, which brand its prefix
+                 carries, whether its scopes were chosen or assigned -- follows from the
+                 binding rather than varying independently of it.
         google.protobuf.Duration:
             type: string
             format: duration

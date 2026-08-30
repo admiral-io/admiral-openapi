@@ -26,18 +26,24 @@ tags:
     - name: AgentAPI
       description: |-
         AgentAPI is the management surface for execution agents: their lifecycle,
-        their Service Access Tokens, and read-only visibility into the work they
-        have done. It is the human-facing half of the agent contract, called with a
-        PAT from the CLI, Terraform provider, or web app.
+        their API keys, and read-only visibility into the work they have done. It is
+        the human-facing half of the agent contract, called with a user's own API key
+        from the CLI, Terraform provider, or web app.
+
+        An agent's key is bound to the agent's service account
+        (BINDING_TYPE_SERVICE_ACCOUNT), not to the agent record: an agent HAS a
+        service account rather than being one, so its credential rotates without
+        touching the agent.
 
         The execution protocol the agents themselves speak lives in AgentRuntimeAPI
-        (runtime.proto). That half is SAT-only, excluded from the public OpenAPI
+        (runtime.proto). That half is reachable only with a service-account-bound
+        key, excluded from the public OpenAPI
         surface, and changes with the agent binaries. Keeping the two apart means the
         documented management contract is not versioned against the churn of job
         bundles, hooks, and engines.
 
         Both agent kinds are managed here and share one identity, lifecycle, and
-        token model:
+        key model:
 
           - TERRAFORM agents are the execution plane for infrastructure operations
             (plan, apply, destroy) run by a terraform-semantic engine (Terraform or
@@ -47,12 +53,12 @@ tags:
             reporting workload telemetry and applying rendered manifest revisions.
 
         Administrators create an agent via CreateAgent (passing the kind), which
-        returns a Service Access Token (SAT) for deploying the agent binary. Once the
+        returns an API key for deploying the agent binary. Once the
         agent boots and begins reporting through AgentRuntimeAPI, the server
         transitions its health from PENDING to HEALTHY.
 
         Management routes follow /v1/agents/... (plural, with IDs); the runtime
-        protocol uses /v1/agent/... (singular, no ID; derived from the SAT binding).
+        protocol uses /v1/agent/... (singular, no ID; derived from the key's binding).
 
         Message definitions live in companion files: jobs.proto (TERRAFORM execution)
         and workloads.proto (KUBERNETES telemetry and revision delivery).
@@ -173,12 +179,14 @@ tags:
         could name someone else's.
     - name: UserAPI
       description: |-
-        UserAPI provides operations for user profile retrieval and Personal Access
-        Token (PAT) management.
+        UserAPI provides operations for user profile retrieval and management of the
+        caller's own API keys.
 
-        PATs allow users to authenticate with the Admiral API from scripts, CI
-        pipelines, and other programmatic contexts. Each PAT has user-selected
-        scopes and an optional expiration.
+        An API key here is bound to the calling user (BINDING_TYPE_USER) and lets them
+        authenticate from scripts, CI pipelines, and other programmatic contexts. Its
+        scopes are selected at creation and it may carry an expiration. Personal
+        access token is the same thing said in user-facing words, and the REST routes
+        and generated documentation keep that name; the contract has one noun.
 consumes:
     - application/json
 produces:
@@ -237,14 +245,14 @@ paths:
                 Admin CRUD
                 ---------------------------------------------------------------------------
                 CreateAgent creates a new agent record within the caller's tenant and
-                generates an initial Service Access Token (SAT). The agent starts in PENDING
+                generates an initial API key. The agent starts in PENDING
                 health status until it begins reporting.
             description: |-
                 The request's `kind` selects the agent's execution plane (TERRAFORM or KUBERNETES)
-                and determines the SAT's auto-assigned scopes. The kind is immutable.
+                and determines the key's auto-assigned scopes. The kind is immutable.
 
-                The response includes a `plain_text_token`: the raw SAT secret shown
-                exactly once. Deploy this token to the agent binary for authentication.
+                The response includes a `plain_text_key`: the raw API key secret shown
+                exactly once. Deploy this key to the agent binary for authentication.
 
                 Scope: `agent:write`
             operationId: AgentAPI_CreateAgent
@@ -269,24 +277,24 @@ paths:
     /v1/agents/tokens/{token_id}:
         get:
             summary: |-
-                GetAgentToken retrieves a single SAT by ID. Returns metadata only; the token
-                secret is never included. Token IDs are globally unique, so no agent scoping
-                is required in the path; the server resolves the parent agent from the token
+                GetApiKey retrieves a single API key by ID. Returns metadata only; the key
+                secret is never included. Key IDs are globally unique, so no agent scoping
+                is required in the path; the server resolves the parent agent from the key
                 ID. Authorization is enforced via the `agent:read` scope, not by path prefix.
             description: 'Scope: `agent:read`'
-            operationId: AgentAPI_GetAgentToken
+            operationId: AgentAPI_GetApiKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1GetAgentTokenResponse'
+                        $ref: '#/definitions/apiAgentV1GetApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: token_id
-                  description: The unique identifier of the token (UUID).
+                  description: The unique identifier of the key (UUID).
                   in: path
                   required: true
                   type: string
@@ -295,25 +303,25 @@ paths:
     /v1/agents/tokens/{token_id}/revoke:
         post:
             summary: |-
-                RevokeAgentToken permanently revokes an SAT bound to this agent. The agent
-                will receive a 401 on its next request. If this is the only active SAT for
-                the agent, the agent will become disconnected. Token IDs are globally unique,
+                RevokeApiKey permanently revokes an API key bound to this agent. The agent
+                will receive a 401 on its next request. If this is the only active key for
+                the agent, the agent will become disconnected. Key IDs are globally unique,
                 so no agent scoping is required in the path; authorization is enforced via
                 the `agent:write` scope, not by path prefix.
             description: 'Scope: `agent:write`'
-            operationId: AgentAPI_RevokeAgentToken
+            operationId: AgentAPI_RevokeApiKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1RevokeAgentTokenResponse'
+                        $ref: '#/definitions/apiAgentV1RevokeApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: token_id
-                  description: The unique identifier of the token to revoke (UUID).
+                  description: The unique identifier of the key to revoke (UUID).
                   in: path
                   required: true
                   type: string
@@ -321,7 +329,7 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/AgentAPIRevokeAgentTokenBody'
+                    $ref: '#/definitions/v1AgentAPIRevokeApiKeyBody'
             tags:
                 - AgentAPI
     /v1/agents/{agent.id}:
@@ -383,7 +391,7 @@ paths:
         delete:
             summary: |-
                 DeleteAgent permanently deletes an agent record and revokes all associated
-                service access tokens. For TERRAFORM agents, any not-yet-completed jobs assigned
+                API keys. For TERRAFORM agents, any not-yet-completed jobs assigned
                 to this agent will be failed. This action cannot be undone.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_DeleteAgent
@@ -399,8 +407,8 @@ paths:
             parameters:
                 - name: agent_id
                   description: |-
-                    The unique identifier of the agent to delete (UUID). All associated service
-                    access tokens will be revoked.
+                    The unique identifier of the agent to delete (UUID). All API keys bound to
+                    its service account are revoked.
                   in: path
                   required: true
                   type: string
@@ -576,22 +584,22 @@ paths:
     /v1/agents/{agent_id}/tokens:
         get:
             summary: |-
-                ListAgentTokens returns a paginated list of SATs bound to the specified
-                agent. Token secrets are never included.
+                ListApiKeys returns a paginated list of API keys bound to the specified
+                agent. Secrets are never included.
             description: 'Scope: `agent:read`'
-            operationId: AgentAPI_ListAgentTokens
+            operationId: AgentAPI_ListApiKeys
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1ListAgentTokensResponse'
+                        $ref: '#/definitions/apiAgentV1ListApiKeysResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: The agent to list tokens for (UUID).
+                  description: The agent to list keys for (UUID).
                   in: path
                   required: true
                   type: string
@@ -601,14 +609,14 @@ paths:
                     API documentation for the full operator and predicate reference).
 
                     Filterable fields:
-                      - `name`: filter by token name.
-                      - `status`: filter by token status (ACTIVE, REVOKED).
+                      - `name`: filter by key name.
+                      - `status`: filter by key status (ACTIVE, REVOKED).
                   in: query
                   required: false
                   type: string
                 - name: page_size
                   description: |-
-                    Maximum number of tokens to return per page. Defaults to 50 when omitted or
+                    Maximum number of keys to return per page. Defaults to 50 when omitted or
                     0; must not exceed 100.
                   in: query
                   required: false
@@ -624,30 +632,30 @@ paths:
         post:
             summary: |-
                 ---------------------------------------------------------------------------
-                Agent tokens
+                API keys
                 ---------------------------------------------------------------------------
-                CreateAgentToken creates a new Service Access Token (SAT) bound to the
-                specified agent. Scopes are auto-assigned from the agent's kind and cannot
-                be overridden. The response includes the raw token secret, shown exactly once.
+                CreateApiKey creates a new API key bound to the specified agent's service
+                account. Scopes are auto-assigned from the agent's kind and cannot be
+                overridden. The response includes the raw secret, shown exactly once.
             description: |-
-                Use this to create additional SATs for an existing agent (e.g., for
-                zero-downtime token rotation). The initial SAT is created automatically by
+                Use this to create additional API keys for an existing agent (e.g., for
+                zero-downtime key rotation). The initial key is created automatically by
                 CreateAgent.
 
                 Scope: `agent:write`
-            operationId: AgentAPI_CreateAgentToken
+            operationId: AgentAPI_CreateApiKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1CreateAgentTokenResponse'
+                        $ref: '#/definitions/apiAgentV1CreateApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: The agent to bind this token to (UUID).
+                  description: The agent to bind this key to (UUID).
                   in: path
                   required: true
                   type: string
@@ -655,7 +663,7 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/AgentAPICreateAgentTokenBody'
+                    $ref: '#/definitions/v1AgentAPICreateApiKeyBody'
             tags:
                 - AgentAPI
     /v1/agents/{agent_id}/workloads:
@@ -2430,7 +2438,7 @@ paths:
             summary: |-
                 GetMe retrieves the profile of the currently authenticated user.
                 The user is identified by the authentication token provided in the request.
-            description: 'Scope: any authenticated token (no specific scope required).'
+            description: 'Scope: any authenticated key (no specific scope required).'
             operationId: UserAPI_GetMe
             responses:
                 "200":
@@ -2446,15 +2454,15 @@ paths:
     /v1/user/tokens:
         get:
             summary: |-
-                ListPersonalAccessTokens returns a paginated list of the authenticated
-                user's PATs. Token secrets are never included.
+                ListApiKeys returns a paginated list of the authenticated user's own API
+                keys. Secrets are never included.
             description: 'Scope: `token:read`'
-            operationId: UserAPI_ListPersonalAccessTokens
+            operationId: UserAPI_ListApiKeys
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1ListPersonalAccessTokensResponse'
+                        $ref: '#/definitions/apiUserV1ListApiKeysResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -2466,8 +2474,8 @@ paths:
                     API documentation for the full operator and predicate reference).
 
                     Filterable fields:
-                      - `name`: filter by token name.
-                      - `status`: filter by token status (ACTIVE, REVOKED).
+                      - `name`: filter by key name.
+                      - `status`: filter by key status (ACTIVE, REVOKED).
 
                     Example: `field['status'] = 'ACTIVE'`
                   in: query
@@ -2475,7 +2483,7 @@ paths:
                   type: string
                 - name: page_size
                   description: |-
-                    Maximum number of tokens to return per page. Defaults to 50 when omitted
+                    Maximum number of keys to return per page. Defaults to 50 when omitted
                     or 0; must not exceed 100.
                   in: query
                   required: false
@@ -2490,48 +2498,48 @@ paths:
                 - UserAPI
         post:
             summary: |-
-                CreatePersonalAccessToken creates a new PAT for the authenticated user.
-                The response includes the raw token secret, which is shown exactly once
+                CreateApiKey creates a new API key for the authenticated user.
+                The response includes the raw secret, which is shown exactly once
                 and cannot be retrieved again.
             description: 'Scope: `token:write`'
-            operationId: UserAPI_CreatePersonalAccessToken
+            operationId: UserAPI_CreateApiKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1CreatePersonalAccessTokenResponse'
+                        $ref: '#/definitions/apiUserV1CreateApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: body
-                  description: CreatePersonalAccessTokenRequest contains the parameters for creating a new PAT.
+                  description: CreateApiKeyRequest contains the parameters for creating a new API key.
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/v1CreatePersonalAccessTokenRequest'
+                    $ref: '#/definitions/apiUserV1CreateApiKeyRequest'
             tags:
                 - UserAPI
     /v1/user/tokens/{token_id}:
         get:
             summary: |-
-                GetPersonalAccessToken retrieves a single PAT by ID.
-                Returns metadata only. The token secret is never included.
+                GetApiKey retrieves a single API key by ID.
+                Returns metadata only. The key secret is never included.
             description: 'Scope: `token:read`'
-            operationId: UserAPI_GetPersonalAccessToken
+            operationId: UserAPI_GetApiKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1GetPersonalAccessTokenResponse'
+                        $ref: '#/definitions/apiUserV1GetApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: token_id
-                  description: The unique identifier of the token (UUID).
+                  description: The unique identifier of the key (UUID).
                   in: path
                   required: true
                   type: string
@@ -2539,23 +2547,23 @@ paths:
                 - UserAPI
         patch:
             summary: |-
-                UpdatePersonalAccessToken updates a PAT's mutable fields (name, scopes).
-                Only active tokens can be updated. The token secret and expiration are
+                UpdateApiKey updates an API key's mutable fields (name, scopes).
+                Only active keys can be updated. The secret and expiration are
                 immutable after creation.
             description: 'Scope: `token:write`'
-            operationId: UserAPI_UpdatePersonalAccessToken
+            operationId: UserAPI_UpdateApiKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1UpdatePersonalAccessTokenResponse'
+                        $ref: '#/definitions/v1UpdateApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: token_id
-                  description: The unique identifier of the token to update (UUID).
+                  description: The unique identifier of the key to update (UUID).
                   in: path
                   required: true
                   type: string
@@ -2563,28 +2571,28 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/UserAPIUpdatePersonalAccessTokenBody'
+                    $ref: '#/definitions/UserAPIUpdateApiKeyBody'
             tags:
                 - UserAPI
     /v1/user/tokens/{token_id}/revoke:
         post:
             summary: |-
-                RevokePersonalAccessToken permanently revokes a PAT. The token becomes
+                RevokeApiKey permanently revokes an API key. The key becomes
                 immediately unusable and cannot be restored.
             description: 'Scope: `token:write`'
-            operationId: UserAPI_RevokePersonalAccessToken
+            operationId: UserAPI_RevokeApiKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1RevokePersonalAccessTokenResponse'
+                        $ref: '#/definitions/apiUserV1RevokeApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: token_id
-                  description: The unique identifier of the token to revoke (UUID).
+                  description: The unique identifier of the key to revoke (UUID).
                   in: path
                   required: true
                   type: string
@@ -2592,7 +2600,7 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/UserAPIRevokePersonalAccessTokenBody'
+                    $ref: '#/definitions/v1UserAPIRevokeApiKeyBody'
             tags:
                 - UserAPI
     /v1/users/{user_id}:
@@ -2716,29 +2724,6 @@ definitions:
         description: |-
             ClearAgentIdentityBindingRequest opens a rebind grace window for a KUBERNETES
             agent.
-    AgentAPICreateAgentTokenBody:
-        type: object
-        properties:
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier for the token (e.g., "prod-agent-key").
-                    Unique within the agent's tokens. Lowercase alphanumeric and hyphens only,
-                    must start with a letter and end with an alphanumeric character (1-63 chars).
-            expires_at:
-                type: string
-                format: date-time
-                description: Optional expiration time. If unset, the token does not expire.
-        description: |-
-            CreateAgentTokenRequest contains the parameters for creating a new SAT bound to
-            an agent.
-        required:
-            - name
-    AgentAPIRevokeAgentTokenBody:
-        type: object
-        description: |-
-            RevokeAgentTokenRequest identifies an agent SAT to revoke. Token IDs are
-            globally unique; the server resolves the parent agent from the token ID.
     AgentAPIUpdateAgentBody:
         type: object
         properties:
@@ -2775,13 +2760,13 @@ definitions:
                         type: string
                         description: |-
                             (KUBERNETES only) The Kubernetes kube-system namespace UID, bound at agent
-                            registration using a first-write-wins strategy. Used to detect when a token
+                            registration using a first-write-wins strategy. Used to detect when a key
                             is accidentally deployed to a different physical cluster. Empty for TERRAFORM
                             agents.
                         readOnly: true
                     created_by:
                         $ref: '#/definitions/v1ActorRef'
-                        description: The user or agent who created this agent (server-populated from token).
+                        description: The user or agent who created this agent (server-populated from key).
                         readOnly: true
                     created_at:
                         type: string
@@ -3404,29 +3389,128 @@ definitions:
         description: UpdateSourceRequest contains the source fields to update.
         required:
             - source
-    UserAPIRevokePersonalAccessTokenBody:
-        type: object
-        description: RevokePersonalAccessTokenRequest identifies a PAT to revoke.
-    UserAPIUpdatePersonalAccessTokenBody:
+    UserAPIUpdateApiKeyBody:
         type: object
         properties:
             name:
                 type: string
                 description: |-
-                    New name for the token. Must follow the same naming rules as creation.
+                    New name for the key. Must follow the same naming rules as creation.
                     Omit to leave the name unchanged.
             scopes:
                 type: array
                 items:
                     type: string
                 description: |-
-                    New scopes for the token. Replaces all existing scopes.
+                    New scopes for the key. Replaces all existing scopes.
                     The server enforces that issued scopes are a subset of the caller's own
-                    scopes. A token cannot grant more access than the user holds.
+                    scopes. A key cannot grant more access than the user holds.
                     Omit to leave scopes unchanged.
         description: |-
-            UpdatePersonalAccessTokenRequest contains the fields to update on a PAT.
+            UpdateApiKeyRequest contains the fields to update on an API key.
             Only provided fields are updated; omitted fields remain unchanged.
+    apiAgentV1CreateApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The created key metadata. Scopes are auto-assigned from the agent's kind.
+            plain_text_key:
+                type: string
+                description: The raw secret. Shown exactly once and cannot be retrieved again.
+        description: CreateApiKeyResponse contains the newly created API key.
+    apiAgentV1GetApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The key metadata. The key secret is never included.
+        description: GetApiKeyResponse contains the requested agent API key metadata.
+    apiAgentV1ListApiKeysResponse:
+        type: object
+        properties:
+            api_keys:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ApiKey'
+                description: The list of keys. Secrets are never included.
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListApiKeysResponse contains a page of agent API key metadata.
+    apiAgentV1RevokeApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The key metadata with updated status.
+        description: RevokeApiKeyResponse contains the revoked agent API key metadata.
+    apiUserV1CreateApiKeyRequest:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    URL-safe, human-readable identifier for the key (e.g., "postman-testing").
+                    Unique per user within the tenant. Lowercase alphanumeric and hyphens only,
+                    must start with a letter and end with an alphanumeric character (1-63 chars).
+            scopes:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    The scopes to grant this key. Must be scopes assignable to a user-bound key.
+                    The server enforces that issued scopes are a subset of the caller's own
+                    scopes. A key cannot grant more access than the user holds.
+            expires_at:
+                type: string
+                format: date-time
+                description: |-
+                    Optional expiration time. If unset, the key does not expire.
+                    Tenant policies may enforce a maximum lifetime.
+        description: CreateApiKeyRequest contains the parameters for creating a new API key.
+        required:
+            - name
+    apiUserV1CreateApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The created key metadata.
+            plain_text_key:
+                type: string
+                description: |-
+                    The raw secret (e.g., "admp_7kH3mNqR2xFb..."). This value is
+                    shown exactly once and cannot be retrieved again. Store it securely.
+        description: CreateApiKeyResponse contains the newly created API key.
+    apiUserV1GetApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The key metadata. The key secret is never included.
+        description: GetApiKeyResponse contains the requested API key metadata.
+    apiUserV1ListApiKeysResponse:
+        type: object
+        properties:
+            api_keys:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ApiKey'
+                description: The list of keys. Secrets are never included.
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListApiKeysResponse contains a page of API key metadata.
+    apiUserV1RevokeApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The key metadata with updated status.
+        description: RevokeApiKeyResponse contains the revoked API key metadata.
     protobufAny:
         type: object
         properties:
@@ -3561,107 +3645,6 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/protobufAny'
-    v1AccessToken:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the token (UUID).
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier for the token (e.g., "ci-deploy-key").
-                    Unique within the parent resource. Lowercase alphanumeric and hyphens only,
-                    must start with a letter and end with an alphanumeric character (1-63 chars).
-            token_prefix:
-                type: string
-                description: |-
-                    Non-secret prefix of the token value. The five-character brand
-                    (`admp_` for PATs, `adms_` for SATs) followed by a short sample of
-                    characters from the secret body (e.g., "adms_pL2m"). URL-safe and safe
-                    to log and display. Use for incident response and audit trails without
-                    exposing the secret.
-            token_type:
-                $ref: '#/definitions/v1TokenType'
-                description: The category of this token.
-            scopes:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    The scopes granted to this token. For PATs, these are user-selected.
-                    For SATs, these are auto-assigned from the service account's profile and
-                    cannot be chosen by the caller.
-            status:
-                $ref: '#/definitions/v1AccessTokenStatus'
-                description: Current lifecycle status of the token.
-            binding_type:
-                $ref: '#/definitions/v1BindingType'
-                description: The kind of resource this token is bound to.
-            binding_id:
-                type: string
-                description: |-
-                    The ID of the resource this token is bound to (UUID): the user ID for PATs,
-                    the service account ID for SATs. Tokens minted from this credential carry it
-                    as their `sub`.
-            expires_at:
-                type: string
-                format: date-time
-                description: When the token expires. If unset, the token does not expire.
-            last_used_at:
-                type: string
-                format: date-time
-                description: When the token was last used to authenticate an API request.
-            revoked_at:
-                type: string
-                format: date-time
-                description: When the token was revoked. Only set when status is REVOKED.
-            created_by:
-                $ref: '#/definitions/v1ActorRef'
-                description: |-
-                    The user who created this token. For PATs, this is the token owner.
-                    For SATs, this is the administrator who issued the token.
-            created_at:
-                type: string
-                format: date-time
-                description: When the token was created.
-        description: |-
-            AccessToken contains metadata for an opaque access token issued by Admiral.
-
-            Admiral issues two kinds of tokens, distinguished by `token_type`:
-
-              - **Personal Access Tokens (PATs)**: bound to a user, created by that
-                user via UserAPI. Scopes are user-selected at creation time. Intended
-                for CLI, CI, and human-driven automation.
-              - **Service Access Tokens (SATs)**: bound to a service account, created by
-                administrators via AgentAPI. Scopes are auto-assigned from the agent's
-                kind. Intended for long-lived agents that authenticate as the agent
-                itself.
-
-            The raw token secret is returned exactly once, in the `plain_text_token`
-            field of the Create response. This message carries only metadata; the
-            original secret is never retrievable after creation. The non-secret
-            `token_prefix` is safe to log and display.
-
-            Token CRUD is managed by each parent resource's API:
-              - PATs: UserAPI  (/v1/user/tokens)
-              - SATs: AgentAPI (/v1/agents/{id}/tokens)
-
-            IDP-issued JWTs (OAuth2/OIDC sessions) are not represented here; they are
-            resolved by separate middleware.
-    v1AccessTokenStatus:
-        type: string
-        enum:
-            - ACCESS_TOKEN_STATUS_UNSPECIFIED
-            - ACCESS_TOKEN_STATUS_ACTIVE
-            - ACCESS_TOKEN_STATUS_REVOKED
-        default: ACCESS_TOKEN_STATUS_UNSPECIFIED
-        description: |-
-            AccessTokenStatus represents the lifecycle state of an access token.
-
-             - ACCESS_TOKEN_STATUS_UNSPECIFIED: Default value. Must not be used.
-             - ACCESS_TOKEN_STATUS_ACTIVE: The token is valid and can be used for authentication.
-             - ACCESS_TOKEN_STATUS_REVOKED: The token has been permanently revoked and cannot be used.
     v1ActiveJobInfo:
         type: object
         properties:
@@ -3731,13 +3714,13 @@ definitions:
                 type: string
                 description: |-
                     (KUBERNETES only) The Kubernetes kube-system namespace UID, bound at agent
-                    registration using a first-write-wins strategy. Used to detect when a token
+                    registration using a first-write-wins strategy. Used to detect when a key
                     is accidentally deployed to a different physical cluster. Empty for TERRAFORM
                     agents.
                 readOnly: true
             created_by:
                 $ref: '#/definitions/v1ActorRef'
-                description: The user or agent who created this agent (server-populated from token).
+                description: The user or agent who created this agent (server-populated from key).
                 readOnly: true
             created_at:
                 type: string
@@ -3756,6 +3739,29 @@ definitions:
             Agent represents a registered execution agent within a tenant. The `kind`
             selects its execution plane: TERRAFORM agents claim and execute infrastructure
             jobs; KUBERNETES agents report Kubernetes telemetry and apply manifest revisions.
+    v1AgentAPICreateApiKeyBody:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    URL-safe, human-readable identifier for the key (e.g., "prod-agent-key").
+                    Unique within the agent's keys. Lowercase alphanumeric and hyphens only,
+                    must start with a letter and end with an alphanumeric character (1-63 chars).
+            expires_at:
+                type: string
+                format: date-time
+                description: Optional expiration time. If unset, the key does not expire.
+        description: |-
+            CreateApiKeyRequest contains the parameters for creating a new API key bound to
+            an agent.
+        required:
+            - name
+    v1AgentAPIRevokeApiKeyBody:
+        type: object
+        description: |-
+            RevokeApiKeyRequest identifies an agent API key to revoke. Key IDs are
+            globally unique; the server resolves the parent agent from the key ID.
     v1AgentHealthStatus:
         type: string
         enum:
@@ -3796,6 +3802,113 @@ definitions:
             terraform, tofu). Managed-service deploys (Lambda/ECS/Cloud Run) also run here
             as terraform components.
              - AGENT_KIND_KUBERNETES: Kubernetes agent (cluster telemetry + manifest revision delivery/reconcile).
+    v1ApiKey:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier for the key (UUID).
+            tenant_id:
+                type: string
+                description: |-
+                    The tenant this key belongs to (UUID), and the `tid` of every access token
+                    minted from it.
+
+                    Load-bearing on the resolve path and an echo everywhere else: resolving a
+                    raw key is the one lookup that has no tenant in hand and must return one,
+                    where every lifecycle call already knows the tenant from the caller. The
+                    key belongs to one tenant for its whole life, so the two can never disagree.
+            name:
+                type: string
+                description: |-
+                    URL-safe, human-readable identifier for the key (e.g., "ci-deploy-key").
+                    Unique within the parent resource. Lowercase alphanumeric and hyphens only,
+                    must start with a letter and end with an alphanumeric character (1-63 chars).
+            key_prefix:
+                type: string
+                description: |-
+                    Non-secret prefix of the key. The five-character brand (`admp_` when bound
+                    to a user, `adms_` when bound to a service account) followed by a short
+                    sample of characters from the secret body (e.g., "adms_pL2m"). URL-safe and
+                    safe to log and display. Use for incident response and audit trails without
+                    exposing the secret.
+            scopes:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    The scopes granted to this key, and the ceiling on any access token minted
+                    from it. A mint request may narrow them and may never widen them.
+            status:
+                $ref: '#/definitions/v1ApiKeyStatus'
+                description: Current lifecycle status of the key.
+            binding_type:
+                $ref: '#/definitions/v1BindingType'
+                description: The kind of resource this key is bound to.
+            binding_id:
+                type: string
+                description: |-
+                    The ID of the resource this key is bound to (UUID): a user id or a service
+                    account id, per `binding_type`. Access tokens minted from this key carry it
+                    as their `sub`.
+            expires_at:
+                type: string
+                format: date-time
+                description: When the key expires. If unset, the key does not expire.
+            last_used_at:
+                type: string
+                format: date-time
+                description: |-
+                    When this key was last exchanged for an access token.
+
+                    NOT the time of the last API request made with it: minted tokens are cached
+                    and reused for their lifetime, so a key in continuous use is exchanged only
+                    when the token minted from it runs out. Reads as "still in use", at a
+                    granularity of the access-token lifetime, which is the question this field
+                    exists to answer before revoking one.
+            revoked_at:
+                type: string
+                format: date-time
+                description: When the key was revoked. Only set when status is REVOKED.
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                description: |-
+                    The user who created this key. When bound to a user, this is the key's
+                    owner; when bound to a service account, the administrator who issued it.
+            created_at:
+                type: string
+                format: date-time
+                description: When the key was created.
+        description: |-
+            ApiKey contains metadata for an opaque, long-lived credential issued by
+            Admiral and presented by a caller to authenticate.
+
+            A key is bound to exactly one subject for its whole life -- see
+            `binding_type` and `binding_id` -- and to exactly one tenant. Presenting one
+            is exchanged for a short-lived access token whose `sub` is the binding and
+            whose scopes are bounded by this key's.
+
+            The raw secret is returned exactly once, in the `plain_text_key` field of the
+            Create response. This message carries only metadata; the secret is never
+            retrievable afterwards. The non-secret `key_prefix` is safe to log and
+            display.
+
+            Key lifecycle is managed by each parent resource's API:
+              - user-bound:            UserAPI  (/v1/user/tokens)
+              - service-account-bound: AgentAPI (/v1/agents/{id}/tokens)
+    v1ApiKeyStatus:
+        type: string
+        enum:
+            - API_KEY_STATUS_UNSPECIFIED
+            - API_KEY_STATUS_ACTIVE
+            - API_KEY_STATUS_REVOKED
+        default: API_KEY_STATUS_UNSPECIFIED
+        description: |-
+            ApiKeyStatus represents the lifecycle state of an API key.
+
+             - API_KEY_STATUS_UNSPECIFIED: Default value. Must not be used.
+             - API_KEY_STATUS_ACTIVE: The key is valid and can be used to authenticate.
+             - API_KEY_STATUS_REVOKED: The key has been permanently revoked and cannot be used.
     v1Application:
         type: object
         properties:
@@ -3944,11 +4057,18 @@ definitions:
             - BINDING_TYPE_SERVICE_ACCOUNT
         default: BINDING_TYPE_UNSPECIFIED
         description: |-
-            BindingType identifies the kind of resource an access token is bound to.
+            BindingType identifies the kind of resource an API key is bound to.
+
+            This is the ONLY discriminator the contract carries. What a key is bound to
+            decides the subject it authenticates as, and every other distinction that used
+            to be modelled separately -- which surface created it, which brand its prefix
+            carries, whether its scopes were chosen or assigned -- follows from the
+            binding rather than varying independently of it.
 
              - BINDING_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - BINDING_TYPE_USER: Token is bound to a user (PATs).
-             - BINDING_TYPE_SERVICE_ACCOUNT: Token is bound to a service account (SATs). An agent has a service account;
+             - BINDING_TYPE_USER: Bound to a user, and created by that user. Scopes are selected at creation.
+             - BINDING_TYPE_SERVICE_ACCOUNT: Bound to a service account, and created by an administrator. Scopes are
+            assigned from a profile rather than chosen. An agent has a service account;
             which agent, if any, is resolved from the service account record.
     v1CancelRunResponse:
         type: object
@@ -4497,7 +4617,7 @@ definitions:
                 $ref: '#/definitions/v1AgentKind'
                 description: |-
                     The execution plane this agent serves (TERRAFORM or KUBERNETES). Selects the
-                    SAT's auto-assigned scopes and is immutable.
+                    key's auto-assigned scopes and is immutable.
             name:
                 type: string
                 description: |-
@@ -4522,23 +4642,13 @@ definitions:
             agent:
                 $ref: '#/definitions/v1Agent'
                 description: The created agent. Health status will be PENDING until it begins reporting.
-            plain_text_token:
+            plain_text_key:
                 type: string
                 description: |-
-                    The raw Service Access Token secret (e.g., "adms_pL2mN5oQ8rS1..."). Shown
-                    exactly once and cannot be retrieved again. Deploy this token to the agent
-                    binary for authentication. For additional tokens, use CreateAgentToken.
-        description: CreateAgentResponse contains the newly created agent and its initial SAT.
-    v1CreateAgentTokenResponse:
-        type: object
-        properties:
-            access_token:
-                $ref: '#/definitions/v1AccessToken'
-                description: The created token metadata. Scopes are auto-assigned from the agent's kind.
-            plain_text_token:
-                type: string
-                description: The raw token secret. Shown exactly once and cannot be retrieved again.
-        description: CreateAgentTokenResponse contains the newly created SAT.
+                    The raw API key secret (e.g., "adms_pL2mN5oQ8rS1..."). Shown exactly once
+                    and cannot be retrieved again. Deploy this key to the agent binary for
+                    authentication. For additional keys, use CreateApiKey.
+        description: CreateAgentResponse contains the newly created agent and its initial API key.
     v1CreateApplicationRequest:
         type: object
         properties:
@@ -4715,44 +4825,6 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The created environment.
         description: CreateEnvironmentResponse contains the newly created environment.
-    v1CreatePersonalAccessTokenRequest:
-        type: object
-        properties:
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier for the token (e.g., "postman-testing").
-                    Unique per user within the tenant. Lowercase alphanumeric and hyphens only,
-                    must start with a letter and end with an alphanumeric character (1-63 chars).
-            scopes:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    The scopes to grant this token. Must be valid scopes allowed for PATs.
-                    The server enforces that issued scopes are a subset of the caller's own
-                    scopes. A token cannot grant more access than the user holds.
-            expires_at:
-                type: string
-                format: date-time
-                description: |-
-                    Optional expiration time. If unset, the token does not expire.
-                    Tenant policies may enforce a maximum lifetime.
-        description: CreatePersonalAccessTokenRequest contains the parameters for creating a new PAT.
-        required:
-            - name
-    v1CreatePersonalAccessTokenResponse:
-        type: object
-        properties:
-            access_token:
-                $ref: '#/definitions/v1AccessToken'
-                description: The created token metadata.
-            plain_text_token:
-                type: string
-                description: |-
-                    The raw token secret (e.g., "admp_7kH3mNqR2xFb..."). This value is
-                    shown exactly once and cannot be retrieved again. Store it securely.
-        description: CreatePersonalAccessTokenResponse contains the newly created PAT.
     v1CreateRunRequest:
         type: object
         properties:
@@ -5245,13 +5317,6 @@ definitions:
             GetAgentStatusResponse contains the server-derived health status and the latest
             kind-specific status snapshot. If the agent has not reported yet, health_status
             will be PENDING and status will be absent.
-    v1GetAgentTokenResponse:
-        type: object
-        properties:
-            access_token:
-                $ref: '#/definitions/v1AccessToken'
-                description: The token metadata. The token secret is never included.
-        description: GetAgentTokenResponse contains the requested agent SAT metadata.
     v1GetApplicationResponse:
         type: object
         properties:
@@ -5301,13 +5366,6 @@ definitions:
                 $ref: '#/definitions/v1User'
                 description: The user profile.
         description: GetMeResponse contains the authenticated user's profile.
-    v1GetPersonalAccessTokenResponse:
-        type: object
-        properties:
-            access_token:
-                $ref: '#/definitions/v1AccessToken'
-                description: The token metadata. The token secret is never included.
-        description: GetPersonalAccessTokenResponse contains the requested PAT metadata.
     v1GetRevisionBundleResponse:
         type: object
         properties:
@@ -5744,19 +5802,6 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListAgentJobsResponse contains a page of jobs.
-    v1ListAgentTokensResponse:
-        type: object
-        properties:
-            access_tokens:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1AccessToken'
-                description: The list of tokens. Token secrets are never included.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListAgentTokensResponse contains a page of agent SAT metadata.
     v1ListAgentsResponse:
         type: object
         properties:
@@ -5865,19 +5910,6 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListEnvironmentsResponse contains a page of environments.
-    v1ListPersonalAccessTokensResponse:
-        type: object
-        properties:
-            access_tokens:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1AccessToken'
-                description: The list of tokens. Token secrets are never included.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListPersonalAccessTokensResponse contains a page of PAT metadata.
     v1ListRevisionsResponse:
         type: object
         properties:
@@ -6488,20 +6520,6 @@ definitions:
         description: |-
             RevisionSummary provides aggregate counts of revision statuses within a
             run, enabling quick status display without loading all revisions.
-    v1RevokeAgentTokenResponse:
-        type: object
-        properties:
-            access_token:
-                $ref: '#/definitions/v1AccessToken'
-                description: The token metadata with updated status.
-        description: RevokeAgentTokenResponse contains the revoked agent SAT metadata.
-    v1RevokePersonalAccessTokenResponse:
-        type: object
-        properties:
-            access_token:
-                $ref: '#/definitions/v1AccessToken'
-                description: The token metadata with updated status.
-        description: RevokePersonalAccessTokenResponse contains the revoked PAT metadata.
     v1Run:
         type: object
         properties:
@@ -7008,21 +7026,6 @@ definitions:
             TestSourceResponse reports the outcome of the test against the external
             system. The same outcome is persisted on the Source (`last_test_status`,
             `last_test_error`, `last_tested_at`).
-    v1TokenType:
-        type: string
-        enum:
-            - TOKEN_TYPE_UNSPECIFIED
-            - TOKEN_TYPE_PAT
-            - TOKEN_TYPE_SAT
-        default: TOKEN_TYPE_UNSPECIFIED
-        description: |-
-            TokenType identifies the category of an access token issued by Admiral's token system.
-            IDP-issued JWTs (OAuth2/OIDC sessions) are NOT represented here. They are
-            resolved by separate middleware.
-
-             - TOKEN_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - TOKEN_TYPE_PAT: Personal Access Token, bound to a user.
-             - TOKEN_TYPE_SAT: Service Access Token, bound to a service account.
     v1UpdateAgentResponse:
         type: object
         properties:
@@ -7030,6 +7033,13 @@ definitions:
                 $ref: '#/definitions/v1Agent'
                 description: The updated agent.
         description: UpdateAgentResponse contains the updated agent.
+    v1UpdateApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The updated key metadata.
+        description: UpdateApiKeyResponse contains the updated API key metadata.
     v1UpdateApplicationResponse:
         type: object
         properties:
@@ -7067,13 +7077,6 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The updated environment.
         description: UpdateEnvironmentResponse contains the updated environment.
-    v1UpdatePersonalAccessTokenResponse:
-        type: object
-        properties:
-            access_token:
-                $ref: '#/definitions/v1AccessToken'
-                description: The updated token metadata.
-        description: UpdatePersonalAccessTokenResponse contains the updated PAT metadata.
     v1UpdateSourceResponse:
         type: object
         properties:
@@ -7138,6 +7141,9 @@ definitions:
                 format: date-time
                 description: When the user was last updated.
         description: User represents a user's profile information.
+    v1UserAPIRevokeApiKeyBody:
+        type: object
+        description: RevokeApiKeyRequest identifies an API key to revoke.
     v1ValueDiff:
         type: object
         properties:
