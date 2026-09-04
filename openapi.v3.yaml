@@ -167,12 +167,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                agent:
-                                    title: agent
-                                    description: |-
-                                        The agent with updated fields. The `id` field is required. Only fields named
-                                         in `update_mask` are updated. `kind` is immutable and cannot be updated.
-                                    $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                                 update_mask:
                                     title: update_mask
                                     description: |-
@@ -181,8 +175,6 @@ paths:
                                          `description`, `labels`.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateAgentRequest
-                            required:
-                                - agent
                             additionalProperties: false
                             description: UpdateAgentRequest contains the agent fields to update.
                 required: true
@@ -723,12 +715,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                application:
-                                    title: application
-                                    description: |-
-                                        The application with updated fields. Its `id` identifies the application;
-                                         only fields named in `update_mask` are applied.
-                                    $ref: '#/components/schemas/admiral.api.application.v1.Application'
                                 update_mask:
                                     title: update_mask
                                     description: |-
@@ -737,8 +723,6 @@ paths:
                                          `description`, `labels`.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateApplicationRequest
-                            required:
-                                - application
                             additionalProperties: false
                             description: UpdateApplicationRequest contains the application fields to update.
                 required: true
@@ -897,12 +881,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                catalog_item:
-                                    title: catalog_item
-                                    description: |-
-                                        The catalog item with updated fields. Its `id` identifies the item; only
-                                         fields named in `update_mask` are applied.
-                                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
                                 update_mask:
                                     title: update_mask
                                     description: |-
@@ -912,8 +890,6 @@ paths:
                                          immutable and cannot be updated.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateCatalogItemRequest
-                            required:
-                                - catalog_item
                             additionalProperties: false
                             description: UpdateCatalogItemRequest contains the catalog item fields to update.
                 required: true
@@ -1123,12 +1099,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                change_set:
-                                    title: change_set
-                                    description: |-
-                                        The change set with updated fields. Its `id` identifies the change set;
-                                         only fields named in `update_mask` are applied.
-                                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                                 update_mask:
                                     title: update_mask
                                     description: |-
@@ -1137,8 +1107,6 @@ paths:
                                          `description`.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateChangeSetRequest
-                            required:
-                                - change_set
                             additionalProperties: false
                             description: UpdateChangeSetRequest updates a change set's mutable metadata.
                 required: true
@@ -1698,15 +1666,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                credential:
-                                    title: credential
-                                    description: |-
-                                        The credential with updated fields.
-                                         Only fields specified in `update_mask` are updated.
-
-                                         When updating auth_config, the entire auth config is replaced.
-                                         Omitting auth_config from the update_mask leaves credentials unchanged.
-                                    $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                                 update_mask:
                                     title: update_mask
                                     description: |-
@@ -1715,8 +1674,6 @@ paths:
                                          `description`, `auth_config`, `labels`.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateCredentialRequest
-                            required:
-                                - credential
                             additionalProperties: false
                             description: UpdateCredentialRequest contains the credential fields to update.
                 required: true
@@ -1868,12 +1825,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                environment:
-                                    title: environment
-                                    description: |-
-                                        The environment with updated fields.
-                                         Only fields specified in `update_mask` are updated.
-                                    $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
                                 update_mask:
                                     title: update_mask
                                     description: |-
@@ -1882,8 +1833,6 @@ paths:
                                          `description`, `labels`.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateEnvironmentRequest
-                            required:
-                                - environment
                             additionalProperties: false
                             description: UpdateEnvironmentRequest contains the environment fields to update.
                 required: true
@@ -2448,12 +2397,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                source:
-                                    title: source
-                                    description: |-
-                                        The source with updated fields. Only fields specified in `update_mask`
-                                         are updated.
-                                    $ref: '#/components/schemas/admiral.api.source.v1.Source'
                                 update_mask:
                                     title: update_mask
                                     description: |-
@@ -2462,8 +2405,6 @@ paths:
                                          `description`, `url`, `credential_id`, `source_config`, `labels`.
                                     $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateSourceRequest
-                            required:
-                                - source
                             additionalProperties: false
                             description: UpdateSourceRequest contains the source fields to update.
                 required: true
