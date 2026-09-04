@@ -120,6 +120,10 @@
       "description": "Read user profiles within your own tenant."
     },
     {
+      "name": "user:resolve",
+      "description": "Resolve an address within a tenant into the user it identifies, for authentication. Narrower than user:read on purpose -- it answers one address in one tenant rather than listing a directory, so the sign-in service can authenticate without being able to enumerate anyone."
+    },
+    {
       "name": "user:write",
       "description": "Create users and manage their access -- suspending, reactivating, or offboarding them. Reach is decided per tenant rather than by holding this, so the same scope covers adding someone to your own tenant and an operator acting across the platform.",
       "implies": [
