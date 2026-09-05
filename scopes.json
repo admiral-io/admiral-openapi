@@ -94,6 +94,10 @@
       "description": "Read the caller's own tenant -- name, slug, and status."
     },
     {
+      "name": "tenant:resolve",
+      "description": "Find the tenants an address belongs to, before any tenant is known, so the sign-in service can ask which one to authenticate against. Deliberately not implied by tenant:read and not implied BY anything -- it is the one scope here that answers across tenants rather than within the caller's own, so holding it must be a separate decision every time."
+    },
+    {
       "name": "tenant:write",
       "description": "Update the caller's own tenant's settings, and close it -- suspending or deleting the tenant you own. Which of those you may actually do is decided per tenant, not by holding this.",
       "implies": [
