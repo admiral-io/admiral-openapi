@@ -94,10 +94,6 @@
       "description": "Read the caller's own tenant -- name, slug, and status."
     },
     {
-      "name": "tenant:resolve",
-      "description": "Find the tenants an address belongs to, before any tenant is known, so the sign-in service can ask which one to authenticate against. Deliberately not implied by tenant:read and not implied BY anything -- it is the one scope here that answers across tenants rather than within the caller's own, so holding it must be a separate decision every time."
-    },
-    {
       "name": "tenant:write",
       "description": "Update the caller's own tenant's settings, and close it -- suspending or deleting the tenant you own. Which of those you may actually do is decided per tenant, not by holding this.",
       "implies": [
@@ -109,10 +105,6 @@
       "description": "Read your own API keys."
     },
     {
-      "name": "token:resolve",
-      "description": "Resolve a presented API key into the credential it identifies."
-    },
-    {
       "name": "token:write",
       "description": "Create, update, and revoke your own API keys.",
       "implies": [
@@ -122,10 +114,6 @@
     {
       "name": "user:read",
       "description": "Read user profiles within your own tenant."
-    },
-    {
-      "name": "user:resolve",
-      "description": "Resolve an address within a tenant into the user it identifies, for authentication. Narrower than user:read on purpose -- it answers one address in one tenant rather than listing a directory, so the sign-in service can authenticate without being able to enumerate anyone."
     },
     {
       "name": "user:write",
