@@ -118,25 +118,6 @@ paths:
                     type: string
                     title: token_id
                     format: uuid
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                token_id:
-                                    type: string
-                                    title: token_id
-                                    format: uuid
-                                    description: The unique identifier of the key to revoke (UUID).
-                            title: RevokeApiKeyRequest
-                            required:
-                                - token_id
-                            additionalProperties: false
-                            description: |-
-                                RevokeApiKeyRequest identifies an agent API key to revoke. Key IDs are
-                                 globally unique; the server resolves the parent agent from the key ID.
-                required: true
             responses:
                 "200":
                     description: Success
@@ -261,11 +242,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                agent_id:
-                                    type: string
-                                    title: agent_id
-                                    format: uuid
-                                    description: The Admiral agent record ID (UUID), not the kube-system UID.
                                 reason:
                                     type: string
                                     title: reason
@@ -276,8 +252,6 @@ paths:
                                     description: How long the grace window stays open. Defaults to 1h server-side if unset.
                                     $ref: '#/components/schemas/google.protobuf.Duration'
                             title: ClearAgentIdentityBindingRequest
-                            required:
-                                - agent_id
                             additionalProperties: false
                             description: |-
                                 ClearAgentIdentityBindingRequest opens a rebind grace window for a KUBERNETES
@@ -505,11 +479,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                agent_id:
-                                    type: string
-                                    title: agent_id
-                                    format: uuid
-                                    description: The agent to bind this key to (UUID).
                                 name:
                                     type: string
                                     title: name
@@ -526,7 +495,6 @@ paths:
                                     $ref: '#/components/schemas/google.protobuf.Timestamp'
                             title: CreateApiKeyRequest
                             required:
-                                - agent_id
                                 - name
                             additionalProperties: false
                             description: |-
@@ -971,11 +939,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                catalog_item_id:
-                                    type: string
-                                    title: catalog_item_id
-                                    format: uuid
-                                    description: Unique identifier of the catalog item to resolve (UUID).
                                 ref_override:
                                     type: string
                                     title: ref_override
@@ -985,8 +948,6 @@ paths:
                                          default ref. Useful for previewing a different version without modifying
                                          the catalog item definition.
                             title: ResolveCatalogItemRequest
-                            required:
-                                - catalog_item_id
                             additionalProperties: false
                             description: ResolveCatalogItemRequest identifies a catalog item to resolve.
                 required: true
@@ -1171,13 +1132,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                change_set_id:
-                                    type: string
-                                    title: change_set_id
-                                    minLength: 1
-                                    description: |-
-                                        Identifier of the source change set to copy. Accepts either the short
-                                         ID (`cs-<suffix>`) or the canonical UUID. Can be in any status.
                                 environment_id:
                                     type: string
                                     title: environment_id
@@ -1199,7 +1153,6 @@ paths:
                                          when empty.
                             title: CopyChangeSetRequest
                             required:
-                                - change_set_id
                                 - environment_id
                             additionalProperties: false
                             description: |-
@@ -1265,25 +1218,6 @@ paths:
                     type: string
                     title: change_set_id
                     minLength: 1
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                change_set_id:
-                                    type: string
-                                    title: change_set_id
-                                    minLength: 1
-                                    description: |-
-                                        Identifier of the change set to discard. Accepts either the short ID
-                                         (`cs-<suffix>`) or the canonical UUID.
-                            title: DiscardChangeSetRequest
-                            required:
-                                - change_set_id
-                            additionalProperties: false
-                            description: DiscardChangeSetRequest abandons an OPEN change set.
-                required: true
             responses:
                 "200":
                     description: Success
@@ -1337,20 +1271,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                change_set_id:
-                                    type: string
-                                    title: change_set_id
-                                    minLength: 1
-                                    description: |-
-                                        Identifier of the change set. Accepts either the short ID
-                                         (`cs-<suffix>`) or the canonical UUID.
-                                component_name:
-                                    type: string
-                                    title: component_name
-                                    maxLength: 63
-                                    minLength: 1
-                                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                                    description: Component name (stable identifier set at creation). Required.
                                 change_type:
                                     not:
                                         enum:
@@ -1403,8 +1323,6 @@ paths:
                                     $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
                             title: SetEntryRequest
                             required:
-                                - change_set_id
-                                - component_name
                                 - change_type
                             additionalProperties: false
                             description: SetEntryRequest creates or replaces a component entry within a change set.
@@ -1493,13 +1411,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                change_set_id:
-                                    type: string
-                                    title: change_set_id
-                                    minLength: 1
-                                    description: |-
-                                        Identifier of the change set. Accepts either the short ID
-                                         (`cs-<suffix>`) or the canonical UUID.
                                 value:
                                     type: string
                                     title: value
@@ -1515,7 +1426,6 @@ paths:
                                     description: When true, the value is encrypted at rest and masked in API responses.
                             title: SetVariableRequest
                             required:
-                                - change_set_id
                                 - value
                             additionalProperties: false
                             description: SetVariableRequest creates or replaces a variable entry within a change set.
@@ -2110,19 +2020,12 @@ paths:
                         schema:
                             type: object
                             properties:
-                                run_id:
-                                    type: string
-                                    title: run_id
-                                    minLength: 1
-                                    description: Identifier of the run to apply. UUID or `run-<suffix>` display ID.
                                 message:
                                     type: string
                                     title: message
                                     maxLength: 1024
                                     description: Optional message describing the apply (e.g., "Approved by @martin").
                             title: ApplyRunRequest
-                            required:
-                                - run_id
                             additionalProperties: false
                             description: ApplyRunRequest transitions a planned run to apply phase.
                 required: true
@@ -2155,19 +2058,12 @@ paths:
                         schema:
                             type: object
                             properties:
-                                run_id:
-                                    type: string
-                                    title: run_id
-                                    minLength: 1
-                                    description: Identifier of the run to cancel. UUID or `run-<suffix>` display ID.
                                 reason:
                                     type: string
                                     title: reason
                                     maxLength: 1024
                                     description: Optional reason for cancellation.
                             title: CancelRunRequest
-                            required:
-                                - run_id
                             additionalProperties: false
                             description: CancelRunRequest cancels an in-progress run.
                 required: true
@@ -2273,29 +2169,6 @@ paths:
                     type: string
                     title: revision_id
                     format: uuid
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                run_id:
-                                    type: string
-                                    title: run_id
-                                    minLength: 1
-                                    description: The run. UUID or `run-<suffix>` display ID.
-                                revision_id:
-                                    type: string
-                                    title: revision_id
-                                    format: uuid
-                                    description: The revision to retry (UUID). Must be in FAILED status.
-                            title: RetryRevisionRequest
-                            required:
-                                - run_id
-                                - revision_id
-                            additionalProperties: false
-                            description: RetryRevisionRequest retries a failed revision.
-                required: true
             responses:
                 "200":
                     description: Success
@@ -2486,23 +2359,6 @@ paths:
                     type: string
                     title: source_id
                     format: uuid
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                source_id:
-                                    type: string
-                                    title: source_id
-                                    format: uuid
-                                    description: Unique identifier of the source to test (UUID).
-                            title: TestSourceRequest
-                            required:
-                                - source_id
-                            additionalProperties: false
-                            description: TestSourceRequest identifies a source to test.
-                required: true
             responses:
                 "200":
                     description: Success
@@ -2722,11 +2578,6 @@ paths:
                         schema:
                             type: object
                             properties:
-                                token_id:
-                                    type: string
-                                    title: token_id
-                                    format: uuid
-                                    description: The unique identifier of the key to update (UUID).
                                 name:
                                     type:
                                         - string
@@ -2752,8 +2603,6 @@ paths:
                                          scopes. A key cannot grant more access than the user holds.
                                          Omit to leave scopes unchanged.
                             title: UpdateApiKeyRequest
-                            required:
-                                - token_id
                             additionalProperties: false
                             description: |-
                                 UpdateApiKeyRequest contains the fields to update on an API key.
@@ -2782,23 +2631,6 @@ paths:
                     type: string
                     title: token_id
                     format: uuid
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                token_id:
-                                    type: string
-                                    title: token_id
-                                    format: uuid
-                                    description: The unique identifier of the key to revoke (UUID).
-                            title: RevokeApiKeyRequest
-                            required:
-                                - token_id
-                            additionalProperties: false
-                            description: RevokeApiKeyRequest identifies an API key to revoke.
-                required: true
             responses:
                 "200":
                     description: Success
@@ -3404,8 +3236,14 @@ components:
                       title: terraform
                       required:
                         - terraform
+                    - not:
+                        anyOf:
+                            - required:
+                                - kubernetes
+                            - required:
+                                - terraform
+            unevaluatedProperties: false
             title: GetAgentStatusResponse
-            additionalProperties: false
             description: |-
                 GetAgentStatusResponse contains the server-derived health status and the latest
                  kind-specific status snapshot. If the agent has not reported yet, health_status
@@ -7017,8 +6855,16 @@ components:
                   title: ssh_key
                   required:
                     - ssh_key
+                - not:
+                    anyOf:
+                        - required:
+                            - basic_auth
+                        - required:
+                            - bearer_token
+                        - required:
+                            - ssh_key
+            unevaluatedProperties: false
             title: AuthConfig
-            additionalProperties: false
             description: |-
                 AuthConfig is the polymorphic auth configuration attached to a Credential.
                  Exactly one variant is populated, corresponding to the credential's type.
@@ -9055,8 +8901,14 @@ components:
                   title: terraform
                   required:
                     - terraform
+                - not:
+                    anyOf:
+                        - required:
+                            - helm
+                        - required:
+                            - terraform
+            unevaluatedProperties: false
             title: SourceConfig
-            additionalProperties: false
             description: |-
                 SourceConfig is the type-specific configuration attached to a Source. Only
                  source types whose location is not fully expressed by `url` alone (TERRAFORM,
