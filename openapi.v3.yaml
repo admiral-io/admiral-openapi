@@ -1894,6 +1894,102 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.environment.v1.ListEnvironmentVariablesResponse'
+    /v1/invitations:
+        get:
+            tags:
+                - Invitations
+            summary: List invitations
+            description: 'Scope: `user:read`'
+            operationId: InvitationAPI_ListInvitations
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                     API documentation for the full operator and predicate reference).
+
+                     Filterable fields:
+                       - `email`: filter by address.
+                       - `status`: filter by lifecycle status.
+
+                     Example: `field['status'] = 'PENDING'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: |-
+                    Maximum number of invitations to return per page. Defaults to 50 when
+                     omitted or 0; must not exceed 100.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: Opaque pagination token from a previous response.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.invitation.v1.ListInvitationsResponse'
+        post:
+            tags:
+                - Invitations
+            summary: Invite someone into the current tenant
+            description: |-
+                A live invitation for the same address is retired and replaced, so a retry
+                 or a "send it again" is this same call. ALREADY_EXISTS when the address is
+                 already a member. INVALID_ARGUMENT for a role that cannot be granted by
+                 invitation: OWNER moves by transfer, and APP_CREATOR is a capability
+                 rather than a role.
+
+                 Scope: `user:write`
+            operationId: InvitationAPI_CreateInvitation
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.invitation.v1.CreateInvitationRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.invitation.v1.CreateInvitationResponse'
+    /v1/invitations/{invitation_id}/revoke:
+        post:
+            tags:
+                - Invitations
+            summary: Withdraw an invitation
+            description: 'Scope: `user:write`'
+            operationId: InvitationAPI_RevokeInvitation
+            parameters:
+                - name: invitation_id
+                  in: path
+                  description: The invitation (UUID), from CreateInvitation or ListInvitations.
+                  required: true
+                  schema:
+                    type: string
+                    title: invitation_id
+                    format: uuid
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.invitation.v1.RevokeInvitationResponse'
     /v1/runs:
         get:
             tags:
@@ -2638,6 +2734,53 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.user.v1.RevokeApiKeyResponse'
+    /v1/users:
+        get:
+            tags:
+                - User
+            summary: List the members of the current tenant
+            description: 'Scope: `user:read`'
+            operationId: UserAPI_ListUsers
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                     API documentation for the full operator and predicate reference).
+
+                     Filterable fields:
+                       - `email`: filter by address.
+                       - `status`: filter by status.
+
+                     Example: `field['status'] = 'ACTIVE'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: |-
+                    Maximum number of users to return per page. Defaults to 50 when omitted
+                     or 0; must not exceed 100.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: Opaque pagination token from a previous response.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.user.v1.ListUsersResponse'
     /v1/users/{user_id}:
         get:
             tags:
@@ -7652,6 +7795,183 @@ components:
             description: |-
                 HealthcheckResponse is returned when the service is healthy.
                  An empty response indicates the service is operating normally.
+        admiral.api.invitation.v1.CreateInvitationRequest:
+            type: object
+            properties:
+                email:
+                    type: string
+                    title: email
+                    maxLength: 254
+                    format: email
+                    description: Where the mail goes, and the address the user will be created with.
+                role:
+                    title: role
+                    enum:
+                        - USER_ROLE_ADMIN
+                        - USER_ROLE_MEMBER
+                    description: The role to hold on joining. ADMIN or MEMBER.
+                    $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
+            title: CreateInvitationRequest
+            required:
+                - email
+                - role
+            additionalProperties: false
+            description: CreateInvitationRequest invites one address into the caller's tenant.
+        admiral.api.invitation.v1.CreateInvitationResponse:
+            type: object
+            properties:
+                invitation:
+                    title: invitation
+                    $ref: '#/components/schemas/admiral.api.invitation.v1.Invitation'
+            title: CreateInvitationResponse
+            additionalProperties: false
+            description: CreateInvitationResponse carries the invitation, without its link.
+        admiral.api.invitation.v1.Invitation:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    description: Unique identifier (UUID).
+                    readOnly: true
+                email:
+                    type: string
+                    title: email
+                    description: The address the invitation was sent to.
+                    readOnly: true
+                role:
+                    title: role
+                    description: The role the person holds once they join. ADMIN or MEMBER.
+                    readOnly: true
+                    $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
+                status:
+                    title: status
+                    readOnly: true
+                    $ref: '#/components/schemas/admiral.api.invitation.v1.InvitationStatus'
+                invited_by:
+                    type:
+                        - string
+                        - "null"
+                    title: invited_by
+                    description: |-
+                        The member who issued it (UUID). Absent when it was issued by an operator
+                         from outside the tenant.
+                    readOnly: true
+                created_at:
+                    title: created_at
+                    readOnly: true
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                expires_at:
+                    title: expires_at
+                    description: After this instant the link no longer works.
+                    readOnly: true
+                    $ref: '#/components/schemas/google.protobuf.Timestamp'
+                accepted_at:
+                    oneOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                        - type: "null"
+                    title: accepted_at
+                    description: |-
+                        When it was redeemed, and who it became. Both set together, only on
+                         ACCEPTED.
+                    readOnly: true
+                accepted_user_id:
+                    type:
+                        - string
+                        - "null"
+                    title: accepted_user_id
+                    readOnly: true
+                revoked_at:
+                    oneOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                        - type: "null"
+                    title: revoked_at
+                    description: When it was withdrawn or retired. Only on REVOKED.
+                    readOnly: true
+            title: Invitation
+            additionalProperties: false
+            description: |-
+                Invitation is one person invited into the caller's tenant. Never carries
+                 the link or its token.
+        admiral.api.invitation.v1.InvitationStatus:
+            type: string
+            title: InvitationStatus
+            enum:
+                - INVITATION_STATUS_UNSPECIFIED
+                - INVITATION_STATUS_PENDING
+                - INVITATION_STATUS_ACCEPTED
+                - INVITATION_STATUS_EXPIRED
+                - INVITATION_STATUS_REVOKED
+            description: InvitationStatus is where an invitation is in its life.
+        admiral.api.invitation.v1.ListInvitationsRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                         API documentation for the full operator and predicate reference).
+
+                         Filterable fields:
+                           - `email`: filter by address.
+                           - `status`: filter by lifecycle status.
+
+                         Example: `field['status'] = 'PENDING'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: |-
+                        Maximum number of invitations to return per page. Defaults to 50 when
+                         omitted or 0; must not exceed 100.
+                page_token:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            title: ListInvitationsRequest
+            additionalProperties: false
+            description: ListInvitationsRequest pages through the caller's tenant's invitations.
+        admiral.api.invitation.v1.ListInvitationsResponse:
+            type: object
+            properties:
+                invitations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.invitation.v1.Invitation'
+                    title: invitations
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                    description: Pagination token for the next page. Empty when there are no more results.
+            title: ListInvitationsResponse
+            additionalProperties: false
+            description: ListInvitationsResponse contains a page of invitations.
+        admiral.api.invitation.v1.RevokeInvitationRequest:
+            type: object
+            properties:
+                invitation_id:
+                    type: string
+                    title: invitation_id
+                    format: uuid
+                    description: The invitation (UUID), from CreateInvitation or ListInvitations.
+            title: RevokeInvitationRequest
+            required:
+                - invitation_id
+            additionalProperties: false
+            description: RevokeInvitationRequest names one invitation in the caller's tenant.
+        admiral.api.invitation.v1.RevokeInvitationResponse:
+            type: object
+            properties:
+                invitation:
+                    title: invitation
+                    $ref: '#/components/schemas/admiral.api.invitation.v1.Invitation'
+            title: RevokeInvitationResponse
+            additionalProperties: false
+            description: RevokeInvitationResponse carries the invitation as it now stands.
         admiral.api.run.v1.ApplyRunRequest:
             type: object
             properties:
@@ -9373,6 +9693,55 @@ components:
             title: ListApiKeysResponse
             additionalProperties: false
             description: ListApiKeysResponse contains a page of API key metadata.
+        admiral.api.user.v1.ListUsersRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                         API documentation for the full operator and predicate reference).
+
+                         Filterable fields:
+                           - `email`: filter by address.
+                           - `status`: filter by status.
+
+                         Example: `field['status'] = 'ACTIVE'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: |-
+                        Maximum number of users to return per page. Defaults to 50 when omitted
+                         or 0; must not exceed 100.
+                page_token:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            title: ListUsersRequest
+            additionalProperties: false
+            description: |-
+                ListUsersRequest pages through the members of the caller's tenant. The
+                 tenant is never a parameter: it is the caller's own.
+        admiral.api.user.v1.ListUsersResponse:
+            type: object
+            properties:
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.user.v1.User'
+                    title: users
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                    description: Pagination token for the next page. Empty when there are no more results.
+            title: ListUsersResponse
+            additionalProperties: false
+            description: ListUsersResponse contains a page of members.
         admiral.api.user.v1.RevokeApiKeyRequest:
             type: object
             properties:
@@ -9493,6 +9862,16 @@ components:
                     title: updated_at
                     description: When the user was last updated.
                     $ref: '#/components/schemas/google.protobuf.Timestamp'
+                role:
+                    title: role
+                    description: The user's standing in the tenant.
+                    readOnly: true
+                    $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
+                status:
+                    title: status
+                    description: Whether the user can currently sign in.
+                    readOnly: true
+                    $ref: '#/components/schemas/admiral.api.user.v1.UserStatus'
             title: User
             additionalProperties: false
             description: User represents a user's profile information.
@@ -9505,6 +9884,27 @@ components:
                 avatar_url: "https://avatars.example.com/alex-chen.jpg"
                 created_at: "2025-06-01T09:00:00Z"
                 updated_at: "2025-11-15T11:00:00Z"
+        admiral.api.user.v1.UserRole:
+            type: string
+            title: UserRole
+            enum:
+                - USER_ROLE_UNSPECIFIED
+                - USER_ROLE_OWNER
+                - USER_ROLE_ADMIN
+                - USER_ROLE_MEMBER
+                - USER_ROLE_APP_CREATOR
+            description: |-
+                UserRole is a member's standing in the tenant. The tiers imply one another
+                 downward: an owner can do everything an administrator can, an administrator
+                 everything a member can.
+        admiral.api.user.v1.UserStatus:
+            type: string
+            title: UserStatus
+            enum:
+                - USER_STATUS_UNSPECIFIED
+                - USER_STATUS_ACTIVE
+                - USER_STATUS_SUSPENDED
+            description: UserStatus is whether a member can currently sign in.
         admiral.api.variable.v1.Variable:
             type: object
             properties:
@@ -10224,7 +10624,9 @@ tags:
     - name: Agent Tokens
       description: Manage service access tokens bound to a service account.
     - name: User
-      description: Retrieve user profiles.
+      description: Retrieve user profiles and list the members of your tenant.
+    - name: Invitations
+      description: Invite people into your tenant, see what is outstanding, and withdraw an invitation.
     - name: Personal Access Tokens
       description: Manage personal access tokens for API authentication.
     - name: State Backend

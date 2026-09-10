@@ -151,6 +151,31 @@ tags:
         HealthcheckAPI provides health check operations for monitoring service
         availability. All RPCs in this service are public (no authentication
         required), suitable for load balancer probes.
+    - name: UserAPI
+      description: |-
+        UserAPI provides operations for user profile retrieval, the list of a
+        tenant's members, and management of the caller's own API keys.
+
+        An API key here is bound to the calling user (BINDING_TYPE_USER) and lets them
+        authenticate from scripts, CI pipelines, and other programmatic contexts. Its
+        scopes are selected at creation and it may carry an expiration. Personal
+        access token is the same thing said in user-facing words, and the REST routes
+        and generated documentation keep that name; the contract has one noun.
+    - name: InvitationAPI
+      description: |-
+        InvitationAPI brings a person into the caller's tenant.
+
+        An invitation is its own resource: it has a lifecycle (PENDING, ACCEPTED,
+        EXPIRED, REVOKED) and a user exists only once it is redeemed. Creating one
+        sends the mail; the link in it leads to the sign-in service, which is where
+        the person proves the address and joins. The token in that link never
+        appears on this surface.
+
+        Keyed on the address, one live invitation per address. Creating a second one
+        for the same address retires the first and mails a new link, which is also
+        how "send it again" works; there is no resend procedure.
+
+        Every request acts on the caller's own tenant; none names one.
     - name: SourceAPI
       description: |-
         SourceAPI manages source definitions: pointers to external artifacts that
@@ -177,16 +202,6 @@ tags:
         No request names a tenant. The caller's tenant comes from their token, so
         there is no id to pass and none to get wrong -- and no shape in which a caller
         could name someone else's.
-    - name: UserAPI
-      description: |-
-        UserAPI provides operations for user profile retrieval and management of the
-        caller's own API keys.
-
-        An API key here is bound to the calling user (BINDING_TYPE_USER) and lets them
-        authenticate from scripts, CI pipelines, and other programmatic contexts. Its
-        scopes are selected at creation and it may carry an expiration. Personal
-        access token is the same thing said in user-facing words, and the REST routes
-        and generated documentation keep that name; the contract has one noun.
 consumes:
     - application/json
 produces:
@@ -1888,6 +1903,114 @@ paths:
                   type: string
             tags:
                 - EnvironmentAPI
+    /v1/invitations:
+        get:
+            summary: |-
+                ListInvitations returns a page of the caller's tenant's invitations, every
+                status included, so an administrator can see what is outstanding, what
+                expired and what was withdrawn.
+            description: 'Scope: `user:read`'
+            operationId: InvitationAPI_ListInvitations
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListInvitationsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                    API documentation for the full operator and predicate reference).
+
+                    Filterable fields:
+                      - `email`: filter by address.
+                      - `status`: filter by lifecycle status.
+
+                    Example: `field['status'] = 'PENDING'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  description: |-
+                    Maximum number of invitations to return per page. Defaults to 50 when
+                    omitted or 0; must not exceed 100.
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  description: Opaque pagination token from a previous response.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - InvitationAPI
+        post:
+            summary: |-
+                CreateInvitation invites an address into the caller's tenant for a role and
+                sends the mail. Returns the invitation; the link is only ever in the mail.
+            description: |-
+                A live invitation for the same address is retired and replaced, so a retry
+                or a "send it again" is this same call. ALREADY_EXISTS when the address is
+                already a member. INVALID_ARGUMENT for a role that cannot be granted by
+                invitation: OWNER moves by transfer, and APP_CREATOR is a capability
+                rather than a role.
+
+                Scope: `user:write`
+            operationId: InvitationAPI_CreateInvitation
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateInvitationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: CreateInvitationRequest invites one address into the caller's tenant.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateInvitationRequest'
+            tags:
+                - InvitationAPI
+    /v1/invitations/{invitation_id}/revoke:
+        post:
+            summary: |-
+                RevokeInvitation withdraws a PENDING invitation; the link in the mail stops
+                working at once. Idempotent: revoking one already revoked succeeds and
+                changes nothing. FAILED_PRECONDITION when it was already accepted: there is
+                a member now, and that is a different act.
+            description: 'Scope: `user:write`'
+            operationId: InvitationAPI_RevokeInvitation
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1RevokeInvitationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: invitation_id
+                  description: The invitation (UUID), from CreateInvitation or ListInvitations.
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/InvitationAPIRevokeInvitationBody'
+            tags:
+                - InvitationAPI
     /v1/runs:
         get:
             summary: ListRuns returns a paginated list of runs.
@@ -2603,6 +2726,52 @@ paths:
                     $ref: '#/definitions/v1UserAPIRevokeApiKeyBody'
             tags:
                 - UserAPI
+    /v1/users:
+        get:
+            summary: |-
+                ListUsers returns a page of the caller's tenant's members: everyone who
+                has joined, whatever their role or status. People who have been invited but
+                have not joined are not users yet; they are listed by InvitationAPI.
+            description: 'Scope: `user:read`'
+            operationId: UserAPI_ListUsers
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListUsersResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                    API documentation for the full operator and predicate reference).
+
+                    Filterable fields:
+                      - `email`: filter by address.
+                      - `status`: filter by status.
+
+                    Example: `field['status'] = 'ACTIVE'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  description: |-
+                    Maximum number of users to return per page. Defaults to 50 when omitted
+                    or 0; must not exceed 100.
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  description: Opaque pagination token from a previous response.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - UserAPI
     /v1/users/{user_id}:
         get:
             summary: GetUser retrieves a user's profile by ID.
@@ -3266,6 +3435,9 @@ definitions:
         description: UpdateEnvironmentRequest contains the environment fields to update.
         required:
             - environment
+    InvitationAPIRevokeInvitationBody:
+        type: object
+        description: RevokeInvitationRequest names one invitation in the caller's tenant.
     RunAPIApplyRunBody:
         type: object
         properties:
@@ -4825,6 +4997,25 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The created environment.
         description: CreateEnvironmentResponse contains the newly created environment.
+    v1CreateInvitationRequest:
+        type: object
+        properties:
+            email:
+                type: string
+                description: Where the mail goes, and the address the user will be created with.
+            role:
+                $ref: '#/definitions/v1UserRole'
+                description: The role to hold on joining. ADMIN or MEMBER.
+        description: CreateInvitationRequest invites one address into the caller's tenant.
+        required:
+            - email
+            - role
+    v1CreateInvitationResponse:
+        type: object
+        properties:
+            invitation:
+                $ref: '#/definitions/v1Invitation'
+        description: CreateInvitationResponse carries the invitation, without its link.
     v1CreateRunRequest:
         type: object
         properties:
@@ -5549,6 +5740,75 @@ definitions:
               - `after_*` hooks run ONLY when the corresponding engine command succeeded;
                 they are run-all (individual failures are logged, not fatal).
               - `after_run` always runs (the agent's `finally`). Also run-all.
+    v1Invitation:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier (UUID).
+                readOnly: true
+            email:
+                type: string
+                description: The address the invitation was sent to.
+                readOnly: true
+            role:
+                $ref: '#/definitions/v1UserRole'
+                description: The role the person holds once they join. ADMIN or MEMBER.
+                readOnly: true
+            status:
+                $ref: '#/definitions/v1InvitationStatus'
+                readOnly: true
+            invited_by:
+                type: string
+                description: |-
+                    The member who issued it (UUID). Absent when it was issued by an operator
+                    from outside the tenant.
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+            expires_at:
+                type: string
+                format: date-time
+                description: After this instant the link no longer works.
+                readOnly: true
+            accepted_at:
+                type: string
+                format: date-time
+                description: |-
+                    When it was redeemed, and who it became. Both set together, only on
+                    ACCEPTED.
+                readOnly: true
+            accepted_user_id:
+                type: string
+                readOnly: true
+            revoked_at:
+                type: string
+                format: date-time
+                description: When it was withdrawn or retired. Only on REVOKED.
+                readOnly: true
+        description: |-
+            Invitation is one person invited into the caller's tenant. Never carries
+            the link or its token.
+    v1InvitationStatus:
+        type: string
+        enum:
+            - INVITATION_STATUS_UNSPECIFIED
+            - INVITATION_STATUS_PENDING
+            - INVITATION_STATUS_ACCEPTED
+            - INVITATION_STATUS_EXPIRED
+            - INVITATION_STATUS_REVOKED
+        default: INVITATION_STATUS_UNSPECIFIED
+        description: |-
+            InvitationStatus is where an invitation is in its life.
+
+             - INVITATION_STATUS_UNSPECIFIED: Default value. Must not be used.
+             - INVITATION_STATUS_PENDING: Issued and redeemable until expires_at.
+             - INVITATION_STATUS_ACCEPTED: Redeemed; accepted_user_id names the member it became.
+             - INVITATION_STATUS_EXPIRED: expires_at passed with nobody redeeming it.
+             - INVITATION_STATUS_REVOKED: Withdrawn, or retired because a newer invitation was issued for the same
+            address.
     v1Job:
         type: object
         properties:
@@ -5910,6 +6170,18 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListEnvironmentsResponse contains a page of environments.
+    v1ListInvitationsResponse:
+        type: object
+        properties:
+            invitations:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Invitation'
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListInvitationsResponse contains a page of invitations.
     v1ListRevisionsResponse:
         type: object
         properties:
@@ -5962,6 +6234,18 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListSourcesResponse contains a page of sources.
+    v1ListUsersResponse:
+        type: object
+        properties:
+            users:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1User'
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListUsersResponse contains a page of members.
     v1ListWorkloadEventsResponse:
         type: object
         properties:
@@ -6520,6 +6804,12 @@ definitions:
         description: |-
             RevisionSummary provides aggregate counts of revision statuses within a
             run, enabling quick status display without loading all revisions.
+    v1RevokeInvitationResponse:
+        type: object
+        properties:
+            invitation:
+                $ref: '#/definitions/v1Invitation'
+        description: RevokeInvitationResponse carries the invitation as it now stands.
     v1Run:
         type: object
         properties:
@@ -7140,10 +7430,53 @@ definitions:
                 type: string
                 format: date-time
                 description: When the user was last updated.
+            role:
+                $ref: '#/definitions/v1UserRole'
+                description: The user's standing in the tenant.
+                readOnly: true
+            status:
+                $ref: '#/definitions/v1UserStatus'
+                description: Whether the user can currently sign in.
+                readOnly: true
         description: User represents a user's profile information.
     v1UserAPIRevokeApiKeyBody:
         type: object
         description: RevokeApiKeyRequest identifies an API key to revoke.
+    v1UserRole:
+        type: string
+        enum:
+            - USER_ROLE_UNSPECIFIED
+            - USER_ROLE_OWNER
+            - USER_ROLE_ADMIN
+            - USER_ROLE_MEMBER
+            - USER_ROLE_APP_CREATOR
+        default: USER_ROLE_UNSPECIFIED
+        description: |-
+            UserRole is a member's standing in the tenant. The tiers imply one another
+            downward: an owner can do everything an administrator can, an administrator
+            everything a member can.
+
+             - USER_ROLE_UNSPECIFIED: Default value. Must not be used.
+             - USER_ROLE_OWNER: Owns the tenant. Exactly one per tenant; ownership moves by transfer, never
+            by invitation.
+             - USER_ROLE_ADMIN: Manages members and tenant settings.
+             - USER_ROLE_MEMBER: Ordinary membership.
+             - USER_ROLE_APP_CREATOR: A member who may also create applications. An additive capability rather
+            than a rung on the tier, reported here as the role the platform holds for
+            the user.
+    v1UserStatus:
+        type: string
+        enum:
+            - USER_STATUS_UNSPECIFIED
+            - USER_STATUS_ACTIVE
+            - USER_STATUS_SUSPENDED
+        default: USER_STATUS_UNSPECIFIED
+        description: |-
+            UserStatus is whether a member can currently sign in.
+
+             - USER_STATUS_UNSPECIFIED: Default value. Must not be used.
+             - USER_STATUS_ACTIVE: Can sign in and act.
+             - USER_STATUS_SUSPENDED: Suspended by an administrator; cannot sign in until reactivated.
     v1ValueDiff:
         type: object
         properties:
