@@ -149,12 +149,13 @@ paths:
                             type: object
                             properties:
                                 update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                                          `description`, `labels`.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateAgentRequest
                             additionalProperties: false
                             description: UpdateAgentRequest contains the agent fields to update.
@@ -248,9 +249,10 @@ paths:
                                     minLength: 1
                                     description: Free-text audit reason for the rebind (e.g. "DR rebuild 2026-05-30").
                                 grace_window:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.Duration'
                                     title: grace_window
                                     description: How long the grace window stays open. Defaults to 1h server-side if unset.
-                                    $ref: '#/components/schemas/google.protobuf.Duration'
                             title: ClearAgentIdentityBindingRequest
                             additionalProperties: false
                             description: |-
@@ -490,9 +492,10 @@ paths:
                                          Unique within the agent's keys. Lowercase alphanumeric and hyphens only,
                                          must start with a letter and end with an alphanumeric character (1-63 chars).
                                 expires_at:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                                     title: expires_at
                                     description: Optional expiration time. If unset, the key does not expire.
-                                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                             title: CreateApiKeyRequest
                             required:
                                 - name
@@ -684,12 +687,13 @@ paths:
                             type: object
                             properties:
                                 update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                                          `description`, `labels`.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateApplicationRequest
                             additionalProperties: false
                             description: UpdateApplicationRequest contains the application fields to update.
@@ -850,13 +854,14 @@ paths:
                             type: object
                             properties:
                                 update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                                          `description`, `source_id`, `ref`, `root`, `path`, `labels`. `type` is
                                          immutable and cannot be updated.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateCatalogItemRequest
                             additionalProperties: false
                             description: UpdateCatalogItemRequest contains the catalog item fields to update.
@@ -1061,12 +1066,13 @@ paths:
                             type: object
                             properties:
                                 update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `title`,
                                          `description`.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateChangeSetRequest
                             additionalProperties: false
                             description: UpdateChangeSetRequest updates a change set's mutable metadata.
@@ -1272,12 +1278,13 @@ paths:
                             type: object
                             properties:
                                 change_type:
+                                    allOf:
+                                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                                     not:
                                         enum:
                                             - CHANGE_SET_ENTRY_TYPE_UNSPECIFIED
                                     title: change_type
                                     description: The change type.
-                                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                                 catalog_item_id:
                                     type:
                                         - string
@@ -1315,12 +1322,13 @@ paths:
                                     maxLength: 1024
                                     description: Optional description of the proposed change.
                                 target:
+                                    allOf:
+                                        - $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
                                     title: target
                                     description: |-
                                         Resolved placement for the component, by kind. Required for CREATE (the
                                          component needs a placement); for UPDATE, absent means "no change to
                                          placement."
-                                    $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
                             title: SetEntryRequest
                             required:
                                 - change_type
@@ -1417,9 +1425,10 @@ paths:
                                     minLength: 1
                                     description: The value to set on apply. For COMPLEX type, must be valid JSON.
                                 type:
+                                    allOf:
+                                        - $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                                     title: type
                                     description: How the value should be interpreted. Defaults to STRING when unspecified.
-                                    $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                                 sensitive:
                                     type: boolean
                                     title: sensitive
@@ -1577,12 +1586,13 @@ paths:
                             type: object
                             properties:
                                 update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                                          `description`, `auth_config`, `labels`.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateCredentialRequest
                             additionalProperties: false
                             description: UpdateCredentialRequest contains the credential fields to update.
@@ -1736,12 +1746,13 @@ paths:
                             type: object
                             properties:
                                 update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                                          `description`, `labels`.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateEnvironmentRequest
                             additionalProperties: false
                             description: UpdateEnvironmentRequest contains the environment fields to update.
@@ -2367,12 +2378,13 @@ paths:
                             type: object
                             properties:
                                 update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                                          `description`, `url`, `credential_id`, `source_config`, `labels`.
-                                    $ref: '#/components/schemas/google.protobuf.FieldMask'
                             title: UpdateSourceRequest
                             additionalProperties: false
                             description: UpdateSourceRequest contains the source fields to update.
@@ -2901,13 +2913,15 @@ components:
                     format: uuid
                     description: The job being executed (UUID).
                 phase:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.JobPhase'
                     title: phase
                     description: Current execution phase reported by the worker thread.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.JobPhase'
                 started_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: started_at
                     description: When execution of this job started (when the agent claimed it).
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: ActiveJobInfo
             additionalProperties: false
             description: |-
@@ -2923,12 +2937,13 @@ components:
                     description: Unique identifier for the agent (UUID).
                     readOnly: true
                 kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.AgentKind'
                     title: kind
                     description: |-
                         (IMMUTABLE) The execution plane this agent serves. Set at creation and immutable
                          (CreateAgentRequest.kind carries the not_in:[0] requirement). Not validated
                          here so a partial Agent in UpdateAgentRequest (which omits kind) passes.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.AgentKind'
                 name:
                     type: string
                     title: name
@@ -2956,10 +2971,11 @@ components:
                         Arbitrary key-value labels for organizing and filtering agents
                          (e.g., `{"cloud": "aws", "team": "platform"}`).
                 health_status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.AgentHealthStatus'
                     title: health_status
                     description: Derived health status based on reporting recency and kind-specific signals.
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.agent.v1.AgentHealthStatus'
                 cluster_uid:
                     type: string
                     title: cluster_uid
@@ -2970,40 +2986,32 @@ components:
                          agents.
                     readOnly: true
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this agent (server-populated from key).
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the agent record was created.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: |-
                         When the agent record was last updated via UpdateAgent. Reports/heartbeats
                          do not bump this field; liveness is exposed separately via GetAgentStatus
                          and health_status.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Agent
             additionalProperties: false
             description: |-
                 Agent represents a registered execution agent within a tenant. The `kind`
                  selects its execution plane: TERRAFORM agents claim and execute infrastructure
                  jobs; KUBERNETES agents report Kubernetes telemetry and apply manifest revisions.
-        admiral.api.agent.v1.Agent.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.agent.v1.AgentHealthStatus:
             type: string
             title: AgentHealthStatus
@@ -3057,11 +3065,12 @@ components:
             type: object
             properties:
                 job:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Job'
                     title: job
                     description: |-
                         The job to execute. Absent if no work is available; the agent should wait and
                          poll again after its configured interval.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Job'
             title: ClaimJobResponse
             additionalProperties: false
             description: ClaimJobResponse contains the next job to execute, if any.
@@ -3079,9 +3088,10 @@ components:
                     minLength: 1
                     description: Free-text audit reason for the rebind (e.g. "DR rebuild 2026-05-30").
                 grace_window:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Duration'
                     title: grace_window
                     description: How long the grace window stays open. Defaults to 1h server-side if unset.
-                    $ref: '#/components/schemas/google.protobuf.Duration'
             title: ClearAgentIdentityBindingRequest
             required:
                 - agent_id
@@ -3097,9 +3107,10 @@ components:
                     title: accepted
                     description: Whether the rebind grace window was opened.
                 expires_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: expires_at
                     description: When the grace window expires.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: ClearAgentIdentityBindingResponse
             additionalProperties: false
             description: ClearAgentIdentityBindingResponse acknowledges the rebind window.
@@ -3115,9 +3126,7 @@ components:
                     title: status
                     description: 'Condition status: "True", "False", or "Unknown".'
                 observed_generation:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: observed_generation
                     format: int64
                     description: The .metadata.generation the condition was set against.
@@ -3130,9 +3139,10 @@ components:
                     title: message
                     description: Human-readable detail for the condition's last transition.
                 last_transition_time:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_transition_time
                     description: When the condition last transitioned.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Condition
             additionalProperties: false
             description: |-
@@ -3169,6 +3179,8 @@ components:
             type: object
             properties:
                 kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.AgentKind'
                     not:
                         enum:
                             - AGENT_KIND_UNSPECIFIED
@@ -3176,7 +3188,6 @@ components:
                     description: |-
                         The execution plane this agent serves (TERRAFORM or KUBERNETES). Selects the
                          key's auto-assigned scopes and is immutable.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.AgentKind'
                 name:
                     type: string
                     title: name
@@ -3207,24 +3218,14 @@ components:
                 - name
             additionalProperties: false
             description: CreateAgentRequest contains the parameters for creating a new agent.
-        admiral.api.agent.v1.CreateAgentRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.agent.v1.CreateAgentResponse:
             type: object
             properties:
                 agent:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                     title: agent
                     description: The created agent. Health status will be PENDING until it begins reporting.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                 plain_text_key:
                     type: string
                     title: plain_text_key
@@ -3254,9 +3255,10 @@ components:
                          Unique within the agent's keys. Lowercase alphanumeric and hyphens only,
                          must start with a letter and end with an alphanumeric character (1-63 chars).
                 expires_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: expires_at
                     description: Optional expiration time. If unset, the key does not expire.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: CreateApiKeyRequest
             required:
                 - agent_id
@@ -3269,9 +3271,10 @@ components:
             type: object
             properties:
                 api_key:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                     title: api_key
                     description: The created key metadata. Scopes are auto-assigned from the agent's kind.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                 plain_text_key:
                     type: string
                     title: plain_text_key
@@ -3329,9 +3332,10 @@ components:
             type: object
             properties:
                 agent:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                     title: agent
                     description: The retrieved agent, including its server-derived health_status.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
             title: GetAgentResponse
             additionalProperties: false
             description: GetAgentResponse contains the agent record.
@@ -3350,42 +3354,48 @@ components:
             description: GetAgentStatusRequest identifies an agent whose status to retrieve.
         admiral.api.agent.v1.GetAgentStatusResponse:
             type: object
-            allOf:
-                - properties:
-                    health_status:
-                        title: health_status
-                        description: Server-derived health status based on reporting recency and kind signals.
-                        $ref: '#/components/schemas/admiral.api.agent.v1.AgentHealthStatus'
-                    reported_at:
-                        title: reported_at
-                        description: When the latest report was received.
-                        $ref: '#/components/schemas/google.protobuf.Timestamp'
-                - oneOf:
-                    - type: object
-                      properties:
-                        kubernetes:
-                            title: kubernetes
-                            description: Cluster telemetry snapshot for a KUBERNETES agent.
-                            $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesAgentStatus'
-                      title: kubernetes
-                      required:
-                        - kubernetes
-                    - type: object
-                      properties:
-                        terraform:
-                            title: terraform
-                            description: Capacity snapshot for a TERRAFORM agent.
-                            $ref: '#/components/schemas/admiral.api.agent.v1.TerraformAgentStatus'
-                      title: terraform
-                      required:
-                        - terraform
+            anyOf:
+                - type: object
+                  properties:
+                    kubernetes:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesAgentStatus'
+                        title: kubernetes
+                        description: Cluster telemetry snapshot for a KUBERNETES agent.
+                  title: kubernetes
+                - type: object
+                  properties:
+                    terraform:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.TerraformAgentStatus'
+                        title: terraform
+                        description: Capacity snapshot for a TERRAFORM agent.
+                  title: terraform
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - kubernetes
+                        - required:
+                            - terraform
                     - not:
-                        anyOf:
+                        oneOf:
                             - required:
                                 - kubernetes
                             - required:
                                 - terraform
-            unevaluatedProperties: false
+            properties:
+                health_status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.AgentHealthStatus'
+                    title: health_status
+                    description: Server-derived health status based on reporting recency and kind signals.
+                reported_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: reported_at
+                    description: When the latest report was received.
             title: GetAgentStatusResponse
             description: |-
                 GetAgentStatusResponse contains the server-derived health status and the latest
@@ -3410,9 +3420,10 @@ components:
             type: object
             properties:
                 api_key:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                     title: api_key
                     description: The key metadata. The key secret is never included.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
             title: GetApiKeyResponse
             additionalProperties: false
             description: GetApiKeyResponse contains the requested agent API key metadata.
@@ -3433,9 +3444,10 @@ components:
             type: object
             properties:
                 bundle:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.JobBundle'
                     title: bundle
                     description: The artifact bundle with everything needed to execute the operation.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.JobBundle'
             title: GetJobBundleResponse
             additionalProperties: false
             description: GetJobBundleResponse contains the rendered artifacts for execution.
@@ -3456,9 +3468,10 @@ components:
             type: object
             properties:
                 bundle:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.RevisionBundle'
                     title: bundle
                     description: The artifact bundle with everything needed to apply the workload.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.RevisionBundle'
             title: GetRevisionBundleResponse
             additionalProperties: false
             description: GetRevisionBundleResponse contains the rendered manifests for the revision.
@@ -3485,9 +3498,10 @@ components:
             type: object
             properties:
                 workload:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Workload'
                     title: workload
                     description: The workload with full detail.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Workload'
             title: GetWorkloadResponse
             additionalProperties: false
             description: GetWorkloadResponse contains the workload with full detail.
@@ -3495,9 +3509,10 @@ components:
             type: object
             properties:
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.TerraformAgentStatus'
                     title: status
                     description: Current capacity and telemetry metrics.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.TerraformAgentStatus'
                 instance_id:
                     type: string
                     title: instance_id
@@ -3556,6 +3571,8 @@ components:
                         Optional human-friendly name used in log lines (e.g., "vault-login"). Not
                          required to be unique.
                 interpreter:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.HookInterpreter'
                     not:
                         enum:
                             - HOOK_INTERPRETER_UNSPECIFIED
@@ -3563,7 +3580,6 @@ components:
                     description: |-
                         Required. Which interpreter runs `script`. Server populates from the hook
                          config; UNSPECIFIED is rejected.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.HookInterpreter'
             title: Hook
             additionalProperties: false
             description: |-
@@ -3661,25 +3677,30 @@ components:
                     format: uuid
                     description: The run this job belongs to (UUID). Denormalized for convenience.
                 job_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.JobType'
                     title: job_type
                     description: The type of infrastructure operation to execute.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.JobType'
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
                     title: status
                     description: Current lifecycle status of the job.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
                 started_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: started_at
                     description: When the agent started executing the job.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 completed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: completed_at
                     description: When the job finished (succeeded, failed, or canceled).
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the job was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Job
             additionalProperties: false
             description: |-
@@ -3725,6 +3746,8 @@ components:
                         Backend configuration (JSON-encoded). Contains the backend type and its
                          configuration for state storage. Engine-agnostic in shape.
                 engine:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Engine'
                     not:
                         enum:
                             - ENGINE_UNSPECIFIED
@@ -3732,7 +3755,6 @@ components:
                     description: |-
                         Required. The infrastructure-as-code engine the agent should execute. Server
                          populates from the catalog item's declared engine; UNSPECIFIED is rejected.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Engine'
                 engine_version:
                     type: string
                     title: engine_version
@@ -3756,39 +3778,18 @@ components:
                          by the preceding plan job, passed to `apply <plan_file>` so the exact reviewed
                          plan is applied. Empty for plan jobs.
                 hooks:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Hooks'
                     title: hooks
                     description: |-
                         Shell-script hooks that run before and after each engine phase. The agent
                          invokes each hook via its selected interpreter in the execution directory.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Hooks'
             title: JobBundle
             additionalProperties: false
             description: |-
                 JobBundle contains everything a TERRAFORM agent needs to execute an
                  infrastructure operation. Fetched separately from ClaimJob to keep the claim
                  response light.
-        admiral.api.agent.v1.JobBundle.ProviderConfigsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: ProviderConfigsEntry
-            additionalProperties: false
-        admiral.api.agent.v1.JobBundle.VariablesEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: VariablesEntry
-            additionalProperties: false
         admiral.api.agent.v1.JobPhase:
             type: string
             title: JobPhase
@@ -3870,30 +3871,22 @@ components:
                     format: int32
                     description: Number of pods in Failed phase.
                 cpu_capacity_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_capacity_millicores
                     format: int64
                     description: Total CPU capacity across all nodes, in millicores.
                 cpu_used_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_used_millicores
                     format: int64
                     description: Current CPU usage across all nodes, in millicores.
                 memory_capacity_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_capacity_bytes
                     format: int64
                     description: Total memory capacity across all nodes, in bytes.
                 memory_used_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_used_bytes
                     format: int64
                     description: Current memory usage across all nodes, in bytes.
@@ -4240,9 +4233,10 @@ components:
             type: object
             properties:
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesAgentStatus'
                     title: status
                     description: Cluster-level telemetry snapshot.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesAgentStatus'
                 workloads:
                     type: array
                     items:
@@ -4256,9 +4250,10 @@ components:
                     title: events
                     description: Kubernetes events observed since the last push.
                 reported_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: reported_at
                     description: When the agent generated this report.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 cluster_uid:
                     type: string
                     title: cluster_uid
@@ -4309,11 +4304,12 @@ components:
                     format: uuid
                     description: The job being reported on (UUID).
                 result:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
                     title: result
                     description: |-
                         The execution report with status, normalized summary, outputs, transcript,
                          and error information.
-                    $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
             title: ReportJobResultRequest
             required:
                 - job_id
@@ -4339,9 +4335,10 @@ components:
                     format: uuid
                     description: The revision being reported on (UUID).
                 result:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
                     title: result
                     description: The result of applying the revision.
-                    $ref: '#/components/schemas/admiral.api.run.v1.ExecutionReport'
             title: ReportRevisionResultRequest
             required:
                 - revision_id
@@ -4370,9 +4367,10 @@ components:
                     title: metrics
                     description: Per-pod metric samples collected since the last push.
                 reported_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: reported_at
                     description: When the agent generated this report.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 cluster_uid:
                     type: string
                     title: cluster_uid
@@ -4411,9 +4409,10 @@ components:
                     title: workloads
                     description: Per-workload status snapshots.
                 reported_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: reported_at
                     description: When the agent generated this report.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: ReportWorkloadStatusRequest
             additionalProperties: false
             description: |-
@@ -4453,13 +4452,15 @@ components:
                     title: name
                     description: Object name.
                 sync:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.SyncState'
                     title: sync
                     description: Whether this resource matches the bundle.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.SyncState'
                 health:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadHealthStatus'
                     title: health
                     description: Derived health of this resource.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadHealthStatus'
                 message:
                     type: string
                     title: message
@@ -4532,9 +4533,10 @@ components:
             type: object
             properties:
                 api_key:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                     title: api_key
                     description: The key metadata with updated status.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
             title: RevokeApiKeyResponse
             additionalProperties: false
             description: RevokeApiKeyResponse contains the revoked agent API key metadata.
@@ -4587,18 +4589,20 @@ components:
             type: object
             properties:
                 agent:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                     title: agent
                     description: |-
                         The agent with updated fields. The `id` field is required. Only fields named
                          in `update_mask` are updated. `kind` is immutable and cannot be updated.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                          `description`, `labels`.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateAgentRequest
             required:
                 - agent
@@ -4608,9 +4612,10 @@ components:
             type: object
             properties:
                 agent:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                     title: agent
                     description: The updated agent.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
             title: UpdateAgentResponse
             additionalProperties: false
             description: UpdateAgentResponse contains the updated agent.
@@ -4645,9 +4650,10 @@ components:
                         title: value
                     description: Kubernetes labels on the workload.
                 health_status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadHealthStatus'
                     title: health_status
                     description: Derived health status.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadHealthStatus'
                 status_reason:
                     type: string
                     title: status_reason
@@ -4668,44 +4674,32 @@ components:
                     format: int32
                     description: Number of available replicas.
                 cpu_requests_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_requests_millicores
                     format: int64
                     description: CPU requests across all containers, in millicores.
                 cpu_limits_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_limits_millicores
                     format: int64
                     description: CPU limits across all containers, in millicores.
                 cpu_used_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_used_millicores
                     format: int64
                     description: Current CPU usage across all containers, in millicores.
                 memory_requests_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_requests_bytes
                     format: int64
                     description: Memory requests across all containers, in bytes.
                 memory_limits_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_limits_bytes
                     format: int64
                     description: Memory limits across all containers, in bytes.
                 memory_used_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_used_bytes
                     format: int64
                     description: Current memory usage across all containers, in bytes.
@@ -4716,9 +4710,10 @@ components:
                     title: containers
                     description: Status of individual containers in this workload.
                 last_updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_updated_at
                     description: When this workload's status was last updated.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 uid:
                     type: string
                     title: uid
@@ -4726,17 +4721,16 @@ components:
                         Rich detail (populated by GetWorkload; omitted from ListWorkloads). Mirrors
                          the agent-reported WorkloadStatus.
                 generation:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: generation
                     format: int64
                 revision_id:
                     type: string
                     title: revision_id
                 sync:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.SyncState'
                     title: sync
-                    $ref: '#/components/schemas/admiral.api.agent.v1.SyncState'
                 suspended:
                     type: boolean
                     title: suspended
@@ -4751,11 +4745,13 @@ components:
                         $ref: '#/components/schemas/admiral.api.agent.v1.Condition'
                     title: conditions
                 observed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: observed_at
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 last_reconciled_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_reconciled_at
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 last_applied_revision:
                     type: string
                     title: last_applied_revision
@@ -4764,17 +4760,6 @@ components:
             description: |-
                 Workload represents a Kubernetes workload (Deployment, StatefulSet, DaemonSet,
                  etc.) as observed by a KUBERNETES agent.
-        admiral.api.agent.v1.Workload.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.agent.v1.WorkloadEvent:
             type: object
             properties:
@@ -4791,21 +4776,24 @@ components:
                     title: reason
                     description: Short machine-readable reason (e.g., "BackOff", "FailedScheduling").
                 regarding:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ObjectReference'
                     title: regarding
                     description: The Kubernetes object this event is about.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.ObjectReference'
                 message:
                     type: string
                     title: message
                     description: Human-readable event message.
                 first_seen:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: first_seen
                     description: When this event was first observed.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 last_seen:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_seen
                     description: When this event was most recently observed.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 count:
                     type: integer
                     title: count
@@ -4840,39 +4828,39 @@ components:
             type: object
             properties:
                 application:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ApplicationRef'
                     title: application
                     description: The Application that owns the pod's top-level controller.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.ApplicationRef'
                 pod:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ObjectReference'
                     title: pod
                     description: The pod this sample was taken from.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.ObjectReference'
                 node:
                     type: string
                     title: node
                     description: Name of the node the pod is scheduled on.
                 cpu_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_millicores
                     format: int64
                     description: CPU usage summed across all containers in the pod, in millicores.
                 memory_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_bytes
                     format: int64
                     description: Memory usage summed across all containers in the pod, in bytes.
                 window:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Duration'
                     title: window
                     description: The metrics-server scrape window this sample represents (typically ~30s).
-                    $ref: '#/components/schemas/google.protobuf.Duration'
                 timestamp:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: timestamp
                     description: When metrics-server recorded the sample.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: WorkloadMetric
             additionalProperties: false
             description: |-
@@ -4917,51 +4905,40 @@ components:
                     format: int32
                     description: Number of available replicas.
                 cpu_requests_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_requests_millicores
                     format: int64
                     description: CPU requests across all containers, in millicores.
                 cpu_limits_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_limits_millicores
                     format: int64
                     description: CPU limits across all containers, in millicores.
                 cpu_used_millicores:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: cpu_used_millicores
                     format: int64
                     description: Current CPU usage across all containers, in millicores.
                 memory_requests_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_requests_bytes
                     format: int64
                     description: Memory requests across all containers, in bytes.
                 memory_limits_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_limits_bytes
                     format: int64
                     description: Memory limits across all containers, in bytes.
                 memory_used_bytes:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: memory_used_bytes
                     format: int64
                     description: Current memory usage across all containers, in bytes.
                 health_status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadHealthStatus'
                     title: health_status
                     description: Derived health status.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadHealthStatus'
                 containers:
                     type: array
                     items:
@@ -4975,9 +4952,7 @@ components:
                         Kubernetes object UID. Stable identity across rename (rename is delete +
                          recreate, so a changed UID means a different workload).
                 generation:
-                    type:
-                        - integer
-                        - string
+                    type: string
                     title: generation
                     format: int64
                     description: The .metadata.generation observed for this workload.
@@ -4986,9 +4961,10 @@ components:
                     title: revision_id
                     description: The Admiral revision this workload was reconciled against.
                 sync:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.SyncState'
                     title: sync
                     description: Whether the live cluster state matches the bundle.
-                    $ref: '#/components/schemas/admiral.api.agent.v1.SyncState'
                 suspended:
                     type: boolean
                     title: suspended
@@ -5006,13 +4982,15 @@ components:
                     title: conditions
                     description: Typed observations on the workload as a whole.
                 observed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: observed_at
                     description: When the agent took this observation.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 last_reconciled_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_reconciled_at
                     description: When the workload was last reconciled.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 last_applied_revision:
                     type: string
                     title: last_applied_revision
@@ -5022,17 +5000,6 @@ components:
             description: |-
                 WorkloadStatus is the agent-reported status for a single workload within a
                  telemetry push payload.
-        admiral.api.agent.v1.WorkloadStatus.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.application.v1.Application:
             type: object
             properties:
@@ -5071,20 +5038,23 @@ components:
                         Arbitrary key-value labels for organizing and filtering applications
                          (e.g., `{"team": "logistics", "tier": "critical"}`).
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this application (server-populated from token).
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the application was created.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the application was last updated.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Application
             additionalProperties: false
             description: |-
@@ -5104,17 +5074,6 @@ components:
                     email: "alex.chen@example.com"
                 created_at: "2025-09-15T10:30:00Z"
                 updated_at: "2025-11-02T14:22:00Z"
-        admiral.api.application.v1.Application.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.application.v1.CreateApplicationRequest:
             type: object
             properties:
@@ -5147,24 +5106,14 @@ components:
                 - name
             additionalProperties: false
             description: CreateApplicationRequest contains the parameters for creating a new application.
-        admiral.api.application.v1.CreateApplicationRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.application.v1.CreateApplicationResponse:
             type: object
             properties:
                 application:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
                     title: application
                     description: The created application.
-                    $ref: '#/components/schemas/admiral.api.application.v1.Application'
             title: CreateApplicationResponse
             additionalProperties: false
             description: CreateApplicationResponse contains the newly created application.
@@ -5209,9 +5158,10 @@ components:
             type: object
             properties:
                 application:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
                     title: application
                     description: The retrieved application.
-                    $ref: '#/components/schemas/admiral.api.application.v1.Application'
             title: GetApplicationResponse
             additionalProperties: false
             description: GetApplicationResponse contains the application record.
@@ -5267,18 +5217,20 @@ components:
             type: object
             properties:
                 application:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
                     title: application
                     description: |-
                         The application with updated fields. Its `id` identifies the application;
                          only fields named in `update_mask` are applied.
-                    $ref: '#/components/schemas/admiral.api.application.v1.Application'
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                          `description`, `labels`.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateApplicationRequest
             required:
                 - application
@@ -5288,9 +5240,10 @@ components:
             type: object
             properties:
                 application:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
                     title: application
                     description: The updated application.
-                    $ref: '#/components/schemas/admiral.api.application.v1.Application'
             title: UpdateApplicationResponse
             additionalProperties: false
             description: UpdateApplicationResponse contains the updated application.
@@ -5321,11 +5274,12 @@ components:
                         Optional longer-form description of the catalog item's purpose
                          (e.g., "Standard VPC module for billing workloads").
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
                     title: type
                     description: |-
                         (IMMUTABLE) The content type: what this item contains and how it should be executed.
                          Immutable after creation.
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
                 source_id:
                     type: string
                     title: source_id
@@ -5372,20 +5326,23 @@ components:
                     description: Display name of the parent source. Denormalized for display.
                     readOnly: true
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this catalog item (server-populated from token).
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the catalog item was created.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the catalog item was last updated.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: CatalogItem
             additionalProperties: false
             description: |-
@@ -5401,17 +5358,6 @@ components:
                  A catalog item is a starting point: components are instantiated FROM it as
                  self-contained copies (copy-not-link), so editing or deleting an item never
                  mutates already-placed components.
-        admiral.api.catalog.v1.CatalogItem.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.catalog.v1.CatalogItemType:
             type: string
             title: CatalogItemType
@@ -5445,12 +5391,13 @@ components:
                     maxLength: 1024
                     description: Optional description of the catalog item's purpose.
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
                     not:
                         enum:
                             - CATALOG_ITEM_TYPE_UNSPECIFIED
                     title: type
                     description: 'The content type: what this item contains and how it should be executed.'
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
                 source_id:
                     type: string
                     title: source_id
@@ -5496,24 +5443,14 @@ components:
                 - source_id
             additionalProperties: false
             description: CreateCatalogItemRequest contains the parameters for creating a new item.
-        admiral.api.catalog.v1.CreateCatalogItemRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.catalog.v1.CreateCatalogItemResponse:
             type: object
             properties:
                 catalog_item:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
                     title: catalog_item
                     description: The created catalog item.
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
             title: CreateCatalogItemResponse
             additionalProperties: false
             description: CreateCatalogItemResponse contains the newly created catalog item.
@@ -5552,9 +5489,10 @@ components:
             type: object
             properties:
                 catalog_item:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
                     title: catalog_item
                     description: The retrieved catalog item.
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
             title: GetCatalogItemResponse
             additionalProperties: false
             description: GetCatalogItemResponse contains the catalog item record.
@@ -5644,9 +5582,10 @@ components:
                         Content-addressing digest of the fetched content (e.g., "sha1:<commit>",
                          "sha256:<hash>").
                 catalog_item:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
                     title: catalog_item
                     description: The catalog item that was resolved, with current field values.
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
             title: ResolveCatalogItemResponse
             additionalProperties: false
             description: |-
@@ -5656,19 +5595,21 @@ components:
             type: object
             properties:
                 catalog_item:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
                     title: catalog_item
                     description: |-
                         The catalog item with updated fields. Its `id` identifies the item; only
                          fields named in `update_mask` are applied.
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                          `description`, `source_id`, `ref`, `root`, `path`, `labels`. `type` is
                          immutable and cannot be updated.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateCatalogItemRequest
             required:
                 - catalog_item
@@ -5678,9 +5619,10 @@ components:
             type: object
             properties:
                 catalog_item:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
                     title: catalog_item
                     description: The updated catalog item.
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
             title: UpdateCatalogItemResponse
             additionalProperties: false
             description: UpdateCatalogItemResponse contains the updated catalog item.
@@ -5752,10 +5694,11 @@ components:
                     description: The environment this change set targets (UUID).
                     readOnly: true
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetStatus'
                     title: status
                     description: Lifecycle status of this change set.
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetStatus'
                 copied_from_id:
                     type: string
                     title: copied_from_id
@@ -5820,24 +5763,27 @@ components:
                     description: Display name of the parent environment. Denormalized for display.
                     readOnly: true
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: |-
                         The user or agent that created this change set
                          (server-populated from token).
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the change set was created.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: |-
                         When the change set was last updated (metadata, entries, variable
                          entries, or status).
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: ChangeSet
             additionalProperties: false
             description: |-
@@ -5908,9 +5854,10 @@ components:
                          created. For UPDATE/DESTROY/ORPHAN entries, this matches an existing
                          component in the application.
                 change_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                     title: change_type
                     description: The change type.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                 catalog_item_id:
                     type:
                         - string
@@ -5965,20 +5912,23 @@ components:
                         Display name of the referenced catalog item. Denormalized for display.
                          Read-only; ignored on writes.
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the entry was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the entry was last replaced.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 target:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
                     title: target
                     description: |-
                         Resolved placement for the component: the agent it deploys on (plus a
                          namespace for WORKLOAD components). Copied onto the component at deploy
                          time, and the component is the source of truth for placement at runtime.
-                    $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
             title: ChangeSetEntry
             additionalProperties: false
             description: |-
@@ -6041,19 +5991,21 @@ components:
                         The value to set on apply. Absent means "delete this key on apply"
                          (tombstone). Masked in responses when `sensitive` is true.
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                     title: type
                     description: |-
                         How the value should be interpreted by the rendering engine and
                          displayed in the UI.
-                    $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                 sensitive:
                     type: boolean
                     title: sensitive
                     description: When true, the value is encrypted at rest and masked in API responses.
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the variable entry was created or last replaced.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: ChangeSetVariableEntry
             additionalProperties: false
             description: |-
@@ -6103,9 +6055,10 @@ components:
             type: object
             properties:
                 change_set:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
                     description: The new change set with `copied_from_id` set to the source.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
             title: CopyChangeSetResponse
             additionalProperties: false
             description: CopyChangeSetResponse contains the newly created change set.
@@ -6144,11 +6097,12 @@ components:
             type: object
             properties:
                 change_set:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
                     description: |-
                         The created change set. Status is OPEN; entries and variable entries
                          are empty.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
             title: CreateChangeSetResponse
             additionalProperties: false
             description: CreateChangeSetResponse contains the newly created change set.
@@ -6171,11 +6125,12 @@ components:
             type: object
             properties:
                 diff:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetDiff'
                     title: diff
                     description: |-
                         The structural diff. Empty `entries`, `variables`, and `downstream` lists
                          mean the change set proposes no changes relative to current state.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetDiff'
             title: DiffChangeSetResponse
             additionalProperties: false
             description: DiffChangeSetResponse contains the computed diff.
@@ -6210,9 +6165,10 @@ components:
             type: object
             properties:
                 change_set:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
                     description: The change set with status set to DISCARDED.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
             title: DiscardChangeSetResponse
             additionalProperties: false
             description: DiscardChangeSetResponse contains the discarded change set.
@@ -6245,9 +6201,10 @@ components:
                     title: component_name
                     description: Component name this entry targets.
                 change_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                     title: change_type
                     description: Change kind.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                 catalog_item:
                     oneOf:
                         - $ref: '#/components/schemas/admiral.api.changeset.v1.CatalogItemVersionDiff'
@@ -6316,9 +6273,10 @@ components:
             type: object
             properties:
                 change_set:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
                     description: The change set, with `entries` and `variable_entries` populated.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
             title: GetChangeSetResponse
             additionalProperties: false
             description: GetChangeSetResponse contains the change set with all entries inline.
@@ -6431,9 +6389,10 @@ components:
             type: object
             properties:
                 variable_entry:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetVariableEntry'
                     title: variable_entry
                     description: The tombstone entry (value absent, marking the key for deletion on apply).
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetVariableEntry'
             title: RemoveVariableResponse
             additionalProperties: false
             description: RemoveVariableResponse contains the tombstone variable entry.
@@ -6455,12 +6414,13 @@ components:
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                     description: Component name (stable identifier set at creation). Required.
                 change_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                     not:
                         enum:
                             - CHANGE_SET_ENTRY_TYPE_UNSPECIFIED
                     title: change_type
                     description: The change type.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntryType'
                 catalog_item_id:
                     type:
                         - string
@@ -6498,12 +6458,13 @@ components:
                     maxLength: 1024
                     description: Optional description of the proposed change.
                 target:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
                     title: target
                     description: |-
                         Resolved placement for the component, by kind. Required for CREATE (the
                          component needs a placement); for UPDATE, absent means "no change to
                          placement."
-                    $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
             title: SetEntryRequest
             required:
                 - change_set_id
@@ -6515,9 +6476,10 @@ components:
             type: object
             properties:
                 entry:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntry'
                     title: entry
                     description: The entry as recorded on the change set.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetEntry'
             title: SetEntryResponse
             additionalProperties: false
             description: SetEntryResponse contains the created or replaced entry.
@@ -6544,9 +6506,10 @@ components:
                     minLength: 1
                     description: The value to set on apply. For COMPLEX type, must be valid JSON.
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                     title: type
                     description: How the value should be interpreted. Defaults to STRING when unspecified.
-                    $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                 sensitive:
                     type: boolean
                     title: sensitive
@@ -6562,9 +6525,10 @@ components:
             type: object
             properties:
                 variable_entry:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetVariableEntry'
                     title: variable_entry
                     description: The variable entry as recorded on the change set.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetVariableEntry'
             title: SetVariableResponse
             additionalProperties: false
             description: SetVariableResponse contains the created or replaced variable entry.
@@ -6572,18 +6536,20 @@ components:
             type: object
             properties:
                 change_set:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
                     description: |-
                         The change set with updated fields. Its `id` identifies the change set;
                          only fields named in `update_mask` are applied.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `title`,
                          `description`.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateChangeSetRequest
             required:
                 - change_set
@@ -6593,9 +6559,10 @@ components:
             type: object
             properties:
                 change_set:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
                     description: The updated change set.
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
             title: UpdateChangeSetResponse
             additionalProperties: false
             description: |-
@@ -6609,9 +6576,10 @@ components:
                     title: key
                     description: Key inside the values_template. Always `values_template` today.
                 change_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.DiffChangeType'
                     title: change_type
                     description: The change type (ADDED, CHANGED, REMOVED).
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.DiffChangeType'
                 old:
                     type:
                         - string
@@ -6645,9 +6613,10 @@ components:
                     title: key
                     description: The variable key.
                 change_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.DiffChangeType'
                     title: change_type
                     description: The change type (ADDED, CHANGED, REMOVED).
-                    $ref: '#/components/schemas/admiral.api.changeset.v1.DiffChangeType'
                 old:
                     type:
                         - string
@@ -6711,12 +6680,13 @@ components:
                         Optional description of the component's purpose
                          (e.g., "Primary VPC for all environments" or "Redis cache layer").
                 kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.component.v1.ComponentKind'
                     title: kind
                     description: |-
                         Whether this is an infrastructure or workload component. Derived from
                          the referenced module's type when the component is created, but stored
                          explicitly for filtering and to determine execution behavior.
-                    $ref: '#/components/schemas/admiral.api.component.v1.ComponentKind'
                 deletion_protection:
                     type: boolean
                     title: deletion_protection
@@ -6787,17 +6757,20 @@ components:
 
                          See ComponentOutput for examples.
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this component (server-populated from token).
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the component was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the component was last updated.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 inputs:
                     type: array
                     items:
@@ -6808,12 +6781,13 @@ components:
                          Additive: the edge spec the impact-scoping work reads. Binding still flows
                          through values_template today.
                 target:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
                     title: target
                     description: |-
                         Resolved placement: where this component deploys. Copied onto the component
                          from the reviewed Change at deploy time (copy-not-link); the run snapshots
                          it onto the revision. Exactly one shape is populated, by `kind`.
-                    $ref: '#/components/schemas/admiral.api.component.v1.ComponentTarget'
             title: Component
             additionalProperties: false
             description: |-
@@ -6973,40 +6947,46 @@ components:
                  component (it is the source of truth at runtime, not the environment).
         admiral.api.credential.v1.AuthConfig:
             type: object
-            oneOf:
+            anyOf:
                 - type: object
                   properties:
                     basic_auth:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.credential.v1.BasicAuth'
                         title: basic_auth
-                        $ref: '#/components/schemas/admiral.api.credential.v1.BasicAuth'
                   title: basic_auth
-                  required:
-                    - basic_auth
                 - type: object
                   properties:
                     bearer_token:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.credential.v1.BearerTokenAuth'
                         title: bearer_token
-                        $ref: '#/components/schemas/admiral.api.credential.v1.BearerTokenAuth'
                   title: bearer_token
-                  required:
-                    - bearer_token
                 - type: object
                   properties:
                     ssh_key:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.credential.v1.SSHKeyAuth'
                         title: ssh_key
-                        $ref: '#/components/schemas/admiral.api.credential.v1.SSHKeyAuth'
                   title: ssh_key
-                  required:
-                    - ssh_key
-                - not:
-                    anyOf:
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
                         - required:
                             - basic_auth
                         - required:
                             - bearer_token
                         - required:
                             - ssh_key
-            unevaluatedProperties: false
+                    - not:
+                        oneOf:
+                            - required:
+                                - basic_auth
+                            - required:
+                                - bearer_token
+                            - required:
+                                - ssh_key
             title: AuthConfig
             description: |-
                 AuthConfig is the polymorphic auth configuration attached to a Credential.
@@ -7071,16 +7051,18 @@ components:
                     maxLength: 1024
                     description: Optional description of the credential's purpose.
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
                     not:
                         enum:
                             - CREDENTIAL_TYPE_UNSPECIFIED
                     title: type
                     description: The type of external system and authentication mechanism.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
                 auth_config:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.AuthConfig'
                     title: auth_config
                     description: Auth material corresponding to `type`.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.AuthConfig'
                 labels:
                     type: object
                     title: labels
@@ -7097,24 +7079,14 @@ components:
                 - auth_config
             additionalProperties: false
             description: CreateCredentialRequest contains the parameters for creating a new credential.
-        admiral.api.credential.v1.CreateCredentialRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.credential.v1.CreateCredentialResponse:
             type: object
             properties:
                 credential:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
                     description: The created credential. Auth config sensitive fields are masked.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
             title: CreateCredentialResponse
             additionalProperties: false
             description: CreateCredentialResponse contains the newly created credential.
@@ -7145,17 +7117,19 @@ components:
                         Optional longer-form description of what this credential is for
                          (e.g., "Read-only access to the platform team's GitHub org").
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
                     title: type
                     description: |-
                         (IMMUTABLE) The type of external system and authentication mechanism.
                          Immutable after creation.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
                 auth_config:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.AuthConfig'
                     title: auth_config
                     description: |-
                         Auth material corresponding to `type`. Sensitive fields are write-only
                          and masked in responses.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.AuthConfig'
                 labels:
                     type: object
                     title: labels
@@ -7168,20 +7142,23 @@ components:
                         Arbitrary key-value labels for organizing and filtering credentials
                          (e.g., `{"team": "platform", "environment": "prod"}`).
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this credential (server-populated from token).
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the credential was created.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the credential was last updated.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Credential
             additionalProperties: false
             description: |-
@@ -7191,17 +7168,6 @@ components:
 
                  Sensitive fields within auth_config are write-only: accepted on create and
                  update but never returned in API responses.
-        admiral.api.credential.v1.Credential.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.credential.v1.CredentialType:
             type: string
             title: CredentialType
@@ -7253,9 +7219,10 @@ components:
             type: object
             properties:
                 credential:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
                     description: The retrieved credential. Sensitive fields are masked.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
             title: GetCredentialResponse
             additionalProperties: false
             description: GetCredentialResponse contains the credential record.
@@ -7332,6 +7299,8 @@ components:
             type: object
             properties:
                 credential:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
                     description: |-
                         The credential with updated fields.
@@ -7339,14 +7308,14 @@ components:
 
                          When updating auth_config, the entire auth config is replaced.
                          Omitting auth_config from the update_mask leaves credentials unchanged.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                          `description`, `auth_config`, `labels`.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateCredentialRequest
             required:
                 - credential
@@ -7356,9 +7325,10 @@ components:
             type: object
             properties:
                 credential:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
                     description: The updated credential. Sensitive fields are masked.
-                    $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
             title: UpdateCredentialResponse
             additionalProperties: false
             description: UpdateCredentialResponse contains the updated credential.
@@ -7400,24 +7370,14 @@ components:
                 - name
             additionalProperties: false
             description: CreateEnvironmentRequest contains the parameters for creating a new environment.
-        admiral.api.environment.v1.CreateEnvironmentRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.environment.v1.CreateEnvironmentResponse:
             type: object
             properties:
                 environment:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
                     title: environment
                     description: The created environment.
-                    $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
             title: CreateEnvironmentResponse
             additionalProperties: false
             description: CreateEnvironmentResponse contains the newly created environment.
@@ -7501,27 +7461,31 @@ components:
                          to distinguish "clean" from "never deployed").
                     readOnly: true
                 last_deployed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_deployed_at
                     description: |-
                         When the last successful run for this environment completed. Absent if
                          no successful run has occurred yet.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this environment (server-populated from token).
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the environment was created.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the environment was last updated.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Environment
             additionalProperties: false
             description: |-
@@ -7544,17 +7508,6 @@ components:
                     email: "alex.chen@example.com"
                 created_at: "2025-09-15T11:00:00Z"
                 updated_at: "2025-11-02T14:30:00Z"
-        admiral.api.environment.v1.Environment.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.environment.v1.EnvironmentComponent:
             type: object
             properties:
@@ -7563,11 +7516,12 @@ components:
                     title: name
                     description: Component name (stable identifier set at creation).
                 catalog_item_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
                     title: catalog_item_type
                     description: |-
                         Engine type the component renders against (TERRAFORM, HELM, etc),
                          denormalized from the component's own deploy spec.
-                    $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
                 ref:
                     type: string
                     title: ref
@@ -7579,15 +7533,17 @@ components:
                         ID of the last-succeeded revision for this component in this env, if
                          any (UUID). Empty when the component has never reached SUCCEEDED.
                 last_revision_status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.RevisionStatus'
                     title: last_revision_status
                     description: |-
                         Status of the last revision (SUCCEEDED when populated). UNSPECIFIED
                          means the component has no last-succeeded revision yet.
-                    $ref: '#/components/schemas/admiral.api.run.v1.RevisionStatus'
                 last_deployed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_deployed_at
                     description: When the last-succeeded revision completed.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: EnvironmentComponent
             additionalProperties: false
             description: |-
@@ -7612,9 +7568,10 @@ components:
             type: object
             properties:
                 environment:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
                     title: environment
                     description: The retrieved environment.
-                    $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
             title: GetEnvironmentResponse
             additionalProperties: false
             description: GetEnvironmentResponse contains the environment record.
@@ -7761,18 +7718,20 @@ components:
             type: object
             properties:
                 environment:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
                     title: environment
                     description: |-
                         The environment with updated fields.
                          Only fields specified in `update_mask` are updated.
-                    $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                          `description`, `labels`.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateEnvironmentRequest
             required:
                 - environment
@@ -7782,9 +7741,10 @@ components:
             type: object
             properties:
                 environment:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
                     title: environment
                     description: The updated environment.
-                    $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
             title: UpdateEnvironmentResponse
             additionalProperties: false
             description: UpdateEnvironmentResponse contains the updated environment.
@@ -7805,12 +7765,13 @@ components:
                     format: email
                     description: Where the mail goes, and the address the user will be created with.
                 role:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
                     title: role
                     enum:
                         - USER_ROLE_ADMIN
                         - USER_ROLE_MEMBER
                     description: The role to hold on joining. ADMIN or MEMBER.
-                    $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
             title: CreateInvitationRequest
             required:
                 - email
@@ -7821,8 +7782,9 @@ components:
             type: object
             properties:
                 invitation:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.invitation.v1.Invitation'
                     title: invitation
-                    $ref: '#/components/schemas/admiral.api.invitation.v1.Invitation'
             title: CreateInvitationResponse
             additionalProperties: false
             description: CreateInvitationResponse carries the invitation, without its link.
@@ -7840,14 +7802,16 @@ components:
                     description: The address the invitation was sent to.
                     readOnly: true
                 role:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
                     title: role
                     description: The role the person holds once they join. ADMIN or MEMBER.
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.invitation.v1.InvitationStatus'
                     title: status
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.invitation.v1.InvitationStatus'
                 invited_by:
                     type:
                         - string
@@ -7858,14 +7822,16 @@ components:
                          from outside the tenant.
                     readOnly: true
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 expires_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: expires_at
                     description: After this instant the link no longer works.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 accepted_at:
                     oneOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
@@ -7967,8 +7933,9 @@ components:
             type: object
             properties:
                 invitation:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.invitation.v1.Invitation'
                     title: invitation
-                    $ref: '#/components/schemas/admiral.api.invitation.v1.Invitation'
             title: RevokeInvitationResponse
             additionalProperties: false
             description: RevokeInvitationResponse carries the invitation as it now stands.
@@ -7994,11 +7961,12 @@ components:
             type: object
             properties:
                 run:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.Run'
                     title: run
                     description: |-
                         The run with status advanced to APPLYING. Revisions that were
                          PLANNED are now APPLYING.
-                    $ref: '#/components/schemas/admiral.api.run.v1.Run'
             title: ApplyRunResponse
             additionalProperties: false
             description: ApplyRunResponse contains the run after apply jobs are dispatched.
@@ -8015,9 +7983,10 @@ components:
             type: object
             properties:
                 kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.ArtifactKind'
                     title: kind
                     description: The kind of artifact.
-                    $ref: '#/components/schemas/admiral.api.run.v1.ArtifactKind'
                 key:
                     type: string
                     title: key
@@ -8056,9 +8025,10 @@ components:
             type: object
             properties:
                 run:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.Run'
                     title: run
                     description: The canceled run.
-                    $ref: '#/components/schemas/admiral.api.run.v1.Run'
             title: CancelRunResponse
             additionalProperties: false
             description: CancelRunResponse contains the updated run.
@@ -8138,9 +8108,10 @@ components:
             type: object
             properties:
                 run:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.Run'
                     title: run
                     description: The created run. Status will be PENDING initially.
-                    $ref: '#/components/schemas/admiral.api.run.v1.Run'
             title: CreateRunResponse
             additionalProperties: false
             description: CreateRunResponse contains the newly created run.
@@ -8173,30 +8144,34 @@ components:
             type: object
             properties:
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.ExecutionStatus'
                     title: status
                     description: Terminal status of the phase.
-                    $ref: '#/components/schemas/admiral.api.run.v1.ExecutionStatus'
                 error_message:
                     type: string
                     title: error_message
                     description: Error message if the phase failed. Empty on success.
                 summary:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.ChangeSummary'
                     title: summary
                     description: Normalized change counts (create/update/delete/noop).
-                    $ref: '#/components/schemas/admiral.api.run.v1.ChangeSummary'
                 outputs:
                     type: object
                     title: outputs
                     additionalProperties:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.run.v1.EngineOutput'
                         title: value
-                        $ref: '#/components/schemas/admiral.api.run.v1.EngineOutput'
                     description: Outputs captured after a successful apply. Keys are output names.
                 artifact:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.ArtifactRef'
                     title: artifact
                     description: |-
                         Optional reference to an artifact this phase produced (e.g. a terraform
                          PLAN). Recorded into the revision's artifact set when present.
-                    $ref: '#/components/schemas/admiral.api.run.v1.ArtifactRef'
                 transcript:
                     type: string
                     title: transcript
@@ -8217,17 +8192,6 @@ components:
                 ExecutionReport is the executor-agnostic outcome of one revision phase --
                  the single report shape every executor maps its native result onto. The
                  TERRAFORM and KUBERNETES agents both report via this message.
-        admiral.api.run.v1.ExecutionReport.OutputsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    title: value
-                    $ref: '#/components/schemas/admiral.api.run.v1.EngineOutput'
-            title: OutputsEntry
-            additionalProperties: false
         admiral.api.run.v1.ExecutionStatus:
             type: string
             title: ExecutionStatus
@@ -8261,9 +8225,10 @@ components:
             type: object
             properties:
                 revision:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.Revision'
                     title: revision
                     description: The revision record with current status and artifacts.
-                    $ref: '#/components/schemas/admiral.api.run.v1.Revision'
             title: GetRevisionResponse
             additionalProperties: false
             description: GetRevisionResponse contains the revision record.
@@ -8284,9 +8249,10 @@ components:
             type: object
             properties:
                 run:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.Run'
                     title: run
                     description: The run record with current status.
-                    $ref: '#/components/schemas/admiral.api.run.v1.Run'
             title: GetRunResponse
             additionalProperties: false
             description: GetRunResponse contains the run record.
@@ -8405,12 +8371,13 @@ components:
             type: object
             properties:
                 revision:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.Revision'
                     title: revision
                     description: |-
                         The retried revision. Status resets and retry_count is incremented.
                          Downstream revisions that were BLOCKED will automatically unblock
                          if this revision succeeds.
-                    $ref: '#/components/schemas/admiral.api.run.v1.Revision'
             title: RetryRevisionResponse
             additionalProperties: false
             description: RetryRevisionResponse contains the updated revision.
@@ -8437,19 +8404,22 @@ components:
                     title: component_name
                     description: Component name at the time of run (immutable semantic key).
                 kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.RevisionKind'
                     title: kind
                     description: Component kind at the time of run (after override resolution).
-                    $ref: '#/components/schemas/admiral.api.run.v1.RevisionKind'
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.RevisionStatus'
                     title: status
                     description: Lifecycle status of this revision.
-                    $ref: '#/components/schemas/admiral.api.run.v1.RevisionStatus'
                 change_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.RevisionChangeType'
                     title: change_type
                     description: |-
                         What type of change this revision represents relative to the previously
                          deployed state.
-                    $ref: '#/components/schemas/admiral.api.run.v1.RevisionChangeType'
                 previous_revision_id:
                     type: string
                     title: previous_revision_id
@@ -8493,11 +8463,12 @@ components:
                         Component IDs that are blocking this revision. Only populated when
                          status is BLOCKED; indicates which upstream components failed.
                 plan_summary:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.ChangeSummary'
                     title: plan_summary
                     description: |-
                         The normalized change counts (creates/updates/deletes/noops) this
                          revision's plan computed. Populated after planning. Engine-agnostic.
-                    $ref: '#/components/schemas/admiral.api.run.v1.ChangeSummary'
                 available_phases:
                     type: array
                     items:
@@ -8519,13 +8490,15 @@ components:
                     format: int32
                     description: Number of retry attempts. Starts at 0 for the initial attempt.
                 started_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: started_at
                     description: When the revision started execution (transitioned from PENDING/QUEUED).
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 completed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: completed_at
                     description: When the revision finished (succeeded, failed, or canceled).
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 working_directory:
                     type: string
                     title: working_directory
@@ -8534,9 +8507,10 @@ components:
                          Empty means the archive root. Populated from the catalog item's path field
                          at snapshot time so that relative references resolve correctly.
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the revision was created (same as run created_at).
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 resolved_commit:
                     type: string
                     title: resolved_commit
@@ -8692,13 +8666,15 @@ components:
                     format: uuid
                     description: The target environment (UUID).
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.RunStatus'
                     title: status
                     description: Composite status derived from all component revisions.
-                    $ref: '#/components/schemas/admiral.api.run.v1.RunStatus'
                 triggered_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: triggered_by
                     description: The user or agent that triggered the run (server-populated from token).
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 message:
                     type: string
                     title: message
@@ -8719,15 +8695,17 @@ components:
                         The changeset that was deployed (UUID). Absent for pre-changeset runs
                          and reconcile (no-changeset) runs.
                 revision_summary:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.run.v1.RevisionSummary'
                     title: revision_summary
                     description: Summary counts for quick status display.
-                    $ref: '#/components/schemas/admiral.api.run.v1.RevisionSummary'
                 completed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: completed_at
                     description: |-
                         When the run finished (all revisions completed, failed, or canceled).
                          Absent while the run is in progress.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 display_id:
                     type: string
                     title: display_id
@@ -8761,9 +8739,10 @@ components:
                         Title of the changeset this run deployed. Denormalized for display.
                          Empty when `change_set_id` is empty. Read-only.
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the run was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Run
             additionalProperties: false
             description: |-
@@ -8832,12 +8811,13 @@ components:
                     maxLength: 1024
                     description: Optional description of the source's purpose.
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceType'
                     not:
                         enum:
                             - SOURCE_TYPE_UNSPECIFIED
                     title: type
                     description: The kind of artifact and fetch protocol.
-                    $ref: '#/components/schemas/admiral.api.source.v1.SourceType'
                 url:
                     type: string
                     title: url
@@ -8853,11 +8833,12 @@ components:
                         Reference to the credential providing authentication (UUID). Optional for
                          public sources.
                 source_config:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceConfig'
                     title: source_config
                     description: |-
                         Type-specific configuration. Only required for TERRAFORM and HELM;
                          omit for GIT, OCI, HTTP.
-                    $ref: '#/components/schemas/admiral.api.source.v1.SourceConfig'
                 labels:
                     type: object
                     title: labels
@@ -8874,24 +8855,14 @@ components:
                 - url
             additionalProperties: false
             description: CreateSourceRequest contains the parameters for creating a new source.
-        admiral.api.source.v1.CreateSourceRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.source.v1.CreateSourceResponse:
             type: object
             properties:
                 source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
                     title: source
                     description: The created source.
-                    $ref: '#/components/schemas/admiral.api.source.v1.Source'
             title: CreateSourceResponse
             additionalProperties: false
             description: CreateSourceResponse contains the newly created source.
@@ -8932,9 +8903,10 @@ components:
             type: object
             properties:
                 source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
                     title: source
                     description: The retrieved source.
-                    $ref: '#/components/schemas/admiral.api.source.v1.Source'
             title: GetSourceResponse
             additionalProperties: false
             description: GetSourceResponse contains the source record.
@@ -9072,9 +9044,10 @@ components:
                         Optional longer-form description of the source's purpose
                          (e.g., "Corporate-approved RDS module with encryption and backups").
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceType'
                     title: type
                     description: (IMMUTABLE) The kind of artifact and fetch protocol. Immutable after creation.
-                    $ref: '#/components/schemas/admiral.api.source.v1.SourceType'
                 url:
                     type: string
                     title: url
@@ -9098,13 +9071,14 @@ components:
                          Optional. Null for public sources that require no authentication
                          (e.g., public Terraform registry, public Helm repos).
                 source_config:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceConfig'
                     title: source_config
                     description: |-
                         Type-specific configuration. Only set for source types whose location is
                          not fully expressed by `url` alone (currently TERRAFORM and HELM, which
                          both host multiple artifacts and need a selector). Other source types
                          (GIT, OCI, HTTP) carry all location information in `url`.
-                    $ref: '#/components/schemas/admiral.api.source.v1.SourceConfig'
                 labels:
                     type: object
                     title: labels
@@ -9117,13 +9091,14 @@ components:
                         Arbitrary key-value labels for organizing and filtering sources
                          (e.g., `{"team": "platform", "category": "database"}`).
                 last_test_status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceTestStatus'
                     title: last_test_status
                     description: |-
                         Outcome of the most recent TestSource invocation. Reflects whether the
                          attached credential successfully authenticated against `url` the last time
                          a test was run. UNSPECIFIED if the source has never been tested.
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.source.v1.SourceTestStatus'
                 last_test_error:
                     type: string
                     title: last_test_error
@@ -9132,13 +9107,14 @@ components:
                          Empty when `last_test_status` is SUCCESS or unset.
                     readOnly: true
                 last_tested_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_tested_at
                     description: |-
                         When TestSource was last explicitly invoked against this source. Absent if
                          never tested. This reflects the last on-demand test, not the last time the
                          source was used in a deployment fetch/render.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 credential_name:
                     type: string
                     title: credential_name
@@ -9147,20 +9123,23 @@ components:
                          Empty when `credential_id` is unset (public sources).
                     readOnly: true
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this source (server-populated from token).
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the source was created.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the source was last updated.
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Source
             additionalProperties: false
             description: |-
@@ -9189,45 +9168,39 @@ components:
                     email: "alex.chen@example.com"
                 created_at: "2025-08-01T12:00:00Z"
                 updated_at: "2025-10-20T09:00:00Z"
-        admiral.api.source.v1.Source.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.source.v1.SourceConfig:
             type: object
-            oneOf:
+            anyOf:
                 - type: object
                   properties:
                     helm:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.source.v1.HelmConfig'
                         title: helm
                         description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
-                        $ref: '#/components/schemas/admiral.api.source.v1.HelmConfig'
                   title: helm
-                  required:
-                    - helm
                 - type: object
                   properties:
                     terraform:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.source.v1.TerraformConfig'
                         title: terraform
                         description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
-                        $ref: '#/components/schemas/admiral.api.source.v1.TerraformConfig'
                   title: terraform
-                  required:
-                    - terraform
-                - not:
-                    anyOf:
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
                         - required:
                             - helm
                         - required:
                             - terraform
-            unevaluatedProperties: false
+                    - not:
+                        oneOf:
+                            - required:
+                                - helm
+                            - required:
+                                - terraform
             title: SourceConfig
             description: |-
                 SourceConfig is the type-specific configuration attached to a Source. Only
@@ -9283,11 +9256,12 @@ components:
                          (e.g., "1.2.3"). For Git sources, this is a branch or tag name
                          (e.g., "main", "v1.2.3"). For OCI, this is a tag.
                 published_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: published_at
                     description: |-
                         When this version was published or tagged. May not be available for all
                          source types.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 description:
                     type: string
                     title: description
@@ -9295,11 +9269,12 @@ components:
                         Optional description or release notes for this version. Typically only
                          available from registry sources.
                 kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceRefKind'
                     title: kind
                     description: |-
                         What kind of ref this is. Lets a single list carry mixed kinds (branches,
                          tags, registry versions) so consumers can bucket them.
-                    $ref: '#/components/schemas/admiral.api.source.v1.SourceRefKind'
                 resolved:
                     type: string
                     title: resolved
@@ -9356,17 +9331,19 @@ components:
             type: object
             properties:
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceTestStatus'
                     title: status
                     description: The outcome of the test.
-                    $ref: '#/components/schemas/admiral.api.source.v1.SourceTestStatus'
                 error:
                     type: string
                     title: error
                     description: Human-readable error message when `status` is FAILURE. Empty on success.
                 source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
                     title: source
                     description: The source with test status fields refreshed.
-                    $ref: '#/components/schemas/admiral.api.source.v1.Source'
             title: TestSourceResponse
             additionalProperties: false
             description: |-
@@ -9377,18 +9354,20 @@ components:
             type: object
             properties:
                 source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
                     title: source
                     description: |-
                         The source with updated fields. Only fields specified in `update_mask`
                          are updated.
-                    $ref: '#/components/schemas/admiral.api.source.v1.Source'
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                          `description`, `url`, `credential_id`, `source_config`, `labels`.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateSourceRequest
             required:
                 - source
@@ -9398,9 +9377,10 @@ components:
             type: object
             properties:
                 source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
                     title: source
                     description: The updated source.
-                    $ref: '#/components/schemas/admiral.api.source.v1.Source'
             title: UpdateSourceResponse
             additionalProperties: false
             description: UpdateSourceResponse contains the updated source.
@@ -9413,8 +9393,9 @@ components:
             type: object
             properties:
                 tenant:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
                     title: tenant
-                    $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
             title: GetTenantResponse
             additionalProperties: false
         admiral.api.tenant.v1.Tenant:
@@ -9436,10 +9417,11 @@ components:
                     maxLength: 256
                     description: Human-readable name.
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.tenant.v1.TenantStatus'
                     title: status
                     description: Lifecycle state.
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.tenant.v1.TenantStatus'
                 labels:
                     type: object
                     title: labels
@@ -9448,30 +9430,21 @@ components:
                         title: value
                     description: Free-form labels for the customer's own use.
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     readOnly: true
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Tenant
             additionalProperties: false
             description: |-
                 Tenant is the account as its own members see it: its identity, its lifecycle
                  state, and the settings they control. Operational detail about how the
                  account is run is not part of this view.
-        admiral.api.tenant.v1.Tenant.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.tenant.v1.TenantStatus:
             type: string
             title: TenantStatus
@@ -9501,33 +9474,24 @@ components:
                         title: value
                     description: Replaces all labels when present. Omit to leave unchanged.
                 update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
                         Which fields to apply. Present for forward compatibility as the mutable
                          surface grows.
-                    $ref: '#/components/schemas/google.protobuf.FieldMask'
             title: UpdateTenantRequest
             additionalProperties: false
             description: |-
                 UpdateTenantRequest carries only the mutable fields. The tenant is the
                  caller's own, so there is no id here.
-        admiral.api.tenant.v1.UpdateTenantRequest.LabelsEntry:
-            type: object
-            properties:
-                key:
-                    type: string
-                    title: key
-                value:
-                    type: string
-                    title: value
-            title: LabelsEntry
-            additionalProperties: false
         admiral.api.tenant.v1.UpdateTenantResponse:
             type: object
             properties:
                 tenant:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
                     title: tenant
-                    $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
             title: UpdateTenantResponse
             additionalProperties: false
         admiral.api.user.v1.CreateApiKeyRequest:
@@ -9556,11 +9520,12 @@ components:
                          The server enforces that issued scopes are a subset of the caller's own
                          scopes. A key cannot grant more access than the user holds.
                 expires_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: expires_at
                     description: |-
                         Optional expiration time. If unset, the key does not expire.
                          Tenant policies may enforce a maximum lifetime.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: CreateApiKeyRequest
             required:
                 - name
@@ -9570,9 +9535,10 @@ components:
             type: object
             properties:
                 api_key:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                     title: api_key
                     description: The created key metadata.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                 plain_text_key:
                     type: string
                     title: plain_text_key
@@ -9599,9 +9565,10 @@ components:
             type: object
             properties:
                 api_key:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                     title: api_key
                     description: The key metadata. The key secret is never included.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
             title: GetApiKeyResponse
             additionalProperties: false
             description: GetApiKeyResponse contains the requested API key metadata.
@@ -9616,9 +9583,10 @@ components:
             type: object
             properties:
                 user:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.user.v1.User'
                     title: user
                     description: The user profile.
-                    $ref: '#/components/schemas/admiral.api.user.v1.User'
             title: GetMeResponse
             additionalProperties: false
             description: GetMeResponse contains the authenticated user's profile.
@@ -9639,9 +9607,10 @@ components:
             type: object
             properties:
                 user:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.user.v1.User'
                     title: user
                     description: The user profile.
-                    $ref: '#/components/schemas/admiral.api.user.v1.User'
             title: GetUserResponse
             additionalProperties: false
             description: GetUserResponse contains the requested user's profile.
@@ -9759,9 +9728,10 @@ components:
             type: object
             properties:
                 api_key:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                     title: api_key
                     description: The key metadata with updated status.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
             title: RevokeApiKeyResponse
             additionalProperties: false
             description: RevokeApiKeyResponse contains the revoked API key metadata.
@@ -9808,9 +9778,10 @@ components:
             type: object
             properties:
                 api_key:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKey'
                     title: api_key
                     description: The updated key metadata.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKey'
             title: UpdateApiKeyResponse
             additionalProperties: false
             description: UpdateApiKeyResponse contains the updated API key metadata.
@@ -9855,23 +9826,27 @@ components:
                     title: avatar_url
                     description: URL to the user's avatar image.
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the user was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the user was last updated.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 role:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
                     title: role
                     description: The user's standing in the tenant.
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.user.v1.UserStatus'
                     title: status
                     description: Whether the user can currently sign in.
                     readOnly: true
-                    $ref: '#/components/schemas/admiral.api.user.v1.UserStatus'
             title: User
             additionalProperties: false
             description: User represents a user's profile information.
@@ -9939,11 +9914,12 @@ components:
                     title: sensitive
                     description: Whether the variable value is encrypted at rest and masked in API responses.
                 type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                     title: type
                     description: |-
                         How the value should be interpreted by the rendering engine and displayed
                          in the UI. Defaults to STRING if not specified.
-                    $ref: '#/components/schemas/admiral.api.variable.v1.VariableType'
                 description:
                     type: string
                     title: description
@@ -9966,24 +9942,28 @@ components:
                         The environment this variable is scoped to (UUID). Always set; variables
                          are env-scoped.
                 source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.variable.v1.VariableSource'
                     title: source
                     description: |-
                         How the variable was created. USER for change-set-managed variables,
                          INFRASTRUCTURE for variables produced by engine output capture (Terraform
                          or OpenTofu). Server-populated.
-                    $ref: '#/components/schemas/admiral.api.variable.v1.VariableSource'
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: The user or agent who created this variable (server-populated from token).
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the variable was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     description: When the variable was last updated.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: Variable
             additionalProperties: false
             description: |-
@@ -10103,13 +10083,15 @@ components:
                         The scopes granted to this key, and the ceiling on any access token minted
                          from it. A mint request may narrow them and may never widen them.
                 status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ApiKeyStatus'
                     title: status
                     description: Current lifecycle status of the key.
-                    $ref: '#/components/schemas/admiral.common.v1.ApiKeyStatus'
                 binding_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.BindingType'
                     title: binding_type
                     description: The kind of resource this key is bound to.
-                    $ref: '#/components/schemas/admiral.common.v1.BindingType'
                 binding_id:
                     type: string
                     title: binding_id
@@ -10118,10 +10100,13 @@ components:
                          account id, per `binding_type`. Access tokens minted from this key carry it
                          as their `sub`.
                 expires_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: expires_at
                     description: When the key expires. If unset, the key does not expire.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 last_used_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_used_at
                     description: |-
                         When this key was last exchanged for an access token.
@@ -10131,21 +10116,23 @@ components:
                          when the token minted from it runs out. Reads as "still in use", at a
                          granularity of the access-token lifetime, which is the question this field
                          exists to answer before revoking one.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 revoked_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: revoked_at
                     description: When the key was revoked. Only set when status is REVOKED.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
                 created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
                     description: |-
                         The user who created this key. When bound to a user, this is the key's
                          owner; when bound to a service account, the administrator who issued it.
-                    $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                 created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     description: When the key was created.
-                    $ref: '#/components/schemas/google.protobuf.Timestamp'
             title: ApiKey
             additionalProperties: false
             description: |-
@@ -10210,363 +10197,17 @@ components:
         google.protobuf.Duration:
             type: string
             format: duration
-            description: |-
-                A Duration represents a signed, fixed-length span of time represented
-                 as a count of seconds and fractions of seconds at nanosecond
-                 resolution. It is independent of any calendar and concepts like "day"
-                 or "month". It is related to Timestamp in that the difference between
-                 two Timestamp values is a Duration and it can be added or subtracted
-                 from a Timestamp. Range is approximately +-10,000 years.
-
-                 # Examples
-
-                 Example 1: Compute Duration from two Timestamps in pseudo code.
-
-                     Timestamp start = ...;
-                     Timestamp end = ...;
-                     Duration duration = ...;
-
-                     duration.seconds = end.seconds - start.seconds;
-                     duration.nanos = end.nanos - start.nanos;
-
-                     if (duration.seconds < 0 && duration.nanos > 0) {
-                       duration.seconds += 1;
-                       duration.nanos -= 1000000000;
-                     } else if (duration.seconds > 0 && duration.nanos < 0) {
-                       duration.seconds -= 1;
-                       duration.nanos += 1000000000;
-                     }
-
-                 Example 2: Compute Timestamp from Timestamp + Duration in pseudo code.
-
-                     Timestamp start = ...;
-                     Duration duration = ...;
-                     Timestamp end = ...;
-
-                     end.seconds = start.seconds + duration.seconds;
-                     end.nanos = start.nanos + duration.nanos;
-
-                     if (end.nanos < 0) {
-                       end.seconds -= 1;
-                       end.nanos += 1000000000;
-                     } else if (end.nanos >= 1000000000) {
-                       end.seconds += 1;
-                       end.nanos -= 1000000000;
-                     }
-
-                 Example 3: Compute Duration from datetime.timedelta in Python.
-
-                     td = datetime.timedelta(days=3, minutes=10)
-                     duration = Duration()
-                     duration.FromTimedelta(td)
-
-                 # JSON Mapping
-
-                 In JSON format, the Duration type is encoded as a string rather than an
-                 object, where the string ends in the suffix "s" (indicating seconds) and
-                 is preceded by the number of seconds, with nanoseconds expressed as
-                 fractional seconds. For example, 3 seconds with 0 nanoseconds should be
-                 encoded in JSON format as "3s", while 3 seconds and 1 nanosecond should
-                 be expressed in JSON format as "3.000000001s", and 3 seconds and 1
-                 microsecond should be expressed in JSON format as "3.000001s".
+            description: A signed duration in seconds, with up to nine fractional digits and an `s` suffix (for example, `3s` or `-0.001s`).
         google.protobuf.FieldMask:
             type: string
-            description: |-
-                `FieldMask` represents a set of symbolic field paths, for example:
-
-                     paths: "f.a"
-                     paths: "f.b.d"
-
-                 Here `f` represents a field in some root message, `a` and `b`
-                 fields in the message found in `f`, and `d` a field found in the
-                 message in `f.b`.
-
-                 Field masks are used to specify a subset of fields that should be
-                 returned by a get operation or modified by an update operation.
-                 Field masks also have a custom JSON encoding (see below).
-
-                 # Field Masks in Projections
-
-                 When used in the context of a projection, a response message or
-                 sub-message is filtered by the API to only contain those fields as
-                 specified in the mask. For example, if the mask in the previous
-                 example is applied to a response message as follows:
-
-                     f {
-                       a : 22
-                       b {
-                         d : 1
-                         x : 2
-                       }
-                       y : 13
-                     }
-                     z: 8
-
-                 The result will not contain specific values for fields x,y and z
-                 (their value will be set to the default, and omitted in proto text
-                 output):
-
-
-                     f {
-                       a : 22
-                       b {
-                         d : 1
-                       }
-                     }
-
-                 A repeated field is not allowed except at the last position of a
-                 paths string.
-
-                 If a FieldMask object is not present in a get operation, the
-                 operation applies to all fields (as if a FieldMask of all fields
-                 had been specified).
-
-                 Note that a field mask does not necessarily apply to the
-                 top-level response message. In case of a REST get operation, the
-                 field mask applies directly to the response, but in case of a REST
-                 list operation, the mask instead applies to each individual message
-                 in the returned resource list. In case of a REST custom method,
-                 other definitions may be used. Where the mask applies will be
-                 clearly documented together with its declaration in the API.  In
-                 any case, the effect on the returned resource/resources is required
-                 behavior for APIs.
-
-                 # Field Masks in Update Operations
-
-                 A field mask in update operations specifies which fields of the
-                 targeted resource are going to be updated. The API is required
-                 to only change the values of the fields as specified in the mask
-                 and leave the others untouched. If a resource is passed in to
-                 describe the updated values, the API ignores the values of all
-                 fields not covered by the mask.
-
-                 If a repeated field is specified for an update operation, new values will
-                 be appended to the existing repeated field in the target resource. Note that
-                 a repeated field is only allowed in the last position of a `paths` string.
-
-                 If a sub-message is specified in the last position of the field mask for an
-                 update operation, then new value will be merged into the existing sub-message
-                 in the target resource.
-
-                 For example, given the target message:
-
-                     f {
-                       b {
-                         d: 1
-                         x: 2
-                       }
-                       c: [1]
-                     }
-
-                 And an update message:
-
-                     f {
-                       b {
-                         d: 10
-                       }
-                       c: [2]
-                     }
-
-                 then if the field mask is:
-
-                  paths: ["f.b", "f.c"]
-
-                 then the result will be:
-
-                     f {
-                       b {
-                         d: 10
-                         x: 2
-                       }
-                       c: [1, 2]
-                     }
-
-                 An implementation may provide options to override this default behavior for
-                 repeated and message fields.
-
-                 In order to reset a field's value to the default, the field must
-                 be in the mask and set to the default value in the provided resource.
-                 Hence, in order to reset all fields of a resource, provide a default
-                 instance of the resource and set all fields in the mask, or do
-                 not provide a mask as described below.
-
-                 If a field mask is not present on update, the operation applies to
-                 all fields (as if a field mask of all fields has been specified).
-                 Note that in the presence of schema evolution, this may mean that
-                 fields the client does not know and has therefore not filled into
-                 the request will be reset to their default. If this is unwanted
-                 behavior, a specific service may require a client to always specify
-                 a field mask, producing an error if not.
-
-                 As with get operations, the location of the resource which
-                 describes the updated values in the request message depends on the
-                 operation kind. In any case, the effect of the field mask is
-                 required to be honored by the API.
-
-                 ## Considerations for HTTP REST
-
-                 The HTTP kind of an update operation which uses a field mask must
-                 be set to PATCH instead of PUT in order to satisfy HTTP semantics
-                 (PUT must only be used for full updates).
-
-                 # JSON Encoding of Field Masks
-
-                 In JSON, a field mask is encoded as a single string where paths are
-                 separated by a comma. Fields name in each path are converted
-                 to/from lower-camel naming conventions.
-
-                 As an example, consider the following message declarations:
-
-                     message Profile {
-                       User user = 1;
-                       Photo photo = 2;
-                     }
-                     message User {
-                       string display_name = 1;
-                       string address = 2;
-                     }
-
-                 In proto a field mask for `Profile` may look as such:
-
-                     mask {
-                       paths: "user.display_name"
-                       paths: "photo"
-                     }
-
-                 In JSON, the same mask is represented as below:
-
-                     {
-                       mask: "user.displayName,photo"
-                     }
-
-                 # Field Masks and Oneof Fields
-
-                 Field masks treat fields in oneofs just as regular fields. Consider the
-                 following message:
-
-                     message SampleMessage {
-                       oneof test_oneof {
-                         string name = 4;
-                         SubMessage sub_message = 9;
-                       }
-                     }
-
-                 The field mask can be:
-
-                     mask {
-                       paths: "name"
-                     }
-
-                 Or:
-
-                     mask {
-                       paths: "sub_message"
-                     }
-
-                 Note that oneof type names ("test_oneof" in this case) cannot be used in
-                 paths.
-
-                 ## Field Mask Verification
-
-                 The implementation of any API method which has a FieldMask type field in the
-                 request should verify the included field paths, and return an
-                 `INVALID_ARGUMENT` error if any path is unmappable.
+            description: Comma-separated field paths in lowerCamelCase (for example, `user.displayName,photo`).
         google.protobuf.Timestamp:
             type: string
             examples:
                 - "2023-01-15T01:30:15.01Z"
                 - "2024-12-25T12:00:00Z"
             format: date-time
-            description: |-
-                A Timestamp represents a point in time independent of any time zone or local
-                 calendar, encoded as a count of seconds and fractions of seconds at
-                 nanosecond resolution. The count is relative to an epoch at UTC midnight on
-                 January 1, 1970, in the proleptic Gregorian calendar which extends the
-                 Gregorian calendar backwards to year one.
-
-                 All minutes are 60 seconds long. Leap seconds are "smeared" so that no leap
-                 second table is needed for interpretation, using a [24-hour linear
-                 smear](https://developers.google.com/time/smear).
-
-                 The range is from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z. By
-                 restricting to that range, we ensure that we can convert to and from [RFC
-                 3339](https://www.ietf.org/rfc/rfc3339.txt) date strings.
-
-                 # Examples
-
-                 Example 1: Compute Timestamp from POSIX `time()`.
-
-                     Timestamp timestamp;
-                     timestamp.set_seconds(time(NULL));
-                     timestamp.set_nanos(0);
-
-                 Example 2: Compute Timestamp from POSIX `gettimeofday()`.
-
-                     struct timeval tv;
-                     gettimeofday(&tv, NULL);
-
-                     Timestamp timestamp;
-                     timestamp.set_seconds(tv.tv_sec);
-                     timestamp.set_nanos(tv.tv_usec * 1000);
-
-                 Example 3: Compute Timestamp from Win32 `GetSystemTimeAsFileTime()`.
-
-                     FILETIME ft;
-                     GetSystemTimeAsFileTime(&ft);
-                     UINT64 ticks = (((UINT64)ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
-
-                     // A Windows tick is 100 nanoseconds. Windows epoch 1601-01-01T00:00:00Z
-                     // is 11644473600 seconds before Unix epoch 1970-01-01T00:00:00Z.
-                     Timestamp timestamp;
-                     timestamp.set_seconds((INT64) ((ticks / 10000000) - 11644473600LL));
-                     timestamp.set_nanos((INT32) ((ticks % 10000000) * 100));
-
-                 Example 4: Compute Timestamp from Java `System.currentTimeMillis()`.
-
-                     long millis = System.currentTimeMillis();
-
-                     Timestamp timestamp = Timestamp.newBuilder().setSeconds(millis / 1000)
-                         .setNanos((int) ((millis % 1000) * 1000000)).build();
-
-                 Example 5: Compute Timestamp from Java `Instant.now()`.
-
-                     Instant now = Instant.now();
-
-                     Timestamp timestamp =
-                         Timestamp.newBuilder().setSeconds(now.getEpochSecond())
-                             .setNanos(now.getNano()).build();
-
-                 Example 6: Compute Timestamp from current time in Python.
-
-                     timestamp = Timestamp()
-                     timestamp.GetCurrentTime()
-
-                 # JSON Mapping
-
-                 In JSON format, the Timestamp type is encoded as a string in the
-                 [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) format. That is, the
-                 format is "{year}-{month}-{day}T{hour}:{min}:{sec}[.{frac_sec}]Z"
-                 where {year} is always expressed using four digits while {month}, {day},
-                 {hour}, {min}, and {sec} are zero-padded to two digits each. The fractional
-                 seconds, which can go up to 9 digits (i.e. up to 1 nanosecond resolution),
-                 are optional. The "Z" suffix indicates the timezone ("UTC"); the timezone
-                 is required. A proto3 JSON serializer should always use UTC (as indicated by
-                 "Z") when printing the Timestamp type and a proto3 JSON parser should be
-                 able to accept both UTC and other timezones (as indicated by an offset).
-
-                 For example, "2017-01-15T01:30:15.01Z" encodes 15.01 seconds past
-                 01:30 UTC on January 15, 2017.
-
-                 In JavaScript, one can convert a Date object to this format using the
-                 standard
-                 [toISOString()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toISOString)
-                 method. In Python, a standard `datetime.datetime` object can be converted
-                 to this format using
-                 [`strftime`](https://docs.python.org/2/library/time.html#time.strftime) with
-                 the time format spec '%Y-%m-%dT%H:%M:%S.%fZ'. Likewise, in Java, one can use
-                 the Joda Time's [`ISODateTimeFormat.dateTime()`](
-                 http://joda-time.sourceforge.net/apidocs/org/joda/time/format/ISODateTimeFormat.html#dateTime()
-                 ) to obtain a formatter capable of generating timestamps in this format.
+            description: A point in time in RFC 3339 format, with up to nanosecond precision. Output uses UTC (`Z`); input may use an offset from UTC.
         admiral.healthcheck.v1.HealthcheckResponse:
             type: object
             description: Empty response indicating the service is healthy.
