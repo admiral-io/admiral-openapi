@@ -93,19 +93,6 @@ tags:
         relationships into a single entity that can be deployed across multiple
         environments. Applications are defined once and promoted explicitly between
         environments.
-    - name: CatalogAPI
-      description: |-
-        CatalogAPI manages the catalog: named, reusable references to a slice of
-        content within a Source at a specific ref. One Source can back many catalog
-        items (different refs, different subtrees).
-
-        A catalog item binds a Source to a specific ref (branch, tag, version) and
-        optional root (subdirectory within the fetched tree) and path (working
-        directory within root for execution).
-
-        The API includes a resolve operation (ResolveCatalogItem) that fetches the
-        item via its Source and returns the resolved revision and content digest
-        without streaming content. Content delivery to agents is a separate concern.
     - name: ChangeSetAPI
       description: |-
         ChangeSetAPI manages change sets: scoped, isolated proposals to mutate the
@@ -139,6 +126,28 @@ tags:
         Connectivity validation (testing whether the credential can actually reach a
         remote system) is performed at the Source level, where the credential is
         paired with a target URL.
+    - name: RegistryAPI
+      description: |-
+        RegistryAPI is the component registry: what a tenant has published,
+        addressed by digest.
+
+        A component here is a REGISTRY ENTRY -- the thing `admiral component
+        publish` creates and later publishes land under -- not an instance running
+        in an environment. Both are called component on purpose; the verbs and the
+        address forms carry the distinction. Publish, tag and deprecate act on the
+        registry (this service); add, update and copy act inside a change set.
+        `cloud-sql:v1.2.0` is registry-speak, `my-api/prod/users-db` is
+        environment-speak.
+
+        Three nouns. A Component is the name row. A Revision is one published
+        artifact, identified by the SHA-256 of its normalized bundle; the digest is
+        the identity and the source repository is provenance. A Tag is a pointer
+        from a name to a revision, in the OCI sense: semver tags (v1.2.0) never move
+        once assigned, floating tags (latest, main) may.
+
+        Publishing the same bytes under the same name twice yields the same
+        revision. Revisions are never deleted; deprecation refuses new adoption
+        while what already pins the revision keeps running.
     - name: EnvironmentAPI
       description: |-
         EnvironmentAPI manages environments within an application.
@@ -912,188 +921,6 @@ paths:
                   type: boolean
             tags:
                 - ApplicationAPI
-    /v1/catalog-items:
-        get:
-            summary: |-
-                ListCatalogItems returns a paginated list of catalog items within the
-                caller's tenant. Use the filter to scope by name, source, or labels.
-            description: 'Scope: `catalog:read`'
-            operationId: CatalogAPI_ListCatalogItems
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ListCatalogItemsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `name`: filter by catalog item name.
-                      - `type`: filter by item type (TERRAFORM, HELM, KUSTOMIZE, MANIFEST).
-                      - `source_id`: filter by source reference.
-
-                    Example: `field['type'] = 'TERRAFORM'`
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of catalog items to return per page. Defaults to 50 when
-                    omitted or 0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token from a previous response.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - CatalogAPI
-        post:
-            summary: CreateCatalogItem registers a new catalog item within the caller's tenant.
-            description: |-
-                The referenced source must exist. The item's ref, root, and path are
-                optional and default to empty (meaning: the source's default ref, the
-                repository root, and the root itself as working directory).
-
-                Scope: `catalog:write`
-            operationId: CatalogAPI_CreateCatalogItem
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1CreateCatalogItemResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: CreateCatalogItemRequest contains the parameters for creating a new item.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1CreateCatalogItemRequest'
-            tags:
-                - CatalogAPI
-    /v1/catalog-items/{catalog_item.id}:
-        patch:
-            summary: |-
-                UpdateCatalogItem updates a catalog item's mutable fields.
-                Use the `update_mask` to specify which fields to update.
-            description: 'Scope: `catalog:write`'
-            operationId: CatalogAPI_UpdateCatalogItem
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1UpdateCatalogItemResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: catalog_item.id
-                  description: Unique identifier for the catalog item (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/CatalogAPIUpdateCatalogItemBody'
-            tags:
-                - CatalogAPI
-    /v1/catalog-items/{catalog_item_id}:
-        get:
-            summary: GetCatalogItem retrieves a catalog item by ID.
-            description: 'Scope: `catalog:read`'
-            operationId: CatalogAPI_GetCatalogItem
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetCatalogItemResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: catalog_item_id
-                  description: Unique identifier of the catalog item (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - CatalogAPI
-        delete:
-            summary: |-
-                DeleteCatalogItem permanently deletes a catalog item. Components are
-                self-contained copies and hold no back-reference, so this never fails on
-                existing components. This action cannot be undone.
-            description: 'Scope: `catalog:write`'
-            operationId: CatalogAPI_DeleteCatalogItem
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1DeleteCatalogItemResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: catalog_item_id
-                  description: Unique identifier of the catalog item to delete (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - CatalogAPI
-    /v1/catalog-items/{catalog_item_id}/resolve:
-        post:
-            summary: |-
-                ResolveCatalogItem fetches the item via its Source and returns the resolved
-                revision and content digest. Does NOT stream content; content delivery
-                to agents is handled separately.
-            description: |-
-                This operation fetches from the external system in real time and may take
-                several seconds depending on the source type and size.
-
-                Scope: `catalog:read`
-            operationId: CatalogAPI_ResolveCatalogItem
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ResolveCatalogItemResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: catalog_item_id
-                  description: Unique identifier of the catalog item to resolve (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/CatalogAPIResolveCatalogItemBody'
-            tags:
-                - CatalogAPI
     /v1/changesets:
         get:
             summary: ListChangeSets returns a paginated list of change sets.
@@ -1505,6 +1332,332 @@ paths:
                     $ref: '#/definitions/ChangeSetAPISetVariableBody'
             tags:
                 - ChangeSetAPI
+    /v1/components:
+        get:
+            summary: ListComponents pages through the registry.
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_ListComponents
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListComponentsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                    API documentation for the full operator and predicate reference).
+
+                    Filterable fields:
+                      - `name`: filter by name.
+                      - `description`: filter by description.
+                      - `labels`: filter by label key/value.
+
+                    Example: `field['labels']['team'] = 'payments'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  description: |-
+                    Maximum number of components to return per page. Defaults to 50 when
+                    omitted or 0; must not exceed 100.
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  description: Opaque pagination token from a previous response.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - RegistryAPI
+    /v1/components/{component_id}:
+        delete:
+            summary: |-
+                DeleteComponent retires a name from the registry. Its revisions are kept
+                and anything already pinned to them keeps running; the name no longer
+                resolves and cannot be published to. FAILED_PRECONDITION while any
+                environment pins one of its revisions.
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_DeleteComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - RegistryAPI
+        patch:
+            summary: |-
+                UpdateComponent changes a component's description or labels. The name is
+                immutable: references carry it, and a rename would strand them.
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_UpdateComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdateComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/RegistryAPIUpdateComponentBody'
+            tags:
+                - RegistryAPI
+    /v1/components/{component_id}/revisions:
+        get:
+            summary: ListRevisions pages through a component's revisions, newest first.
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_ListRevisions
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/apiRegistryV1ListRevisionsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+                - name: filter
+                  description: |-
+                    Filter expression. Filterable fields:
+                      - `kind`: TERRAFORM, HELM, MANIFESTS.
+                      - `status`: PUBLISHED, DEPRECATED.
+
+                    Example: `field['status'] = 'PUBLISHED'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - RegistryAPI
+    /v1/components/{component_id}/revisions/{digest}:deprecate:
+        post:
+            summary: |-
+                DeprecateRevision refuses new adoption of a revision with a recorded
+                reason. Environments already pinned to it keep running and warn.
+                One-way: FAILED_PRECONDITION if already deprecated, with the reason that
+                was recorded first.
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_DeprecateRevision
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeprecateRevisionResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+                - name: digest
+                  description: |-
+                    `sha256:<hex>`. A digest, not a tag: what is being deprecated is the
+                    bytes, and a floating tag might name different bytes by the time anyone
+                    reads the reason.
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/RegistryAPIDeprecateRevisionBody'
+            tags:
+                - RegistryAPI
+    /v1/components/{component_id}/revisions/{reference}:
+        get:
+            summary: |-
+                GetRevision retrieves one revision by reference: a tag name or a
+                `sha256:` digest.
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_GetRevision
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/apiRegistryV1GetRevisionResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+                - name: reference
+                  description: |-
+                    A tag name (`v1.2.0`, `latest`) or a digest (`sha256:<hex>`). A digest
+                    is recognised by its prefix; everything else is looked up as a tag.
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - RegistryAPI
+    /v1/components/{component_id}/tags/{name}:
+        delete:
+            summary: |-
+                DeleteTag removes a floating tag. A semver tag is refused with
+                FAILED_PRECONDITION: it is immutable in both directions.
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_DeleteTag
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteTagResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+                - name: name
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - RegistryAPI
+        put:
+            summary: |-
+                SetTag points a tag at a revision, creating it or moving it. A semver tag
+                may be created and never moved: FAILED_PRECONDITION on an attempt to
+                repoint one, with the rule in the message. Setting a tag to the revision
+                it already names succeeds and changes nothing.
+            description: 'Scope: `component:publish`'
+            operationId: RegistryAPI_SetTag
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1SetTagResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+                - name: name
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/RegistryAPISetTagBody'
+            tags:
+                - RegistryAPI
+    /v1/components/{name}:
+        get:
+            summary: GetComponent retrieves a component by name, with its tags.
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_GetComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: name
+                  description: '`cloud-sql`, or `namespace/cloud-sql`.'
+                  in: path
+                  required: true
+                  type: string
+                  pattern: .+
+            tags:
+                - RegistryAPI
+    /v1/components:publish:
+        post:
+            summary: |-
+                PublishComponent uploads a bundle and records it as a revision, creating
+                the component on first use.
+            description: |-
+                The bundle is a gzipped tar of the component root, carried inline and
+                capped at 64 MiB; a fully vendored tree that exceeds it will get a
+                resumable upload path of its own. The server normalizes the bytes
+                (strips `.git`, canonicalizes entry order and timestamps), digests them,
+                runs the publish gate, stores the blob and answers with the revision. If
+                the digest already exists under the name, the existing revision is
+                returned with `unchanged` set and nothing is written, which is what makes
+                a publish-everything CI recipe safe.
+
+                Any tags named in the request are set on the resulting revision.
+                Repointing a semver tag is refused with FAILED_PRECONDITION and the whole
+                publish fails; the bytes are not kept.
+
+                Scope: `component:publish`
+            operationId: RegistryAPI_PublishComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1PublishComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: PublishComponentRequest carries what is being published and the bytes.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1PublishComponentRequest'
+            tags:
+                - RegistryAPI
     /v1/credentials:
         get:
             summary: |-
@@ -2189,7 +2342,7 @@ paths:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1ListRevisionsResponse'
+                        $ref: '#/definitions/apiRunV1ListRevisionsResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -2224,7 +2377,7 @@ paths:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1GetRevisionResponse'
+                        $ref: '#/definitions/apiRunV1GetRevisionResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -3034,97 +3187,6 @@ definitions:
         description: UpdateApplicationRequest contains the application fields to update.
         required:
             - application
-    CatalogAPIResolveCatalogItemBody:
-        type: object
-        properties:
-            ref_override:
-                type: string
-                description: |-
-                    Optional ref override. When set, this ref is used instead of the item's
-                    default ref. Useful for previewing a different version without modifying
-                    the catalog item definition.
-        description: ResolveCatalogItemRequest identifies a catalog item to resolve.
-    CatalogAPIUpdateCatalogItemBody:
-        type: object
-        properties:
-            catalog_item:
-                type: object
-                properties:
-                    name:
-                        type: string
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
-                            Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                            start with a letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        description: |-
-                            Optional longer-form description of the catalog item's purpose
-                            (e.g., "Standard VPC module for billing workloads").
-                    type:
-                        $ref: '#/definitions/v1CatalogItemType'
-                        description: |-
-                            The content type: what this item contains and how it should be executed.
-                            Immutable after creation.
-                    source_id:
-                        type: string
-                        description: Reference to the Source this catalog item fetches from (UUID).
-                    ref:
-                        type: string
-                        description: |-
-                            Git ref, registry version, chart version, or OCI tag to fetch.
-                            Optional. When empty, the backend uses its default (e.g., HEAD for Git,
-                            latest for registries). This is the default a component copies at create
-                            time; the component owns its ref thereafter.
-                    root:
-                        type: string
-                        description: |-
-                            Subdirectory within the fetched tree to treat as the item root.
-                            Optional. When empty, the entire fetched tree is the root.
-                            Example: "modules/vpc" within a monorepo.
-                    path:
-                        type: string
-                        description: |-
-                            Working directory within root for execution (e.g., "environments/prod").
-                            Optional. When empty, defaults to root itself.
-                    labels:
-                        type: object
-                        additionalProperties:
-                            type: string
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering catalog items
-                            (e.g., `{"team": "platform", "stack": "networking"}`).
-                    source_name:
-                        type: string
-                        description: Display name of the parent source. Denormalized for display.
-                        readOnly: true
-                    created_by:
-                        $ref: '#/definitions/v1ActorRef'
-                        description: The user or agent who created this catalog item (server-populated from token).
-                        readOnly: true
-                    created_at:
-                        type: string
-                        format: date-time
-                        description: When the catalog item was created.
-                        readOnly: true
-                    updated_at:
-                        type: string
-                        format: date-time
-                        description: When the catalog item was last updated.
-                        readOnly: true
-                description: |-
-                    The catalog item with updated fields. Its `id` identifies the item; only
-                    fields named in `update_mask` are applied.
-            update_mask:
-                type: string
-                description: |-
-                    The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Pass `*` for full replacement. Supported fields: `name`,
-                    `description`, `source_id`, `ref`, `root`, `path`, `labels`. `type` is
-                    immutable and cannot be updated.
-        description: UpdateCatalogItemRequest contains the catalog item fields to update.
-        required:
-            - catalog_item
     ChangeSetAPICopyChangeSetBody:
         type: object
         properties:
@@ -3438,6 +3500,37 @@ definitions:
     InvitationAPIRevokeInvitationBody:
         type: object
         description: RevokeInvitationRequest names one invitation in the caller's tenant.
+    RegistryAPIDeprecateRevisionBody:
+        type: object
+        properties:
+            reason:
+                type: string
+                description: |-
+                    Shown to anyone who tries to adopt the revision, and to every
+                    environment still running it.
+        description: DeprecateRevisionRequest names a revision by digest and says why.
+        required:
+            - reason
+    RegistryAPISetTagBody:
+        type: object
+        properties:
+            digest:
+                type: string
+                description: The revision to name, as `sha256:<hex>`.
+        description: SetTagRequest points a tag at a revision.
+        required:
+            - digest
+    RegistryAPIUpdateComponentBody:
+        type: object
+        properties:
+            description:
+                type: string
+            labels:
+                $ref: '#/definitions/v1ComponentLabels'
+                description: Replaces the label set entirely when present.
+        description: |-
+            UpdateComponentRequest carries the fields to change. Omitted fields are
+            left as they are.
     RunAPIApplyRunBody:
         type: object
         properties:
@@ -3618,6 +3711,370 @@ definitions:
                 $ref: '#/definitions/v1ApiKey'
                 description: The key metadata with updated status.
         description: RevokeApiKeyResponse contains the revoked agent API key metadata.
+    apiRegistryV1Component:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier (UUID).
+                readOnly: true
+            name:
+                type: string
+                description: |-
+                    The name as it is written: `cloud-sql`, or `payments/cloud-sql` once
+                    team namespaces exist. Unique within the tenant. Immutable.
+                readOnly: true
+            description:
+                type: string
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+                description: |-
+                    Key-value metadata for filtering (e.g. `{"team": "payments",
+                    "runtime": "terraform"}`), the same labels every Admiral resource carries.
+            tags:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Tag'
+                description: Every tag on the component, by name.
+                readOnly: true
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+            updated_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: |-
+            Component is a registry entry: a name, and the revisions and tags beneath
+            it.
+    apiRegistryV1ComponentKind:
+        type: string
+        enum:
+            - COMPONENT_KIND_UNSPECIFIED
+            - TERRAFORM
+            - HELM
+            - MANIFESTS
+        default: COMPONENT_KIND_UNSPECIFIED
+        description: |-
+            ComponentKind is what a revision's bundle is, detected by inspection at
+            publish: a Chart.yaml means HELM, .tf files mean TERRAFORM, anything else
+            that is Kubernetes YAML means MANIFESTS.
+    apiRegistryV1GetRevisionResponse:
+        type: object
+        properties:
+            revision:
+                $ref: '#/definitions/apiRegistryV1Revision'
+        description: GetRevisionResponse contains the revision.
+    apiRegistryV1ListRevisionsResponse:
+        type: object
+        properties:
+            revisions:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/apiRegistryV1Revision'
+            next_page_token:
+                type: string
+        description: ListRevisionsResponse contains a page of revisions, newest first.
+    apiRegistryV1Revision:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier (UUID). Internal handle; references use the digest.
+                readOnly: true
+            component_id:
+                type: string
+                description: The component this revision belongs to (UUID).
+                readOnly: true
+            digest:
+                type: string
+                description: 'The identity: SHA-256 of the normalized bundle, as `sha256:<hex>`.'
+                readOnly: true
+            kind:
+                $ref: '#/definitions/apiRegistryV1ComponentKind'
+                readOnly: true
+            size_bytes:
+                type: string
+                format: int64
+                description: Size of the stored bundle in bytes.
+                readOnly: true
+            contract:
+                $ref: '#/definitions/v1Contract'
+                description: |-
+                    The inputs and outputs the bundle exposes. Inferred from the bundle at
+                    publish; curated by a publisher once the contract format lands.
+                readOnly: true
+            provenance:
+                $ref: '#/definitions/v1Provenance'
+                description: Where the bytes came from.
+                readOnly: true
+            findings:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Finding'
+                description: |-
+                    What the publish gate found. Informational findings do not block a
+                    publish; a revision with findings is published with them attached, and
+                    the findings delta between two revisions is what an upgrade review reads.
+                readOnly: true
+            status:
+                $ref: '#/definitions/apiRegistryV1RevisionStatus'
+                readOnly: true
+            deprecated_at:
+                type: string
+                format: date-time
+                description: Set only when DEPRECATED.
+                readOnly: true
+            deprecation_reason:
+                type: string
+                readOnly: true
+            tags:
+                type: array
+                items:
+                    type: string
+                description: The tags currently naming this revision.
+                readOnly: true
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: Revision is one published artifact. Immutable except for deprecation.
+    apiRegistryV1RevisionStatus:
+        type: string
+        enum:
+            - REVISION_STATUS_UNSPECIFIED
+            - PUBLISHED
+            - DEPRECATED
+        default: REVISION_STATUS_UNSPECIFIED
+        description: |-
+            RevisionStatus is a revision's lifecycle. There is no deleted state.
+
+             - PUBLISHED: Adoptable: a change set may pin it.
+             - DEPRECATED: Refuses new adoption; what already pins it keeps running with a warning.
+    apiRunV1GetRevisionResponse:
+        type: object
+        properties:
+            revision:
+                $ref: '#/definitions/apiRunV1Revision'
+                description: The revision record with current status and artifacts.
+        description: GetRevisionResponse contains the revision record.
+    apiRunV1ListRevisionsResponse:
+        type: object
+        properties:
+            revisions:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/apiRunV1Revision'
+                description: The list of revisions, ordered by dependency graph (upstream first).
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListRevisionsResponse contains all revisions for a run.
+    apiRunV1Revision:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier for the revision (UUID).
+            run_id:
+                type: string
+                description: The run this revision belongs to (UUID).
+            component_id:
+                type: string
+                description: The component this revision is for (UUID).
+            component_name:
+                type: string
+                description: Component name at the time of run (immutable semantic key).
+            kind:
+                $ref: '#/definitions/v1RevisionKind'
+                description: Component kind at the time of run (after override resolution).
+            status:
+                $ref: '#/definitions/apiRunV1RevisionStatus'
+                description: Lifecycle status of this revision.
+            change_type:
+                $ref: '#/definitions/v1RevisionChangeType'
+                description: |-
+                    What type of change this revision represents relative to the previously
+                    deployed state.
+            previous_revision_id:
+                type: string
+                description: |-
+                    The last succeeded revision for this (component, environment) at the
+                    time this revision was created. Null for CREATE revisions.
+            source_id:
+                type: string
+                description: |-
+                    The source the module pointed to at the time of this revision (UUID).
+                    Snapshotted so a rollback can re-fetch from the original source even if
+                    the module's source binding is later edited. Execution today resolves
+                    fetch location through the live module; this field is the audit anchor.
+            ref:
+                type: string
+                description: The git ref / version selector deployed (the component's ref at snapshot).
+            resolved_values:
+                type: string
+                description: |-
+                    The resolved values template snapshot: the values_template with all
+                    variable references and component output references fully resolved.
+                    Stored for audit: shows exactly what inputs were used. Sensitive
+                    variable values are masked in API responses.
+            depends_on:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Component IDs that this revision depends on. Populated from the resolved
+                    depends_on list plus implicit dependencies from template expressions.
+            blocked_by:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Component IDs that are blocking this revision. Only populated when
+                    status is BLOCKED; indicates which upstream components failed.
+            plan_summary:
+                $ref: '#/definitions/v1ChangeSummary'
+                description: |-
+                    The normalized change counts (creates/updates/deletes/noops) this
+                    revision's plan computed. Populated after planning. Engine-agnostic.
+            available_phases:
+                type: array
+                items:
+                    $ref: '#/definitions/v1RevisionPhase'
+                description: |-
+                    Phase labels for which a transcript has been stored, in the order they
+                    ran. Populated as each phase completes (a revision that planned and then
+                    applied carries `[REVISION_PHASE_PLAN, REVISION_PHASE_APPLY]`). Fetch a
+                    phase's transcript via
+                    `GET /api/v1/runs/{run_id}/revisions/{revision_id}/{phase}`.
+            error_message:
+                type: string
+                description: Error message if the revision failed. Empty on success.
+            retry_count:
+                type: integer
+                format: int32
+                description: Number of retry attempts. Starts at 0 for the initial attempt.
+            started_at:
+                type: string
+                format: date-time
+                description: When the revision started execution (transitioned from PENDING/QUEUED).
+            completed_at:
+                type: string
+                format: date-time
+                description: When the revision finished (succeeded, failed, or canceled).
+            working_directory:
+                type: string
+                description: |-
+                    Subdirectory within the delivered archive where the executor runs.
+                    Empty means the archive root. Populated from the catalog item's path field
+                    at snapshot time so that relative references resolve correctly.
+            created_at:
+                type: string
+                format: date-time
+                description: When the revision was created (same as run created_at).
+            resolved_commit:
+                type: string
+                description: |-
+                    The concrete commit this revision resolved its ref to and pinned -- the
+                    reproducibility anchor. `ref` is the intent (e.g. `main`); this is what
+                    actually deployed. Populated when resolution is wired (a later WP).
+            type:
+                type: string
+                description: |-
+                    The deploy/engine type this revision runs (TERRAFORM/HELM/KUSTOMIZE/
+                    MANIFEST), denormalized from the component at snapshot. Selects the
+                    executor: the orchestration layer routes by this type, not by kind.
+        description: |-
+            Revision represents an immutable, rendered artifact for a single component
+            within a run. Each revision tracks the full lifecycle from rendering
+            through execution, and stores references to the produced artifacts
+            (rendered manifests, binary plan files, etc.).
+
+            For infrastructure components (terraform-semantic engine, Terraform or
+            OpenTofu):
+              - Rendering produces the infrastructure source tree (.tf files and
+                auto-loaded tfvars) with resolved variable values.
+              - The engine's plan and apply phases are executed by the assigned
+                TERRAFORM agent (see JobBundle.engine for engine selection).
+              - The plan output is stored for visibility.
+              - Each component has its own state, stored via the configured backend.
+
+            For workload components (Helm, Kustomize, manifests):
+              - Rendering produces Kubernetes manifests (via helm template, kustomize
+                build, or raw file collection).
+              - Manifests are ordered (CRDs before resources, namespaces first).
+              - The rendered bundle is sent to the K8s agent for application.
+    apiRunV1RevisionStatus:
+        type: string
+        enum:
+            - REVISION_STATUS_UNSPECIFIED
+            - REVISION_STATUS_PENDING
+            - REVISION_STATUS_QUEUED
+            - REVISION_STATUS_PLANNING
+            - REVISION_STATUS_PLANNED
+            - REVISION_STATUS_APPLYING
+            - REVISION_STATUS_SUCCEEDED
+            - REVISION_STATUS_FAILED
+            - REVISION_STATUS_BLOCKED
+            - REVISION_STATUS_CANCELED
+            - REVISION_STATUS_SUPERSEDED
+            - REVISION_STATUS_DEFERRED
+            - REVISION_STATUS_STALE
+            - REVISION_STATUS_AWAITING_APPROVAL
+        default: REVISION_STATUS_UNSPECIFIED
+        description: |-
+            RevisionStatus represents the lifecycle status of a single component
+            revision within a run.
+
+             - REVISION_STATUS_UNSPECIFIED: Default value. Must not be used.
+             - REVISION_STATUS_PENDING: The revision has been created but execution has not started. Waiting for
+            its turn in the dependency graph.
+             - REVISION_STATUS_QUEUED: The revision is queued for execution. Its upstream dependencies have
+            completed and it will begin shortly.
+             - REVISION_STATUS_PLANNING: (Infrastructure only) The engine's plan is being generated
+            (`terraform plan` / `tofu plan`). Transitions to PLANNED on success
+            or FAILED on error.
+             - REVISION_STATUS_PLANNED: (Infrastructure only) Plan completed successfully. Under the Option B
+            auto-continue model, this state is transient: the apply is dispatched
+            immediately if the parent run is already APPLYING (user authorized at
+            the changeset level). The plan output is available for review.
+             - REVISION_STATUS_APPLYING: The revision is being applied. For infrastructure, this is the engine's
+            apply phase (`terraform apply` / `tofu apply`). For workloads, this is
+            applying manifests to the target cluster.
+             - REVISION_STATUS_SUCCEEDED: The revision completed successfully. For infrastructure, the engine's
+            apply phase succeeded. For workloads, the manifests were applied and the
+            resources reached a healthy state.
+             - REVISION_STATUS_FAILED: The revision failed. See `error_message` for details.
+             - REVISION_STATUS_BLOCKED: The revision is blocked because an upstream dependency failed. See
+            `blocked_by` for the component(s) that caused the block.
+             - REVISION_STATUS_CANCELED: The revision was canceled by user action (parent run canceled).
+             - REVISION_STATUS_SUPERSEDED: The revision was superseded because its parent run was replaced
+            (a newer plan landed for the same change set, or the change set was
+            edited). System-driven; distinct from CANCELED.
+             - REVISION_STATUS_DEFERRED: The revision cannot plan yet because its values_template references
+            outputs of an upstream revision that has not been applied. Analogous to
+            terraform's "(known after apply)": the inputs to this plan are
+            unknowable until upstream apply completes. Transitions to QUEUED once
+            the upstream apply lands and outputs are captured.
+             - REVISION_STATUS_STALE: The revision's apply stalled with an unknown outcome (never started, still
+            running, or done-but-unreported). Cannot auto-retry; requires
+            reconciliation against real state or an audited operator override. (Set by
+            the liveness/STALE reaper; see Phase D.)
+             - REVISION_STATUS_AWAITING_APPROVAL: The revision has planned and is awaiting explicit approval before its
+            apply runs (gating policy != auto-continue). (Set by the gating flow.)
     apiUserV1CreateApiKeyRequest:
         type: object
         properties:
@@ -3804,6 +4261,18 @@ definitions:
                   "@type": "type.googleapis.com/google.protobuf.Duration",
                   "value": "1.212s"
                 }
+    protobufNullValue:
+        type: string
+        enum:
+            - NULL_VALUE
+        default: NULL_VALUE
+        description: |-
+            `NullValue` is a singleton enumeration to represent the null value for the
+            `Value` type union.
+
+            The JSON representation for `NullValue` is JSON `null`.
+
+             - NULL_VALUE: Null value.
     rpcStatus:
         type: object
         properties:
@@ -4249,113 +4718,6 @@ definitions:
                 $ref: '#/definitions/v1Run'
                 description: The canceled run.
         description: CancelRunResponse contains the updated run.
-    v1CatalogItem:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the catalog item (UUID).
-                readOnly: true
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
-                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                    start with a letter and end with an alphanumeric character (1-63 chars).
-            description:
-                type: string
-                description: |-
-                    Optional longer-form description of the catalog item's purpose
-                    (e.g., "Standard VPC module for billing workloads").
-            type:
-                $ref: '#/definitions/v1CatalogItemType'
-                description: |-
-                    The content type: what this item contains and how it should be executed.
-                    Immutable after creation.
-            source_id:
-                type: string
-                description: Reference to the Source this catalog item fetches from (UUID).
-            ref:
-                type: string
-                description: |-
-                    Git ref, registry version, chart version, or OCI tag to fetch.
-                    Optional. When empty, the backend uses its default (e.g., HEAD for Git,
-                    latest for registries). This is the default a component copies at create
-                    time; the component owns its ref thereafter.
-            root:
-                type: string
-                description: |-
-                    Subdirectory within the fetched tree to treat as the item root.
-                    Optional. When empty, the entire fetched tree is the root.
-                    Example: "modules/vpc" within a monorepo.
-            path:
-                type: string
-                description: |-
-                    Working directory within root for execution (e.g., "environments/prod").
-                    Optional. When empty, defaults to root itself.
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: |-
-                    Arbitrary key-value labels for organizing and filtering catalog items
-                    (e.g., `{"team": "platform", "stack": "networking"}`).
-            source_name:
-                type: string
-                description: Display name of the parent source. Denormalized for display.
-                readOnly: true
-            created_by:
-                $ref: '#/definitions/v1ActorRef'
-                description: The user or agent who created this catalog item (server-populated from token).
-                readOnly: true
-            created_at:
-                type: string
-                format: date-time
-                description: When the catalog item was created.
-                readOnly: true
-            updated_at:
-                type: string
-                format: date-time
-                description: When the catalog item was last updated.
-                readOnly: true
-        description: |-
-            CatalogItem represents a named, reusable reference to a slice of content
-            within a Source at a specific ref. One Source can back many catalog items
-            (different refs, different subtrees, different working directories).
-
-            The catalog item type identifies what the content is (Terraform, Helm,
-            Kustomize, raw manifests) independently of how it is fetched (the Source
-            type). This separation allows a single Git source to back Terraform, Helm,
-            and manifest items in different subdirectories.
-
-            A catalog item is a starting point: components are instantiated FROM it as
-            self-contained copies (copy-not-link), so editing or deleting an item never
-            mutates already-placed components.
-    v1CatalogItemType:
-        type: string
-        enum:
-            - CATALOG_ITEM_TYPE_UNSPECIFIED
-            - CATALOG_ITEM_TYPE_TERRAFORM
-            - CATALOG_ITEM_TYPE_HELM
-            - CATALOG_ITEM_TYPE_KUSTOMIZE
-            - CATALOG_ITEM_TYPE_MANIFEST
-        default: CATALOG_ITEM_TYPE_UNSPECIFIED
-        description: |-
-            CatalogItemType identifies the content semantics: what the fetched content is
-            and how it should be executed. This is orthogonal to SourceType, which
-            identifies the fetch protocol. A single GIT source can back TERRAFORM, HELM,
-            KUSTOMIZE, and MANIFEST items in different subdirectories.
-
-             - CATALOG_ITEM_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - CATALOG_ITEM_TYPE_TERRAFORM: Terraform root module. Contains main.tf, variables.tf, etc. Executed via
-            `terraform init/plan/apply`. Works with GIT, TERRAFORM, and HTTP sources.
-             - CATALOG_ITEM_TYPE_HELM: Helm chart. Contains Chart.yaml, values.yaml, templates/. Rendered via
-            `helm template` or installed via `helm install`. Works with GIT, HELM,
-            OCI, and HTTP sources.
-             - CATALOG_ITEM_TYPE_KUSTOMIZE: Kustomize overlay. Contains kustomization.yaml. Rendered via
-            `kustomize build`. Works with GIT and HTTP sources.
-             - CATALOG_ITEM_TYPE_MANIFEST: Raw Kubernetes manifests. Applied directly via `kubectl apply`. Works with
-            GIT and HTTP sources.
     v1CatalogItemVersionDiff:
         type: object
         properties:
@@ -4712,6 +5074,16 @@ definitions:
                 format: date-time
                 description: When the grace window expires.
         description: ClearAgentIdentityBindingResponse acknowledges the rebind window.
+    v1ComponentLabels:
+        type: object
+        properties:
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+        description: |-
+            ComponentLabels wraps a label map so its presence in an update can be told
+            from an empty map: present and empty clears the labels.
     v1ComponentTarget:
         type: object
         properties:
@@ -4775,6 +5147,62 @@ definitions:
                 type: boolean
                 description: Whether the container's readiness probe is passing.
         description: ContainerStatus describes the current state of a single container.
+    v1Contract:
+        type: object
+        properties:
+            inputs:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ContractInput'
+            outputs:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ContractOutput'
+        description: |-
+            Contract is what a bundle takes and gives. The shape here is what static
+            inspection can produce from any Terraform module or Helm chart; the curated
+            format adds to it without removing anything.
+    v1ContractInput:
+        type: object
+        properties:
+            name:
+                type: string
+            type:
+                type: string
+                description: |-
+                    The type as the bundle declares it, in the bundle's own vocabulary
+                    (Terraform type expressions, JSON Schema types for charts). Informational
+                    until the contract format settles what validation reads.
+            description:
+                type: string
+            required:
+                type: boolean
+                description: True when the bundle gives it no default.
+            default:
+                description: The declared default, when there is one.
+            sensitive:
+                type: boolean
+                description: |-
+                    The value is a secret: never rendered in review, and resolved by the
+                    runner from a reference rather than stored in the change set.
+            ephemeral:
+                type: boolean
+                description: |-
+                    The value must not land in plan or state (Terraform 1.10+ ephemeral
+                    inputs). Implies sensitive.
+        description: ContractInput is one value the bundle accepts.
+    v1ContractOutput:
+        type: object
+        properties:
+            name:
+                type: string
+            description:
+                type: string
+            sensitive:
+                type: boolean
+        description: ContractOutput is one value the bundle produces.
     v1CopyChangeSetResponse:
         type: object
         properties:
@@ -4848,59 +5276,6 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The created application.
         description: CreateApplicationResponse contains the newly created application.
-    v1CreateCatalogItemRequest:
-        type: object
-        properties:
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
-                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                    start with a letter and end with an alphanumeric character (1-63 chars).
-            description:
-                type: string
-                description: Optional description of the catalog item's purpose.
-            type:
-                $ref: '#/definitions/v1CatalogItemType'
-                description: 'The content type: what this item contains and how it should be executed.'
-            source_id:
-                type: string
-                description: Reference to the Source this catalog item fetches from (UUID).
-            ref:
-                type: string
-                description: |-
-                    Git ref, registry version, chart version, or OCI tag to fetch.
-                    Optional. When empty, the backend uses its default (e.g., HEAD for Git,
-                    latest for registries). This is the default a component copies at create
-                    time; the component owns its ref thereafter.
-            root:
-                type: string
-                description: |-
-                    Subdirectory within the fetched tree to treat as the item root.
-                    Optional. When empty, the entire fetched tree is the root.
-                    Example: "modules/vpc" within a monorepo.
-            path:
-                type: string
-                description: |-
-                    Working directory within root for execution (e.g., "environments/prod").
-                    Optional. When empty, defaults to root itself.
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: Arbitrary key-value labels.
-        description: CreateCatalogItemRequest contains the parameters for creating a new item.
-        required:
-            - name
-            - type
-            - source_id
-    v1CreateCatalogItemResponse:
-        type: object
-        properties:
-            catalog_item:
-                $ref: '#/definitions/v1CatalogItem'
-                description: The created catalog item.
-        description: CreateCatalogItemResponse contains the newly created catalog item.
     v1CreateChangeSetRequest:
         type: object
         properties:
@@ -5186,9 +5561,9 @@ definitions:
     v1DeleteApplicationResponse:
         type: object
         description: DeleteApplicationResponse is empty on success.
-    v1DeleteCatalogItemResponse:
+    v1DeleteComponentResponse:
         type: object
-        description: DeleteCatalogItemResponse is empty on success.
+        description: DeleteComponentResponse is empty.
     v1DeleteCredentialResponse:
         type: object
         description: DeleteCredentialResponse is empty on success.
@@ -5198,6 +5573,15 @@ definitions:
     v1DeleteSourceResponse:
         type: object
         description: DeleteSourceResponse is empty on success.
+    v1DeleteTagResponse:
+        type: object
+        description: DeleteTagResponse is empty.
+    v1DeprecateRevisionResponse:
+        type: object
+        properties:
+            revision:
+                $ref: '#/definitions/apiRegistryV1Revision'
+        description: DeprecateRevisionResponse contains the revision with its new status.
     v1DiffChangeSetResponse:
         type: object
         properties:
@@ -5402,11 +5786,11 @@ definitions:
             name:
                 type: string
                 description: Component name (stable identifier set at creation).
-            catalog_item_type:
-                $ref: '#/definitions/v1CatalogItemType'
+            kind:
+                $ref: '#/definitions/apiRegistryV1ComponentKind'
                 description: |-
-                    Engine type the component renders against (TERRAFORM, HELM, etc),
-                    denormalized from the component's own deploy spec.
+                    What the component's pinned revision is (TERRAFORM, HELM, MANIFESTS),
+                    denormalized from the registry.
             ref:
                 type: string
                 description: The git ref / version selector the component deploys.
@@ -5416,7 +5800,7 @@ definitions:
                     ID of the last-succeeded revision for this component in this env, if
                     any (UUID). Empty when the component has never reached SUCCEEDED.
             last_revision_status:
-                $ref: '#/definitions/v1RevisionStatus'
+                $ref: '#/definitions/apiRunV1RevisionStatus'
                 description: |-
                     Status of the last revision (SUCCEEDED when populated). UNSPECIFIED
                     means the component has no last-succeeded revision yet.
@@ -5481,6 +5865,36 @@ definitions:
              - EXECUTION_STATUS_UNSPECIFIED: Default value. Must not be used.
              - EXECUTION_STATUS_SUCCEEDED: The phase completed successfully.
              - EXECUTION_STATUS_FAILED: The phase failed. See error_message.
+    v1Finding:
+        type: object
+        properties:
+            severity:
+                $ref: '#/definitions/v1FindingSeverity'
+            source:
+                type: string
+                description: 'What produced it: `provider-constraint`, `checkov`, `trivy`, `image-ref`.'
+            code:
+                type: string
+                description: |-
+                    The producer's own identifier for the rule, when it has one
+                    (e.g. `CKV_AWS_18`).
+            message:
+                type: string
+            path:
+                type: string
+                description: Where in the bundle, when it applies.
+        description: Finding is one thing the publish gate noticed.
+    v1FindingSeverity:
+        type: string
+        enum:
+            - FINDING_SEVERITY_UNSPECIFIED
+            - INFO
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+        default: FINDING_SEVERITY_UNSPECIFIED
+        description: FindingSeverity ranks what the publish gate found.
     v1GetAgentResponse:
         type: object
         properties:
@@ -5515,13 +5929,6 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The retrieved application.
         description: GetApplicationResponse contains the application record.
-    v1GetCatalogItemResponse:
-        type: object
-        properties:
-            catalog_item:
-                $ref: '#/definitions/v1CatalogItem'
-                description: The retrieved catalog item.
-        description: GetCatalogItemResponse contains the catalog item record.
     v1GetChangeSetResponse:
         type: object
         properties:
@@ -5529,6 +5936,12 @@ definitions:
                 $ref: '#/definitions/v1ChangeSet'
                 description: The change set, with `entries` and `variable_entries` populated.
         description: GetChangeSetResponse contains the change set with all entries inline.
+    v1GetComponentResponse:
+        type: object
+        properties:
+            component:
+                $ref: '#/definitions/apiRegistryV1Component'
+        description: GetComponentResponse contains the component with its tags.
     v1GetCredentialResponse:
         type: object
         properties:
@@ -5564,13 +5977,6 @@ definitions:
                 $ref: '#/definitions/v1RevisionBundle'
                 description: The artifact bundle with everything needed to apply the workload.
         description: GetRevisionBundleResponse contains the rendered manifests for the revision.
-    v1GetRevisionResponse:
-        type: object
-        properties:
-            revision:
-                $ref: '#/definitions/v1Revision'
-                description: The revision record with current status and artifacts.
-        description: GetRevisionResponse contains the revision record.
     v1GetRunResponse:
         type: object
         properties:
@@ -6088,19 +6494,6 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListApplicationsResponse contains a page of applications.
-    v1ListCatalogItemsResponse:
-        type: object
-        properties:
-            catalog_items:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1CatalogItem'
-                description: The list of catalog items.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListCatalogItemsResponse contains a page of catalog items.
     v1ListChangeSetsResponse:
         type: object
         properties:
@@ -6117,6 +6510,19 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListChangeSetsResponse contains a page of change sets.
+    v1ListComponentsResponse:
+        type: object
+        properties:
+            components:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/apiRegistryV1Component'
+                description: Listed without their tags; GetComponent carries those.
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListComponentsResponse contains a page of components.
     v1ListCredentialsResponse:
         type: object
         properties:
@@ -6182,19 +6588,6 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListInvitationsResponse contains a page of invitations.
-    v1ListRevisionsResponse:
-        type: object
-        properties:
-            revisions:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Revision'
-                description: The list of revisions, ordered by dependency graph (upstream first).
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListRevisionsResponse contains all revisions for a run.
     v1ListRunsResponse:
         type: object
         properties:
@@ -6293,6 +6686,131 @@ definitions:
                     Object UID, used to disambiguate references across recreations. Empty when
                     unknown.
         description: ObjectReference is a lightweight reference to a Kubernetes object.
+    v1Pin:
+        type: object
+        properties:
+            source:
+                type: string
+                description: The source as the bundle declared it, before rewriting.
+            constraint:
+                type: string
+                description: The constraint that was asked for, when any.
+            resolved:
+                type: string
+                description: 'What it resolved to: an exact version or commit.'
+        description: Pin is one dependency the closure step resolved and vendored.
+    v1Provenance:
+        type: object
+        properties:
+            kind:
+                $ref: '#/definitions/v1ProvenanceKind'
+            uri:
+                type: string
+                description: |-
+                    The repository or location the bytes were read from: a git remote URL, a
+                    Helm repository URL, an OCI reference. Empty for a local publish with no
+                    remote.
+            ref:
+                type: string
+                description: The ref that was asked for (tag, branch, chart version), when any.
+            commit:
+                type: string
+                description: 'What the ref resolved to: a commit SHA, or the exact chart version.'
+            path:
+                type: string
+                description: |-
+                    The path within the source the bundle was taken from. Empty means the
+                    root.
+            dirty:
+                type: boolean
+                description: |-
+                    The working copy carried uncommitted changes when it was published.
+                    Only meaningful for LOCAL, and only ever true when the CLI said so.
+            pins:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Pin'
+                description: |-
+                    Every remote module or chart the closure step vendored into the bundle,
+                    pinned to what it resolved.
+        description: |-
+            Provenance is where a revision's bytes came from: the audit trail behind
+            the digest.
+    v1ProvenanceKind:
+        type: string
+        enum:
+            - PROVENANCE_KIND_UNSPECIFIED
+            - LOCAL
+            - GIT
+            - PULL
+        default: PROVENANCE_KIND_UNSPECIFIED
+        description: |-
+            ProvenanceKind is how the bytes arrived.
+
+             - LOCAL: Published from a working copy by the CLI. Recorded honestly as local even
+            when the copy is a clean checkout, so policy can later confine local
+            publishes to development catalogs without a new mechanism.
+             - GIT: Published from a repository at a ref by the GitHub App, or by the CLI in
+            remote mode against a registered source.
+             - PULL: Pull-published from a third-party source the tenant does not own. The
+            upstream identity is recorded; the bytes are frozen here.
+    v1PublishComponentRequest:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    The component name to publish under. Created on first use. Bare
+                    (`cloud-sql`), which resolves to the default namespace.
+            kind:
+                $ref: '#/definitions/apiRegistryV1ComponentKind'
+                description: |-
+                    The kind, when the caller knows better than inspection. UNSPECIFIED
+                    means detect.
+            tags:
+                type: array
+                items:
+                    type: string
+                description: Tags to set on the resulting revision (e.g. `v1.2.0`, `latest`).
+            description:
+                type: string
+                description: |-
+                    Description and labels for the component. Applied when the publish
+                    creates the component; ignored when it already exists, since a publish is
+                    not the place to edit metadata. UpdateComponent is.
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+            provenance:
+                $ref: '#/definitions/v1Provenance'
+                description: |-
+                    What the caller knows about where the bytes came from. The server
+                    records the kind as LOCAL for a CLI upload whatever is claimed here; the
+                    uri, ref, commit, path and dirty flag are kept as the caller's
+                    assertion.
+            bundle:
+                type: string
+                format: byte
+                description: 'The bundle: a gzipped tar of the component root. At most 64 MiB.'
+        description: PublishComponentRequest carries what is being published and the bytes.
+        required:
+            - name
+            - bundle
+    v1PublishComponentResponse:
+        type: object
+        properties:
+            component:
+                $ref: '#/definitions/apiRegistryV1Component'
+            revision:
+                $ref: '#/definitions/apiRegistryV1Revision'
+            unchanged:
+                type: boolean
+                description: |-
+                    True when the digest was already published under this name and nothing
+                    was written. Tags in the request were still applied.
+        description: PublishComponentResponse is the recorded revision.
     v1RemoveEntryResponse:
         type: object
         description: RemoveEntryResponse is empty on success.
@@ -6429,25 +6947,6 @@ definitions:
                 type: boolean
                 description: Whether the report was accepted.
         description: ReportWorkloadStatusResponse acknowledges a workload telemetry push.
-    v1ResolveCatalogItemResponse:
-        type: object
-        properties:
-            revision:
-                type: string
-                description: |-
-                    The resolved revision identifier. For Git sources, this is the commit SHA.
-                    For registry sources, the canonical version string. For HTTP, a content hash.
-            digest:
-                type: string
-                description: |-
-                    Content-addressing digest of the fetched content (e.g., "sha1:<commit>",
-                    "sha256:<hash>").
-            catalog_item:
-                $ref: '#/definitions/v1CatalogItem'
-                description: The catalog item that was resolved, with current field values.
-        description: |-
-            ResolveCatalogItemResponse contains the resolved metadata from fetching the
-            catalog item's content via its Source.
     v1ResourceSnapshot:
         type: object
         properties:
@@ -6493,146 +6992,12 @@ definitions:
         type: object
         properties:
             revision:
-                $ref: '#/definitions/v1Revision'
+                $ref: '#/definitions/apiRunV1Revision'
                 description: |-
                     The retried revision. Status resets and retry_count is incremented.
                     Downstream revisions that were BLOCKED will automatically unblock
                     if this revision succeeds.
         description: RetryRevisionResponse contains the updated revision.
-    v1Revision:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the revision (UUID).
-            run_id:
-                type: string
-                description: The run this revision belongs to (UUID).
-            component_id:
-                type: string
-                description: The component this revision is for (UUID).
-            component_name:
-                type: string
-                description: Component name at the time of run (immutable semantic key).
-            kind:
-                $ref: '#/definitions/v1RevisionKind'
-                description: Component kind at the time of run (after override resolution).
-            status:
-                $ref: '#/definitions/v1RevisionStatus'
-                description: Lifecycle status of this revision.
-            change_type:
-                $ref: '#/definitions/v1RevisionChangeType'
-                description: |-
-                    What type of change this revision represents relative to the previously
-                    deployed state.
-            previous_revision_id:
-                type: string
-                description: |-
-                    The last succeeded revision for this (component, environment) at the
-                    time this revision was created. Null for CREATE revisions.
-            source_id:
-                type: string
-                description: |-
-                    The source the module pointed to at the time of this revision (UUID).
-                    Snapshotted so a rollback can re-fetch from the original source even if
-                    the module's source binding is later edited. Execution today resolves
-                    fetch location through the live module; this field is the audit anchor.
-            ref:
-                type: string
-                description: The git ref / version selector deployed (the component's ref at snapshot).
-            resolved_values:
-                type: string
-                description: |-
-                    The resolved values template snapshot: the values_template with all
-                    variable references and component output references fully resolved.
-                    Stored for audit: shows exactly what inputs were used. Sensitive
-                    variable values are masked in API responses.
-            depends_on:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    Component IDs that this revision depends on. Populated from the resolved
-                    depends_on list plus implicit dependencies from template expressions.
-            blocked_by:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    Component IDs that are blocking this revision. Only populated when
-                    status is BLOCKED; indicates which upstream components failed.
-            plan_summary:
-                $ref: '#/definitions/v1ChangeSummary'
-                description: |-
-                    The normalized change counts (creates/updates/deletes/noops) this
-                    revision's plan computed. Populated after planning. Engine-agnostic.
-            available_phases:
-                type: array
-                items:
-                    $ref: '#/definitions/v1RevisionPhase'
-                description: |-
-                    Phase labels for which a transcript has been stored, in the order they
-                    ran. Populated as each phase completes (a revision that planned and then
-                    applied carries `[REVISION_PHASE_PLAN, REVISION_PHASE_APPLY]`). Fetch a
-                    phase's transcript via
-                    `GET /api/v1/runs/{run_id}/revisions/{revision_id}/{phase}`.
-            error_message:
-                type: string
-                description: Error message if the revision failed. Empty on success.
-            retry_count:
-                type: integer
-                format: int32
-                description: Number of retry attempts. Starts at 0 for the initial attempt.
-            started_at:
-                type: string
-                format: date-time
-                description: When the revision started execution (transitioned from PENDING/QUEUED).
-            completed_at:
-                type: string
-                format: date-time
-                description: When the revision finished (succeeded, failed, or canceled).
-            working_directory:
-                type: string
-                description: |-
-                    Subdirectory within the delivered archive where the executor runs.
-                    Empty means the archive root. Populated from the catalog item's path field
-                    at snapshot time so that relative references resolve correctly.
-            created_at:
-                type: string
-                format: date-time
-                description: When the revision was created (same as run created_at).
-            resolved_commit:
-                type: string
-                description: |-
-                    The concrete commit this revision resolved its ref to and pinned -- the
-                    reproducibility anchor. `ref` is the intent (e.g. `main`); this is what
-                    actually deployed. Populated when resolution is wired (a later WP).
-            type:
-                type: string
-                description: |-
-                    The deploy/engine type this revision runs (TERRAFORM/HELM/KUSTOMIZE/
-                    MANIFEST), denormalized from the component at snapshot. Selects the
-                    executor: the orchestration layer routes by this type, not by kind.
-        description: |-
-            Revision represents an immutable, rendered artifact for a single component
-            within a run. Each revision tracks the full lifecycle from rendering
-            through execution, and stores references to the produced artifacts
-            (rendered manifests, binary plan files, etc.).
-
-            For infrastructure components (terraform-semantic engine, Terraform or
-            OpenTofu):
-              - Rendering produces the infrastructure source tree (.tf files and
-                auto-loaded tfvars) with resolved variable values.
-              - The engine's plan and apply phases are executed by the assigned
-                TERRAFORM agent (see JobBundle.engine for engine selection).
-              - The plan output is stored for visibility.
-              - Each component has its own state, stored via the configured backend.
-
-            For workload components (Helm, Kustomize, manifests):
-              - Rendering produces Kubernetes manifests (via helm template, kustomize
-                build, or raw file collection).
-              - Manifests are ordered (CRDs before resources, namespaces first).
-              - The rendered bundle is sent to the K8s agent for application.
     v1RevisionBundle:
         type: object
         properties:
@@ -6712,64 +7077,6 @@ definitions:
              - REVISION_PHASE_UNSPECIFIED: Default value. Must not be used.
              - REVISION_PHASE_PLAN: Plan transcript (terraform plan / tofu plan output).
              - REVISION_PHASE_APPLY: Apply transcript (terraform apply / tofu apply output).
-    v1RevisionStatus:
-        type: string
-        enum:
-            - REVISION_STATUS_UNSPECIFIED
-            - REVISION_STATUS_PENDING
-            - REVISION_STATUS_QUEUED
-            - REVISION_STATUS_PLANNING
-            - REVISION_STATUS_PLANNED
-            - REVISION_STATUS_APPLYING
-            - REVISION_STATUS_SUCCEEDED
-            - REVISION_STATUS_FAILED
-            - REVISION_STATUS_BLOCKED
-            - REVISION_STATUS_CANCELED
-            - REVISION_STATUS_SUPERSEDED
-            - REVISION_STATUS_DEFERRED
-            - REVISION_STATUS_STALE
-            - REVISION_STATUS_AWAITING_APPROVAL
-        default: REVISION_STATUS_UNSPECIFIED
-        description: |-
-            RevisionStatus represents the lifecycle status of a single component
-            revision within a run.
-
-             - REVISION_STATUS_UNSPECIFIED: Default value. Must not be used.
-             - REVISION_STATUS_PENDING: The revision has been created but execution has not started. Waiting for
-            its turn in the dependency graph.
-             - REVISION_STATUS_QUEUED: The revision is queued for execution. Its upstream dependencies have
-            completed and it will begin shortly.
-             - REVISION_STATUS_PLANNING: (Infrastructure only) The engine's plan is being generated
-            (`terraform plan` / `tofu plan`). Transitions to PLANNED on success
-            or FAILED on error.
-             - REVISION_STATUS_PLANNED: (Infrastructure only) Plan completed successfully. Under the Option B
-            auto-continue model, this state is transient: the apply is dispatched
-            immediately if the parent run is already APPLYING (user authorized at
-            the changeset level). The plan output is available for review.
-             - REVISION_STATUS_APPLYING: The revision is being applied. For infrastructure, this is the engine's
-            apply phase (`terraform apply` / `tofu apply`). For workloads, this is
-            applying manifests to the target cluster.
-             - REVISION_STATUS_SUCCEEDED: The revision completed successfully. For infrastructure, the engine's
-            apply phase succeeded. For workloads, the manifests were applied and the
-            resources reached a healthy state.
-             - REVISION_STATUS_FAILED: The revision failed. See `error_message` for details.
-             - REVISION_STATUS_BLOCKED: The revision is blocked because an upstream dependency failed. See
-            `blocked_by` for the component(s) that caused the block.
-             - REVISION_STATUS_CANCELED: The revision was canceled by user action (parent run canceled).
-             - REVISION_STATUS_SUPERSEDED: The revision was superseded because its parent run was replaced
-            (a newer plan landed for the same change set, or the change set was
-            edited). System-driven; distinct from CANCELED.
-             - REVISION_STATUS_DEFERRED: The revision cannot plan yet because its values_template references
-            outputs of an upstream revision that has not been applied. Analogous to
-            terraform's "(known after apply)": the inputs to this plan are
-            unknowable until upstream apply completes. Transitions to QUEUED once
-            the upstream apply lands and outputs are captured.
-             - REVISION_STATUS_STALE: The revision's apply stalled with an unknown outcome (never started, still
-            running, or done-but-unreported). Cannot auto-retry; requires
-            reconciliation against real state or an audited operator override. (Set by
-            the liveness/STALE reaper; see Phase D.)
-             - REVISION_STATUS_AWAITING_APPROVAL: The revision has planned and is awaiting explicit approval before its
-            apply runs (gating policy != auto-continue). (Set by the gating flow.)
     v1RevisionSummary:
         type: object
         properties:
@@ -6962,6 +7269,12 @@ definitions:
                 $ref: '#/definitions/v1ChangeSetEntry'
                 description: The entry as recorded on the change set.
         description: SetEntryResponse contains the created or replaced entry.
+    v1SetTagResponse:
+        type: object
+        properties:
+            tag:
+                $ref: '#/definitions/v1Tag'
+        description: SetTagResponse contains the tag as it now stands.
     v1SetVariableResponse:
         type: object
         properties:
@@ -7204,6 +7517,32 @@ definitions:
              - SYNC_STATE_IGNORED: The operator paused reconciliation of this resource (admiral.io/reconcile =
             disabled), so the agent does not apply or prune it. Drift is not a failure
             here; the resource is intentionally under manual control.
+    v1Tag:
+        type: object
+        properties:
+            name:
+                type: string
+                description: As written after the colon in `cloud-sql:v1.2.0`.
+                readOnly: true
+            digest:
+                type: string
+                description: The revision it names, as `sha256:<hex>`.
+                readOnly: true
+            immutable:
+                type: boolean
+                description: |-
+                    True for a semver tag: it never moves once assigned. Decided from the
+                    name, so two tags with the same name are always the same class.
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+            updated_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: Tag is a name pointing at a revision.
     v1Tenant:
         type: object
         properties:
@@ -7337,13 +7676,6 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The updated application.
         description: UpdateApplicationResponse contains the updated application.
-    v1UpdateCatalogItemResponse:
-        type: object
-        properties:
-            catalog_item:
-                $ref: '#/definitions/v1CatalogItem'
-                description: The updated catalog item.
-        description: UpdateCatalogItemResponse contains the updated catalog item.
     v1UpdateChangeSetResponse:
         type: object
         properties:
@@ -7353,6 +7685,12 @@ definitions:
         description: |-
             UpdateChangeSetResponse contains the updated change set (metadata only;
             entries are not returned; call GetChangeSet for the full record).
+    v1UpdateComponentResponse:
+        type: object
+        properties:
+            component:
+                $ref: '#/definitions/apiRegistryV1Component'
+        description: UpdateComponentResponse contains the updated component.
     v1UpdateCredentialResponse:
         type: object
         properties:

@@ -35,14 +35,21 @@
       ]
     },
     {
-      "name": "catalog:read",
-      "description": "Read catalog items and resolve their content."
+      "name": "component:publish",
+      "description": "Publish revisions and set tags. Adds to the registry and removes nothing from it, which is what a CI publish key holds.",
+      "implies": [
+        "component:read"
+      ]
     },
     {
-      "name": "catalog:write",
-      "description": "Create, update, and delete catalog items.",
+      "name": "component:read",
+      "description": "Read components, their revisions and tags, and the contract and findings each revision carries."
+    },
+    {
+      "name": "component:write",
+      "description": "Edit a component's metadata, retire components, deprecate revisions, and delete floating tags, in addition to everything a publisher can do.",
       "implies": [
-        "catalog:read"
+        "component:publish"
       ]
     },
     {

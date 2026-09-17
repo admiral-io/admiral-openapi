@@ -758,211 +758,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.application.v1.DeleteApplicationResponse'
-    /v1/catalog-items:
-        get:
-            tags:
-                - Catalog
-            summary: List catalog items
-            description: 'Scope: `catalog:read`'
-            operationId: CatalogAPI_ListCatalogItems
-            parameters:
-                - name: filter
-                  in: query
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                     API documentation for the full operator and predicate reference).
-
-                     Filterable fields:
-                       - `name`: filter by catalog item name.
-                       - `type`: filter by item type (TERRAFORM, HELM, KUSTOMIZE, MANIFEST).
-                       - `source_id`: filter by source reference.
-
-                     Example: `field['type'] = 'TERRAFORM'`
-                  schema:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                - name: page_size
-                  in: query
-                  description: |-
-                    Maximum number of catalog items to return per page. Defaults to 50 when
-                     omitted or 0; must not exceed 100.
-                  schema:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                - name: page_token
-                  in: query
-                  description: Opaque pagination token from a previous response.
-                  schema:
-                    type: string
-                    title: page_token
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.catalog.v1.ListCatalogItemsResponse'
-        post:
-            tags:
-                - Catalog
-            summary: Create a catalog item
-            description: |-
-                The referenced source must exist. The item's ref, root, and path are
-                 optional and default to empty (meaning: the source's default ref, the
-                 repository root, and the root itself as working directory).
-
-                 Scope: `catalog:write`
-            operationId: CatalogAPI_CreateCatalogItem
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.catalog.v1.CreateCatalogItemRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.catalog.v1.CreateCatalogItemResponse'
-    /v1/catalog-items/{catalog_item.id}:
-        patch:
-            tags:
-                - Catalog
-            summary: Update a catalog item
-            description: 'Scope: `catalog:write`'
-            operationId: CatalogAPI_UpdateCatalogItem
-            parameters:
-                - name: catalog_item.id
-                  in: path
-                  description: Unique identifier for the catalog item (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: id
-                    format: uuid
-                    readOnly: true
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                update_mask:
-                                    allOf:
-                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
-                                    title: update_mask
-                                    description: |-
-                                        The set of fields to update. Optional; if omitted, all populated fields
-                                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                                         `description`, `source_id`, `ref`, `root`, `path`, `labels`. `type` is
-                                         immutable and cannot be updated.
-                            title: UpdateCatalogItemRequest
-                            additionalProperties: false
-                            description: UpdateCatalogItemRequest contains the catalog item fields to update.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.catalog.v1.UpdateCatalogItemResponse'
-    /v1/catalog-items/{catalog_item_id}:
-        get:
-            tags:
-                - Catalog
-            summary: Retrieve a catalog item
-            description: 'Scope: `catalog:read`'
-            operationId: CatalogAPI_GetCatalogItem
-            parameters:
-                - name: catalog_item_id
-                  in: path
-                  description: Unique identifier of the catalog item (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: catalog_item_id
-                    format: uuid
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.catalog.v1.GetCatalogItemResponse'
-        delete:
-            tags:
-                - Catalog
-            summary: Delete a catalog item
-            description: 'Scope: `catalog:write`'
-            operationId: CatalogAPI_DeleteCatalogItem
-            parameters:
-                - name: catalog_item_id
-                  in: path
-                  description: Unique identifier of the catalog item to delete (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: catalog_item_id
-                    format: uuid
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.catalog.v1.DeleteCatalogItemResponse'
-    /v1/catalog-items/{catalog_item_id}/resolve:
-        post:
-            tags:
-                - Catalog
-            summary: Resolve a catalog item
-            description: |-
-                This operation fetches from the external system in real time and may take
-                 several seconds depending on the source type and size.
-
-                 Scope: `catalog:read`
-            operationId: CatalogAPI_ResolveCatalogItem
-            parameters:
-                - name: catalog_item_id
-                  in: path
-                  description: Unique identifier of the catalog item to resolve (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: catalog_item_id
-                    format: uuid
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                ref_override:
-                                    type: string
-                                    title: ref_override
-                                    maxLength: 256
-                                    description: |-
-                                        Optional ref override. When set, this ref is used instead of the item's
-                                         default ref. Useful for previewing a different version without modifying
-                                         the catalog item definition.
-                            title: ResolveCatalogItemRequest
-                            additionalProperties: false
-                            description: ResolveCatalogItemRequest identifies a catalog item to resolve.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.catalog.v1.ResolveCatalogItemResponse'
     /v1/changesets:
         get:
             tags:
@@ -1486,6 +1281,403 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.RemoveVariableResponse'
+    /v1/components:
+        get:
+            tags:
+                - Components
+            summary: List components
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_ListComponents
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                     API documentation for the full operator and predicate reference).
+
+                     Filterable fields:
+                       - `name`: filter by name.
+                       - `description`: filter by description.
+                       - `labels`: filter by label key/value.
+
+                     Example: `field['labels']['team'] = 'payments'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: |-
+                    Maximum number of components to return per page. Defaults to 50 when
+                     omitted or 0; must not exceed 100.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: Opaque pagination token from a previous response.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.ListComponentsResponse'
+    /v1/components/{component_id}:
+        delete:
+            tags:
+                - Components
+            summary: Retire a component
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_DeleteComponent
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    format: uuid
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.DeleteComponentResponse'
+        patch:
+            tags:
+                - Components
+            summary: Update a component
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_UpdateComponent
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    format: uuid
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                description:
+                                    type:
+                                        - string
+                                        - "null"
+                                    title: description
+                                    maxLength: 1024
+                                labels:
+                                    oneOf:
+                                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentLabels'
+                                        - type: "null"
+                                    title: labels
+                                    description: Replaces the label set entirely when present.
+                            title: UpdateComponentRequest
+                            additionalProperties: false
+                            description: |-
+                                UpdateComponentRequest carries the fields to change. Omitted fields are
+                                 left as they are.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.UpdateComponentResponse'
+    /v1/components/{component_id}/revisions:
+        get:
+            tags:
+                - Components
+            summary: List a component's revisions
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_ListRevisions
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    format: uuid
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression. Filterable fields:
+                       - `kind`: TERRAFORM, HELM, MANIFESTS.
+                       - `status`: PUBLISHED, DEPRECATED.
+
+                     Example: `field['status'] = 'PUBLISHED'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: The page_size query parameter.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: The page_token query parameter.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.ListRevisionsResponse'
+    /v1/components/{component_id}/revisions/{digest}:deprecate:
+        post:
+            tags:
+                - Components
+            summary: Deprecate a revision
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_DeprecateRevision
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    format: uuid
+                - name: digest
+                  in: path
+                  description: |-
+                    `sha256:<hex>`. A digest, not a tag: what is being deprecated is the
+                     bytes, and a floating tag might name different bytes by the time anyone
+                     reads the reason.
+                  required: true
+                  schema:
+                    type: string
+                    title: digest
+                    pattern: ^sha256:[0-9a-f]{64}$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                reason:
+                                    type: string
+                                    title: reason
+                                    maxLength: 1024
+                                    minLength: 1
+                                    description: |-
+                                        Shown to anyone who tries to adopt the revision, and to every
+                                         environment still running it.
+                            title: DeprecateRevisionRequest
+                            required:
+                                - reason
+                            additionalProperties: false
+                            description: DeprecateRevisionRequest names a revision by digest and says why.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.DeprecateRevisionResponse'
+    /v1/components/{component_id}/revisions/{reference}:
+        get:
+            tags:
+                - Components
+            summary: Retrieve a revision
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_GetRevision
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    format: uuid
+                - name: reference
+                  in: path
+                  description: |-
+                    A tag name (`v1.2.0`, `latest`) or a digest (`sha256:<hex>`). A digest
+                     is recognised by its prefix; everything else is looked up as a tag.
+                  required: true
+                  schema:
+                    type: string
+                    title: reference
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^(sha256:[0-9a-f]{64}|[A-Za-z0-9][A-Za-z0-9._+-]{0,127})$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.GetRevisionResponse'
+    /v1/components/{component_id}/tags/{name}:
+        put:
+            tags:
+                - Components
+            summary: Set a tag
+            description: 'Scope: `component:publish`'
+            operationId: RegistryAPI_SetTag
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    format: uuid
+                - name: name
+                  in: path
+                  description: The name path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: name
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                digest:
+                                    type: string
+                                    title: digest
+                                    pattern: ^sha256:[0-9a-f]{64}$
+                                    description: The revision to name, as `sha256:<hex>`.
+                            title: SetTagRequest
+                            required:
+                                - digest
+                            additionalProperties: false
+                            description: SetTagRequest points a tag at a revision.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.SetTagResponse'
+        delete:
+            tags:
+                - Components
+            summary: Delete a tag
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_DeleteTag
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    format: uuid
+                - name: name
+                  in: path
+                  description: The name path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: name
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.DeleteTagResponse'
+    /v1/components/{name}:
+        get:
+            tags:
+                - Components
+            summary: Retrieve a component
+            description: 'Scope: `component:read`'
+            operationId: RegistryAPI_GetComponent
+            parameters:
+                - name: name
+                  in: path
+                  description: '`cloud-sql`, or `namespace/cloud-sql`.'
+                  required: true
+                  schema:
+                    type: string
+                    title: name
+                    maxLength: 127
+                    minLength: 1
+                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?/)?[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.GetComponentResponse'
+    /v1/components:publish:
+        post:
+            tags:
+                - Components
+            summary: Publish a component revision
+            description: |-
+                The bundle is a gzipped tar of the component root, carried inline and
+                 capped at 64 MiB; a fully vendored tree that exceeds it will get a
+                 resumable upload path of its own. The server normalizes the bytes
+                 (strips `.git`, canonicalizes entry order and timestamps), digests them,
+                 runs the publish gate, stores the blob and answers with the revision. If
+                 the digest already exists under the name, the existing revision is
+                 returned with `unchanged` set and nothing is written, which is what makes
+                 a publish-everything CI recipe safe.
+
+                 Any tags named in the request are set on the resulting revision.
+                 Repointing a semver tag is refused with FAILED_PRECONDITION and the whole
+                 publish fails; the bytes are not kept.
+
+                 Scope: `component:publish`
+            operationId: RegistryAPI_PublishComponent
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.registry.v1.PublishComponentRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.PublishComponentResponse'
     /v1/credentials:
         get:
             tags:
@@ -5247,385 +5439,6 @@ components:
             title: UpdateApplicationResponse
             additionalProperties: false
             description: UpdateApplicationResponse contains the updated application.
-        admiral.api.catalog.v1.CatalogItem:
-            type: object
-            properties:
-                id:
-                    type: string
-                    title: id
-                    format: uuid
-                    description: Unique identifier for the catalog item (UUID).
-                    readOnly: true
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
-                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                         start with a letter and end with an alphanumeric character (1-63 chars).
-                description:
-                    type: string
-                    title: description
-                    maxLength: 1024
-                    description: |-
-                        Optional longer-form description of the catalog item's purpose
-                         (e.g., "Standard VPC module for billing workloads").
-                type:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
-                    title: type
-                    description: |-
-                        (IMMUTABLE) The content type: what this item contains and how it should be executed.
-                         Immutable after creation.
-                source_id:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: Reference to the Source this catalog item fetches from (UUID).
-                ref:
-                    type: string
-                    title: ref
-                    maxLength: 256
-                    description: |-
-                        Git ref, registry version, chart version, or OCI tag to fetch.
-                         Optional. When empty, the backend uses its default (e.g., HEAD for Git,
-                         latest for registries). This is the default a component copies at create
-                         time; the component owns its ref thereafter.
-                root:
-                    type: string
-                    title: root
-                    maxLength: 512
-                    description: |-
-                        Subdirectory within the fetched tree to treat as the item root.
-                         Optional. When empty, the entire fetched tree is the root.
-                         Example: "modules/vpc" within a monorepo.
-                path:
-                    type: string
-                    title: path
-                    maxLength: 512
-                    description: |-
-                        Working directory within root for execution (e.g., "environments/prod").
-                         Optional. When empty, defaults to root itself.
-                labels:
-                    type: object
-                    title: labels
-                    maxProperties: 64
-                    additionalProperties:
-                        type: string
-                        title: value
-                        maxLength: 256
-                    description: |-
-                        Arbitrary key-value labels for organizing and filtering catalog items
-                         (e.g., `{"team": "platform", "stack": "networking"}`).
-                source_name:
-                    type: string
-                    title: source_name
-                    description: Display name of the parent source. Denormalized for display.
-                    readOnly: true
-                created_by:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    title: created_by
-                    description: The user or agent who created this catalog item (server-populated from token).
-                    readOnly: true
-                created_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: created_at
-                    description: When the catalog item was created.
-                    readOnly: true
-                updated_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: updated_at
-                    description: When the catalog item was last updated.
-                    readOnly: true
-            title: CatalogItem
-            additionalProperties: false
-            description: |-
-                CatalogItem represents a named, reusable reference to a slice of content
-                 within a Source at a specific ref. One Source can back many catalog items
-                 (different refs, different subtrees, different working directories).
-
-                 The catalog item type identifies what the content is (Terraform, Helm,
-                 Kustomize, raw manifests) independently of how it is fetched (the Source
-                 type). This separation allows a single Git source to back Terraform, Helm,
-                 and manifest items in different subdirectories.
-
-                 A catalog item is a starting point: components are instantiated FROM it as
-                 self-contained copies (copy-not-link), so editing or deleting an item never
-                 mutates already-placed components.
-        admiral.api.catalog.v1.CatalogItemType:
-            type: string
-            title: CatalogItemType
-            enum:
-                - CATALOG_ITEM_TYPE_UNSPECIFIED
-                - CATALOG_ITEM_TYPE_TERRAFORM
-                - CATALOG_ITEM_TYPE_HELM
-                - CATALOG_ITEM_TYPE_KUSTOMIZE
-                - CATALOG_ITEM_TYPE_MANIFEST
-            description: |-
-                CatalogItemType identifies the content semantics: what the fetched content is
-                 and how it should be executed. This is orthogonal to SourceType, which
-                 identifies the fetch protocol. A single GIT source can back TERRAFORM, HELM,
-                 KUSTOMIZE, and MANIFEST items in different subdirectories.
-        admiral.api.catalog.v1.CreateCatalogItemRequest:
-            type: object
-            properties:
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier (e.g., "billing-vpc", "rds-standard").
-                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                         start with a letter and end with an alphanumeric character (1-63 chars).
-                description:
-                    type: string
-                    title: description
-                    maxLength: 1024
-                    description: Optional description of the catalog item's purpose.
-                type:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
-                    not:
-                        enum:
-                            - CATALOG_ITEM_TYPE_UNSPECIFIED
-                    title: type
-                    description: 'The content type: what this item contains and how it should be executed.'
-                source_id:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: Reference to the Source this catalog item fetches from (UUID).
-                ref:
-                    type: string
-                    title: ref
-                    maxLength: 256
-                    description: |-
-                        Git ref, registry version, chart version, or OCI tag to fetch.
-                         Optional. When empty, the backend uses its default (e.g., HEAD for Git,
-                         latest for registries). This is the default a component copies at create
-                         time; the component owns its ref thereafter.
-                root:
-                    type: string
-                    title: root
-                    maxLength: 512
-                    description: |-
-                        Subdirectory within the fetched tree to treat as the item root.
-                         Optional. When empty, the entire fetched tree is the root.
-                         Example: "modules/vpc" within a monorepo.
-                path:
-                    type: string
-                    title: path
-                    maxLength: 512
-                    description: |-
-                        Working directory within root for execution (e.g., "environments/prod").
-                         Optional. When empty, defaults to root itself.
-                labels:
-                    type: object
-                    title: labels
-                    maxProperties: 64
-                    additionalProperties:
-                        type: string
-                        title: value
-                        maxLength: 256
-                    description: Arbitrary key-value labels.
-            title: CreateCatalogItemRequest
-            required:
-                - name
-                - type
-                - source_id
-            additionalProperties: false
-            description: CreateCatalogItemRequest contains the parameters for creating a new item.
-        admiral.api.catalog.v1.CreateCatalogItemResponse:
-            type: object
-            properties:
-                catalog_item:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
-                    title: catalog_item
-                    description: The created catalog item.
-            title: CreateCatalogItemResponse
-            additionalProperties: false
-            description: CreateCatalogItemResponse contains the newly created catalog item.
-        admiral.api.catalog.v1.DeleteCatalogItemRequest:
-            type: object
-            properties:
-                catalog_item_id:
-                    type: string
-                    title: catalog_item_id
-                    format: uuid
-                    description: Unique identifier of the catalog item to delete (UUID).
-            title: DeleteCatalogItemRequest
-            required:
-                - catalog_item_id
-            additionalProperties: false
-            description: DeleteCatalogItemRequest identifies a catalog item to delete.
-        admiral.api.catalog.v1.DeleteCatalogItemResponse:
-            type: object
-            title: DeleteCatalogItemResponse
-            additionalProperties: false
-            description: DeleteCatalogItemResponse is empty on success.
-        admiral.api.catalog.v1.GetCatalogItemRequest:
-            type: object
-            properties:
-                catalog_item_id:
-                    type: string
-                    title: catalog_item_id
-                    format: uuid
-                    description: Unique identifier of the catalog item (UUID).
-            title: GetCatalogItemRequest
-            required:
-                - catalog_item_id
-            additionalProperties: false
-            description: GetCatalogItemRequest identifies a catalog item to retrieve.
-        admiral.api.catalog.v1.GetCatalogItemResponse:
-            type: object
-            properties:
-                catalog_item:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
-                    title: catalog_item
-                    description: The retrieved catalog item.
-            title: GetCatalogItemResponse
-            additionalProperties: false
-            description: GetCatalogItemResponse contains the catalog item record.
-        admiral.api.catalog.v1.ListCatalogItemsRequest:
-            type: object
-            properties:
-                filter:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                         API documentation for the full operator and predicate reference).
-
-                         Filterable fields:
-                           - `name`: filter by catalog item name.
-                           - `type`: filter by item type (TERRAFORM, HELM, KUSTOMIZE, MANIFEST).
-                           - `source_id`: filter by source reference.
-
-                         Example: `field['type'] = 'TERRAFORM'`
-                page_size:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                    description: |-
-                        Maximum number of catalog items to return per page. Defaults to 50 when
-                         omitted or 0; must not exceed 100.
-                page_token:
-                    type: string
-                    title: page_token
-                    description: Opaque pagination token from a previous response.
-            title: ListCatalogItemsRequest
-            additionalProperties: false
-            description: ListCatalogItemsRequest contains pagination and filter parameters.
-        admiral.api.catalog.v1.ListCatalogItemsResponse:
-            type: object
-            properties:
-                catalog_items:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
-                    title: catalog_items
-                    description: The list of catalog items.
-                next_page_token:
-                    type: string
-                    title: next_page_token
-                    description: Pagination token for the next page. Empty when there are no more results.
-            title: ListCatalogItemsResponse
-            additionalProperties: false
-            description: ListCatalogItemsResponse contains a page of catalog items.
-        admiral.api.catalog.v1.ResolveCatalogItemRequest:
-            type: object
-            properties:
-                catalog_item_id:
-                    type: string
-                    title: catalog_item_id
-                    format: uuid
-                    description: Unique identifier of the catalog item to resolve (UUID).
-                ref_override:
-                    type: string
-                    title: ref_override
-                    maxLength: 256
-                    description: |-
-                        Optional ref override. When set, this ref is used instead of the item's
-                         default ref. Useful for previewing a different version without modifying
-                         the catalog item definition.
-            title: ResolveCatalogItemRequest
-            required:
-                - catalog_item_id
-            additionalProperties: false
-            description: ResolveCatalogItemRequest identifies a catalog item to resolve.
-        admiral.api.catalog.v1.ResolveCatalogItemResponse:
-            type: object
-            properties:
-                revision:
-                    type: string
-                    title: revision
-                    description: |-
-                        The resolved revision identifier. For Git sources, this is the commit SHA.
-                         For registry sources, the canonical version string. For HTTP, a content hash.
-                digest:
-                    type: string
-                    title: digest
-                    description: |-
-                        Content-addressing digest of the fetched content (e.g., "sha1:<commit>",
-                         "sha256:<hash>").
-                catalog_item:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
-                    title: catalog_item
-                    description: The catalog item that was resolved, with current field values.
-            title: ResolveCatalogItemResponse
-            additionalProperties: false
-            description: |-
-                ResolveCatalogItemResponse contains the resolved metadata from fetching the
-                 catalog item's content via its Source.
-        admiral.api.catalog.v1.UpdateCatalogItemRequest:
-            type: object
-            properties:
-                catalog_item:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
-                    title: catalog_item
-                    description: |-
-                        The catalog item with updated fields. Its `id` identifies the item; only
-                         fields named in `update_mask` are applied.
-                update_mask:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
-                    title: update_mask
-                    description: |-
-                        The set of fields to update. Optional; if omitted, all populated fields
-                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                         `description`, `source_id`, `ref`, `root`, `path`, `labels`. `type` is
-                         immutable and cannot be updated.
-            title: UpdateCatalogItemRequest
-            required:
-                - catalog_item
-            additionalProperties: false
-            description: UpdateCatalogItemRequest contains the catalog item fields to update.
-        admiral.api.catalog.v1.UpdateCatalogItemResponse:
-            type: object
-            properties:
-                catalog_item:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItem'
-                    title: catalog_item
-                    description: The updated catalog item.
-            title: UpdateCatalogItemResponse
-            additionalProperties: false
-            description: UpdateCatalogItemResponse contains the updated catalog item.
         admiral.api.changeset.v1.CatalogItemVersionDiff:
             type: object
             properties:
@@ -7515,13 +7328,13 @@ components:
                     type: string
                     title: name
                     description: Component name (stable identifier set at creation).
-                catalog_item_type:
+                kind:
                     allOf:
-                        - $ref: '#/components/schemas/admiral.api.catalog.v1.CatalogItemType'
-                    title: catalog_item_type
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentKind'
+                    title: kind
                     description: |-
-                        Engine type the component renders against (TERRAFORM, HELM, etc),
-                         denormalized from the component's own deploy spec.
+                        What the component's pinned revision is (TERRAFORM, HELM, MANIFESTS),
+                         denormalized from the registry.
                 ref:
                     type: string
                     title: ref
@@ -7939,6 +7752,795 @@ components:
             title: RevokeInvitationResponse
             additionalProperties: false
             description: RevokeInvitationResponse carries the invitation as it now stands.
+        admiral.api.registry.v1.Component:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    description: Unique identifier (UUID).
+                    readOnly: true
+                name:
+                    type: string
+                    title: name
+                    description: |-
+                        The name as it is written: `cloud-sql`, or `payments/cloud-sql` once
+                         team namespaces exist. Unique within the tenant. Immutable.
+                    readOnly: true
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+                    description: |-
+                        Key-value metadata for filtering (e.g. `{"team": "payments",
+                         "runtime": "terraform"}`), the same labels every Admiral resource carries.
+                tags:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.Tag'
+                    title: tags
+                    description: Every tag on the component, by name.
+                    readOnly: true
+                created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: created_by
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+                updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: updated_at
+                    readOnly: true
+            title: Component
+            additionalProperties: false
+            description: |-
+                Component is a registry entry: a name, and the revisions and tags beneath
+                 it.
+        admiral.api.registry.v1.ComponentKind:
+            type: string
+            title: ComponentKind
+            enum:
+                - COMPONENT_KIND_UNSPECIFIED
+                - TERRAFORM
+                - HELM
+                - MANIFESTS
+            description: |-
+                ComponentKind is what a revision's bundle is, detected by inspection at
+                 publish: a Chart.yaml means HELM, .tf files mean TERRAFORM, anything else
+                 that is Kubernetes YAML means MANIFESTS.
+        admiral.api.registry.v1.ComponentLabels:
+            type: object
+            properties:
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+            title: ComponentLabels
+            additionalProperties: false
+            description: |-
+                ComponentLabels wraps a label map so its presence in an update can be told
+                 from an empty map: present and empty clears the labels.
+        admiral.api.registry.v1.Contract:
+            type: object
+            properties:
+                inputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.ContractInput'
+                    title: inputs
+                outputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.ContractOutput'
+                    title: outputs
+            title: Contract
+            additionalProperties: false
+            description: |-
+                Contract is what a bundle takes and gives. The shape here is what static
+                 inspection can produce from any Terraform module or Helm chart; the curated
+                 format adds to it without removing anything.
+        admiral.api.registry.v1.ContractInput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                type:
+                    type: string
+                    title: type
+                    description: |-
+                        The type as the bundle declares it, in the bundle's own vocabulary
+                         (Terraform type expressions, JSON Schema types for charts). Informational
+                         until the contract format settles what validation reads.
+                description:
+                    type: string
+                    title: description
+                required:
+                    type: boolean
+                    title: required
+                    description: True when the bundle gives it no default.
+                default:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Value'
+                    title: default
+                    description: The declared default, when there is one.
+                sensitive:
+                    type: boolean
+                    title: sensitive
+                    description: |-
+                        The value is a secret: never rendered in review, and resolved by the
+                         runner from a reference rather than stored in the change set.
+                ephemeral:
+                    type: boolean
+                    title: ephemeral
+                    description: |-
+                        The value must not land in plan or state (Terraform 1.10+ ephemeral
+                         inputs). Implies sensitive.
+            title: ContractInput
+            additionalProperties: false
+            description: ContractInput is one value the bundle accepts.
+        admiral.api.registry.v1.ContractOutput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                description:
+                    type: string
+                    title: description
+                sensitive:
+                    type: boolean
+                    title: sensitive
+            title: ContractOutput
+            additionalProperties: false
+            description: ContractOutput is one value the bundle produces.
+        admiral.api.registry.v1.DeleteComponentRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+            title: DeleteComponentRequest
+            required:
+                - component_id
+            additionalProperties: false
+            description: DeleteComponentRequest identifies the component to retire.
+        admiral.api.registry.v1.DeleteComponentResponse:
+            type: object
+            title: DeleteComponentResponse
+            additionalProperties: false
+            description: DeleteComponentResponse is empty.
+        admiral.api.registry.v1.DeleteTagRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+                name:
+                    type: string
+                    title: name
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            title: DeleteTagRequest
+            required:
+                - component_id
+                - name
+            additionalProperties: false
+            description: DeleteTagRequest identifies a floating tag to remove.
+        admiral.api.registry.v1.DeleteTagResponse:
+            type: object
+            title: DeleteTagResponse
+            additionalProperties: false
+            description: DeleteTagResponse is empty.
+        admiral.api.registry.v1.DeprecateRevisionRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+                digest:
+                    type: string
+                    title: digest
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    description: |-
+                        `sha256:<hex>`. A digest, not a tag: what is being deprecated is the
+                         bytes, and a floating tag might name different bytes by the time anyone
+                         reads the reason.
+                reason:
+                    type: string
+                    title: reason
+                    maxLength: 1024
+                    minLength: 1
+                    description: |-
+                        Shown to anyone who tries to adopt the revision, and to every
+                         environment still running it.
+            title: DeprecateRevisionRequest
+            required:
+                - component_id
+                - digest
+                - reason
+            additionalProperties: false
+            description: DeprecateRevisionRequest names a revision by digest and says why.
+        admiral.api.registry.v1.DeprecateRevisionResponse:
+            type: object
+            properties:
+                revision:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Revision'
+                    title: revision
+            title: DeprecateRevisionResponse
+            additionalProperties: false
+            description: DeprecateRevisionResponse contains the revision with its new status.
+        admiral.api.registry.v1.Finding:
+            type: object
+            properties:
+                severity:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.FindingSeverity'
+                    title: severity
+                source:
+                    type: string
+                    title: source
+                    description: 'What produced it: `provider-constraint`, `checkov`, `trivy`, `image-ref`.'
+                code:
+                    type: string
+                    title: code
+                    description: |-
+                        The producer's own identifier for the rule, when it has one
+                         (e.g. `CKV_AWS_18`).
+                message:
+                    type: string
+                    title: message
+                path:
+                    type: string
+                    title: path
+                    description: Where in the bundle, when it applies.
+            title: Finding
+            additionalProperties: false
+            description: Finding is one thing the publish gate noticed.
+        admiral.api.registry.v1.FindingSeverity:
+            type: string
+            title: FindingSeverity
+            enum:
+                - FINDING_SEVERITY_UNSPECIFIED
+                - INFO
+                - LOW
+                - MEDIUM
+                - HIGH
+                - CRITICAL
+            description: FindingSeverity ranks what the publish gate found.
+        admiral.api.registry.v1.GetComponentRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 127
+                    minLength: 1
+                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?/)?[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: '`cloud-sql`, or `namespace/cloud-sql`.'
+            title: GetComponentRequest
+            required:
+                - name
+            additionalProperties: false
+            description: GetComponentRequest identifies a component by name.
+        admiral.api.registry.v1.GetComponentResponse:
+            type: object
+            properties:
+                component:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Component'
+                    title: component
+            title: GetComponentResponse
+            additionalProperties: false
+            description: GetComponentResponse contains the component with its tags.
+        admiral.api.registry.v1.GetRevisionRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+                reference:
+                    type: string
+                    title: reference
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^(sha256:[0-9a-f]{64}|[A-Za-z0-9][A-Za-z0-9._+-]{0,127})$
+                    description: |-
+                        A tag name (`v1.2.0`, `latest`) or a digest (`sha256:<hex>`). A digest
+                         is recognised by its prefix; everything else is looked up as a tag.
+            title: GetRevisionRequest
+            required:
+                - component_id
+                - reference
+            additionalProperties: false
+            description: GetRevisionRequest identifies a revision by reference.
+        admiral.api.registry.v1.GetRevisionResponse:
+            type: object
+            properties:
+                revision:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Revision'
+                    title: revision
+            title: GetRevisionResponse
+            additionalProperties: false
+            description: GetRevisionResponse contains the revision.
+        admiral.api.registry.v1.ListComponentsRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                         API documentation for the full operator and predicate reference).
+
+                         Filterable fields:
+                           - `name`: filter by name.
+                           - `description`: filter by description.
+                           - `labels`: filter by label key/value.
+
+                         Example: `field['labels']['team'] = 'payments'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: |-
+                        Maximum number of components to return per page. Defaults to 50 when
+                         omitted or 0; must not exceed 100.
+                page_token:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            title: ListComponentsRequest
+            additionalProperties: false
+            description: ListComponentsRequest pages through the registry.
+        admiral.api.registry.v1.ListComponentsResponse:
+            type: object
+            properties:
+                components:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.Component'
+                    title: components
+                    description: Listed without their tags; GetComponent carries those.
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                    description: Pagination token for the next page. Empty when there are no more results.
+            title: ListComponentsResponse
+            additionalProperties: false
+            description: ListComponentsResponse contains a page of components.
+        admiral.api.registry.v1.ListRevisionsRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression. Filterable fields:
+                           - `kind`: TERRAFORM, HELM, MANIFESTS.
+                           - `status`: PUBLISHED, DEPRECATED.
+
+                         Example: `field['status'] = 'PUBLISHED'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                page_token:
+                    type: string
+                    title: page_token
+            title: ListRevisionsRequest
+            required:
+                - component_id
+            additionalProperties: false
+            description: ListRevisionsRequest pages through one component's revisions.
+        admiral.api.registry.v1.ListRevisionsResponse:
+            type: object
+            properties:
+                revisions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.Revision'
+                    title: revisions
+                next_page_token:
+                    type: string
+                    title: next_page_token
+            title: ListRevisionsResponse
+            additionalProperties: false
+            description: ListRevisionsResponse contains a page of revisions, newest first.
+        admiral.api.registry.v1.Pin:
+            type: object
+            properties:
+                source:
+                    type: string
+                    title: source
+                    description: The source as the bundle declared it, before rewriting.
+                constraint:
+                    type: string
+                    title: constraint
+                    description: The constraint that was asked for, when any.
+                resolved:
+                    type: string
+                    title: resolved
+                    description: 'What it resolved to: an exact version or commit.'
+            title: Pin
+            additionalProperties: false
+            description: Pin is one dependency the closure step resolved and vendored.
+        admiral.api.registry.v1.Provenance:
+            type: object
+            properties:
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ProvenanceKind'
+                    title: kind
+                uri:
+                    type: string
+                    title: uri
+                    description: |-
+                        The repository or location the bytes were read from: a git remote URL, a
+                         Helm repository URL, an OCI reference. Empty for a local publish with no
+                         remote.
+                ref:
+                    type: string
+                    title: ref
+                    description: The ref that was asked for (tag, branch, chart version), when any.
+                commit:
+                    type: string
+                    title: commit
+                    description: 'What the ref resolved to: a commit SHA, or the exact chart version.'
+                path:
+                    type: string
+                    title: path
+                    description: |-
+                        The path within the source the bundle was taken from. Empty means the
+                         root.
+                dirty:
+                    type: boolean
+                    title: dirty
+                    description: |-
+                        The working copy carried uncommitted changes when it was published.
+                         Only meaningful for LOCAL, and only ever true when the CLI said so.
+                pins:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.Pin'
+                    title: pins
+                    description: |-
+                        Every remote module or chart the closure step vendored into the bundle,
+                         pinned to what it resolved.
+            title: Provenance
+            additionalProperties: false
+            description: |-
+                Provenance is where a revision's bytes came from: the audit trail behind
+                 the digest.
+        admiral.api.registry.v1.ProvenanceKind:
+            type: string
+            title: ProvenanceKind
+            enum:
+                - PROVENANCE_KIND_UNSPECIFIED
+                - LOCAL
+                - GIT
+                - PULL
+            description: ProvenanceKind is how the bytes arrived.
+        admiral.api.registry.v1.PublishComponentRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        The component name to publish under. Created on first use. Bare
+                         (`cloud-sql`), which resolves to the default namespace.
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentKind'
+                    title: kind
+                    description: |-
+                        The kind, when the caller knows better than inspection. UNSPECIFIED
+                         means detect.
+                tags:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+                    title: tags
+                    maxItems: 16
+                    description: Tags to set on the resulting revision (e.g. `v1.2.0`, `latest`).
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: |-
+                        Description and labels for the component. Applied when the publish
+                         creates the component; ignored when it already exists, since a publish is
+                         not the place to edit metadata. UpdateComponent is.
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+                provenance:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Provenance'
+                    title: provenance
+                    description: |-
+                        What the caller knows about where the bytes came from. The server
+                         records the kind as LOCAL for a CLI upload whatever is claimed here; the
+                         uri, ref, commit, path and dirty flag are kept as the caller's
+                         assertion.
+                bundle:
+                    type: string
+                    title: bundle
+                    maxLength: 67108864
+                    minLength: 1
+                    format: byte
+                    description: 'The bundle: a gzipped tar of the component root. At most 64 MiB.'
+            title: PublishComponentRequest
+            required:
+                - name
+                - bundle
+            additionalProperties: false
+            description: PublishComponentRequest carries what is being published and the bytes.
+        admiral.api.registry.v1.PublishComponentResponse:
+            type: object
+            properties:
+                component:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Component'
+                    title: component
+                revision:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Revision'
+                    title: revision
+                unchanged:
+                    type: boolean
+                    title: unchanged
+                    description: |-
+                        True when the digest was already published under this name and nothing
+                         was written. Tags in the request were still applied.
+            title: PublishComponentResponse
+            additionalProperties: false
+            description: PublishComponentResponse is the recorded revision.
+        admiral.api.registry.v1.Revision:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    description: Unique identifier (UUID). Internal handle; references use the digest.
+                    readOnly: true
+                component_id:
+                    type: string
+                    title: component_id
+                    description: The component this revision belongs to (UUID).
+                    readOnly: true
+                digest:
+                    type: string
+                    title: digest
+                    description: 'The identity: SHA-256 of the normalized bundle, as `sha256:<hex>`.'
+                    readOnly: true
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentKind'
+                    title: kind
+                    readOnly: true
+                size_bytes:
+                    type: string
+                    title: size_bytes
+                    format: int64
+                    description: Size of the stored bundle in bytes.
+                    readOnly: true
+                contract:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Contract'
+                    title: contract
+                    description: |-
+                        The inputs and outputs the bundle exposes. Inferred from the bundle at
+                         publish; curated by a publisher once the contract format lands.
+                    readOnly: true
+                provenance:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Provenance'
+                    title: provenance
+                    description: Where the bytes came from.
+                    readOnly: true
+                findings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.Finding'
+                    title: findings
+                    description: |-
+                        What the publish gate found. Informational findings do not block a
+                         publish; a revision with findings is published with them attached, and
+                         the findings delta between two revisions is what an upgrade review reads.
+                    readOnly: true
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.RevisionStatus'
+                    title: status
+                    readOnly: true
+                deprecated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: deprecated_at
+                    description: Set only when DEPRECATED.
+                    readOnly: true
+                deprecation_reason:
+                    type: string
+                    title: deprecation_reason
+                    readOnly: true
+                tags:
+                    type: array
+                    items:
+                        type: string
+                        readOnly: true
+                    title: tags
+                    description: The tags currently naming this revision.
+                    readOnly: true
+                created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: created_by
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+            title: Revision
+            additionalProperties: false
+            description: Revision is one published artifact. Immutable except for deprecation.
+        admiral.api.registry.v1.RevisionStatus:
+            type: string
+            title: RevisionStatus
+            enum:
+                - REVISION_STATUS_UNSPECIFIED
+                - PUBLISHED
+                - DEPRECATED
+            description: RevisionStatus is a revision's lifecycle. There is no deleted state.
+        admiral.api.registry.v1.SetTagRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+                name:
+                    type: string
+                    title: name
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+                digest:
+                    type: string
+                    title: digest
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    description: The revision to name, as `sha256:<hex>`.
+            title: SetTagRequest
+            required:
+                - component_id
+                - name
+                - digest
+            additionalProperties: false
+            description: SetTagRequest points a tag at a revision.
+        admiral.api.registry.v1.SetTagResponse:
+            type: object
+            properties:
+                tag:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Tag'
+                    title: tag
+            title: SetTagResponse
+            additionalProperties: false
+            description: SetTagResponse contains the tag as it now stands.
+        admiral.api.registry.v1.Tag:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    description: As written after the colon in `cloud-sql:v1.2.0`.
+                    readOnly: true
+                digest:
+                    type: string
+                    title: digest
+                    description: The revision it names, as `sha256:<hex>`.
+                    readOnly: true
+                immutable:
+                    type: boolean
+                    title: immutable
+                    description: |-
+                        True for a semver tag: it never moves once assigned. Decided from the
+                         name, so two tags with the same name are always the same class.
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+                updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: updated_at
+                    readOnly: true
+            title: Tag
+            additionalProperties: false
+            description: Tag is a name pointing at a revision.
+        admiral.api.registry.v1.UpdateComponentRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+                description:
+                    type:
+                        - string
+                        - "null"
+                    title: description
+                    maxLength: 1024
+                labels:
+                    oneOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentLabels'
+                        - type: "null"
+                    title: labels
+                    description: Replaces the label set entirely when present.
+            title: UpdateComponentRequest
+            required:
+                - component_id
+            additionalProperties: false
+            description: |-
+                UpdateComponentRequest carries the fields to change. Omitted fields are
+                 left as they are.
+        admiral.api.registry.v1.UpdateComponentResponse:
+            type: object
+            properties:
+                component:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Component'
+                    title: component
+            title: UpdateComponentResponse
+            additionalProperties: false
+            description: UpdateComponentResponse contains the updated component.
         admiral.api.run.v1.ApplyRunRequest:
             type: object
             properties:
@@ -10201,6 +10803,26 @@ components:
         google.protobuf.FieldMask:
             type: string
             description: Comma-separated field paths in lowerCamelCase (for example, `user.displayName,photo`).
+        google.protobuf.ListValue:
+            type: array
+            items:
+                $ref: '#/components/schemas/google.protobuf.Value'
+            description: A JSON array whose elements may be any JSON value.
+        google.protobuf.NullValue:
+            type: string
+            title: NullValue
+            enum:
+                - NULL_VALUE
+            description: |-
+                `NullValue` is a singleton enumeration to represent the null value for the
+                 `Value` type union.
+
+                 The JSON representation for `NullValue` is JSON `null`.
+        google.protobuf.Struct:
+            type: object
+            additionalProperties:
+                $ref: '#/components/schemas/google.protobuf.Value'
+            description: A JSON object whose property values may be any JSON value.
         google.protobuf.Timestamp:
             type: string
             examples:
@@ -10208,6 +10830,16 @@ components:
                 - "2024-12-25T12:00:00Z"
             format: date-time
             description: A point in time in RFC 3339 format, with up to nanosecond precision. Output uses UTC (`Z`); input may use an offset from UTC.
+        google.protobuf.Value:
+            oneOf:
+                - type: "null"
+                - type: number
+                - type: string
+                - type: boolean
+                - type: array
+                - type: object
+                  additionalProperties: true
+            description: 'Any JSON value: `null`, number, string, boolean, array, or object.'
         admiral.healthcheck.v1.HealthcheckResponse:
             type: object
             description: Empty response indicating the service is healthy.
