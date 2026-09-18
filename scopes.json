@@ -1,4 +1,50 @@
 {
+  "groups": [
+    {
+      "name": "agent",
+      "description": "Execution agents, their tokens, and the jobs and workloads they run."
+    },
+    {
+      "name": "app",
+      "description": "Applications and their change sets."
+    },
+    {
+      "name": "component",
+      "description": "The component registry, where published Terraform modules, Helm charts and manifests live."
+    },
+    {
+      "name": "credential",
+      "description": "Credentials for external systems."
+    },
+    {
+      "name": "env",
+      "description": "Deployment environments and the components in them."
+    },
+    {
+      "name": "run",
+      "description": "Runs of change sets, plan through apply."
+    },
+    {
+      "name": "source",
+      "description": "External artifact sources."
+    },
+    {
+      "name": "tenant",
+      "description": "Your tenant."
+    },
+    {
+      "name": "token",
+      "description": "Your own API keys."
+    },
+    {
+      "name": "user",
+      "description": "Members of your tenant."
+    },
+    {
+      "name": "var",
+      "description": "Configuration variables."
+    }
+  ],
   "scopes": [
     {
       "name": "agent:deploy",
