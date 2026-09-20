@@ -112,20 +112,20 @@ tags:
         abandon). No backtracking.
     - name: CredentialAPI
       description: |-
-        CredentialAPI manages stored credentials for accessing external systems.
+        CredentialAPI manages the credentials a tenant registers for reaching
+        external systems at publish time: a git host, a Helm repository, an OCI
+        registry, a module registry.
 
-        A credential stores the authentication configuration needed to reach a remote
-        system: a Git host, Helm repository, OCI registry, or Terraform registry.
-        Credentials are tenant-scoped and referenced by sources when fetching
-        artifacts.
+        A credential is never selected for the caller. A pull-publish names the
+        credentials it may use, chosen by the user from those whose type its
+        protocols can present, and the platform presents each only where it fits.
+        A credential may carry `allowed_hosts`, a guard that restricts where it is
+        ever presented, whatever it is attached to. Credentials exist for publish
+        only; nothing on the deploy path reads one.
 
-        Sensitive fields (tokens, keys, secrets) are write-only: they are accepted on
-        create/update but never returned in API responses. GET and List operations
-        return credential metadata only.
-
-        Connectivity validation (testing whether the credential can actually reach a
-        remote system) is performed at the Source level, where the credential is
-        paired with a target URL.
+        Secrets are write-only: accepted on create and update, encrypted at rest,
+        decrypted only inside a publish, and never returned. Get and List return
+        metadata only.
     - name: RegistryAPI
       description: |-
         RegistryAPI is the component registry: what a tenant has published,
@@ -185,20 +185,6 @@ tags:
         how "send it again" works; there is no resend procedure.
 
         Every request acts on the caller's own tenant; none names one.
-    - name: SourceAPI
-      description: |-
-        SourceAPI manages source definitions: pointers to external artifacts that
-        Admiral fetches, inspects, and renders into immutable deployment snapshots.
-
-        A source represents a fetchable artifact at a specific location: a Terraform
-        module in a registry, a Helm chart in an OCI registry, Kubernetes manifests
-        in a Git repository, etc. Sources reference a credential for authentication
-        and are referenced by application components for deployment.
-
-        The API includes a discovery operation (ListSourceVersions) that queries
-        external systems in real time. Input and output discovery is not a Source
-        concern: for Git sources, inputs and outputs are a property of a specific
-        (subpath, ref), not of the repo as a whole.
     - name: TenantAPI
       description: |-
         TenantAPI exposes the caller's OWN tenant.
@@ -1658,11 +1644,41 @@ paths:
                     $ref: '#/definitions/v1PublishComponentRequest'
             tags:
                 - RegistryAPI
+    /v1/components:pull:
+        post:
+            summary: |-
+                PullComponent publishes an artifact the tenant does not own: a chart in
+                an HTTP repository or an OCI registry, a module in a module registry, a
+                git repository at a ref, an archive. Admiral fetches it with the
+                credentials named, closes it over what it reaches, scans it, and
+                records the revision with provenance saying where it came from. The
+                bytes are a copy: upstream may move the tag and the revision does not.
+                The same resolution under the same name is the same revision, returned
+                with `unchanged` set.
+            description: 'Scope: `component:publish`'
+            operationId: RegistryAPI_PullComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1PullComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1PullComponentRequest'
+            tags:
+                - RegistryAPI
     /v1/credentials:
         get:
             summary: |-
-                ListCredentials returns a paginated list of credentials within the caller's
-                tenant. Sensitive fields are never included.
+                ListCredentials pages through the caller's tenant's credentials.
+                Secrets are never included.
             description: 'Scope: `credential:read`'
             operationId: CredentialAPI_ListCredentials
             responses:
@@ -1676,39 +1692,50 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `name`: filter by credential name.
-                      - `type`: filter by credential type (SSH_KEY, BASIC_AUTH, BEARER_TOKEN).
-                      - `labels.key`: filter by label key.
-
-                    Example: `field['type'] = 'BEARER_TOKEN'`
+                  description: Reserved for a filter expression; nothing reads it yet.
                   in: query
                   required: false
                   type: string
                 - name: page_size
-                  description: |-
-                    Maximum number of credentials to return per page. Defaults to 50 when
-                    omitted or 0; must not exceed 100.
                   in: query
                   required: false
                   type: integer
                   format: int32
                 - name: page_token
-                  description: Opaque pagination token from a previous response.
                   in: query
                   required: false
                   type: string
+                - name: type
+                  description: |-
+                    Only credentials of this type, when set.
+
+                     - CREDENTIAL_TYPE_SSH_KEY: An SSH private key, for git over ssh.
+                     - CREDENTIAL_TYPE_BASIC_AUTH: A username and password: git over https, a Helm repository, an OCI
+                    registry, an authenticated archive.
+                     - CREDENTIAL_TYPE_BEARER_TOKEN: One token. Presented as `Authorization: Bearer` to a module registry,
+                    a Helm repository, an OCI registry or an archive host, and as the
+                    basic-auth password with the `x-access-token` username to git over
+                    https, which is how GitHub and GitLab take a token.
+                     - CREDENTIAL_TYPE_GITHUB_APP: A GitHub App installation. Not a secret that is presented: the platform
+                    mints a short-lived installation token from the app's private key at
+                    fetch time and presents that as a bearer token. Works for github.com,
+                    GitHub Enterprise Cloud and GitHub Enterprise Server.
+                  in: query
+                  required: false
+                  type: string
+                  enum:
+                    - CREDENTIAL_TYPE_UNSPECIFIED
+                    - CREDENTIAL_TYPE_SSH_KEY
+                    - CREDENTIAL_TYPE_BASIC_AUTH
+                    - CREDENTIAL_TYPE_BEARER_TOKEN
+                    - CREDENTIAL_TYPE_GITHUB_APP
+                  default: CREDENTIAL_TYPE_UNSPECIFIED
             tags:
                 - CredentialAPI
         post:
-            summary: CreateCredential creates a new credential within the caller's tenant.
+            summary: CreateCredential registers a credential within the caller's tenant.
             description: |-
-                The credential type and auth config must match. For example, a GIT_TOKEN
-                credential requires a matching auth_config (e.g. BEARER_TOKEN → bearer_token).
+                The `type` and the populated `auth_config` variant must agree.
 
                 Scope: `credential:write`
             operationId: CredentialAPI_CreateCredential
@@ -1723,7 +1750,6 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: body
-                  description: CreateCredentialRequest contains the parameters for creating a new credential.
                   in: body
                   required: true
                   schema:
@@ -1733,14 +1759,11 @@ paths:
     /v1/credentials/{credential.id}:
         patch:
             summary: |-
-                UpdateCredential updates a credential's mutable fields.
-                Use the `update_mask` to specify which fields to update.
-            description: |-
-                When updating auth_config, the entire auth config is replaced. Partial
-                updates within the auth config oneof are not supported. Omitting auth_config
-                from the update_mask leaves credentials unchanged.
-
-                Scope: `credential:write`
+                UpdateCredential changes a credential's description, labels, allowed
+                hosts, or secret. The name and type are immutable. A new secret
+                replaces the old one whole; a rotation is an update with `auth_config`
+                in the mask.
+            description: 'Scope: `credential:write`'
             operationId: CredentialAPI_UpdateCredential
             responses:
                 "200":
@@ -1753,7 +1776,6 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: credential.id
-                  description: Unique identifier for the credential (UUID).
                   in: path
                   required: true
                   type: string
@@ -1766,12 +1788,10 @@ paths:
                 - CredentialAPI
     /v1/credentials/{credential_id}:
         get:
-            summary: GetCredential retrieves a credential by ID.
-            description: |-
-                Returns credential metadata only. Sensitive fields are never included
-                in the response.
-
-                Scope: `credential:read`
+            summary: |-
+                GetCredential retrieves a credential's metadata by id. The secret is
+                never included.
+            description: 'Scope: `credential:read`'
             operationId: CredentialAPI_GetCredential
             responses:
                 "200":
@@ -1784,7 +1804,6 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: credential_id
-                  description: The unique identifier of the credential (UUID).
                   in: path
                   required: true
                   type: string
@@ -1792,9 +1811,9 @@ paths:
                 - CredentialAPI
         delete:
             summary: |-
-                DeleteCredential permanently deletes a credential. Fails if any sources
-                still reference this credential. Remove or reassign those sources first.
-                This action cannot be undone.
+                DeleteCredential removes a credential. A component whose pull-publish
+                names it keeps the reference; its next pull fails naming the missing
+                credential until it is attached to another.
             description: 'Scope: `credential:write`'
             operationId: CredentialAPI_DeleteCredential
             responses:
@@ -1808,9 +1827,6 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: credential_id
-                  description: |-
-                    The unique identifier of the credential to delete (UUID).
-                    Fails if any sources still reference this credential.
                   in: path
                   required: true
                   type: string
@@ -2430,240 +2446,6 @@ paths:
                     $ref: '#/definitions/RunAPIRetryRevisionBody'
             tags:
                 - RunAPI
-    /v1/sources:
-        get:
-            summary: |-
-                ListSources returns a paginated list of sources within the caller's tenant.
-                Use the filter to scope by type or labels.
-            description: 'Scope: `source:read`'
-            operationId: SourceAPI_ListSources
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ListSourcesResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `name`: filter by source name.
-                      - `type`: filter by source type (GIT, TERRAFORM, HELM, OCI, HTTP).
-                      - `labels.key`: filter by label key.
-
-                    Example: `field['type'] = 'TERRAFORM' AND field['labels.team'] = 'platform'`
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of sources to return per page. Defaults to 50 when omitted
-                    or 0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token from a previous response.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - SourceAPI
-        post:
-            summary: CreateSource creates a new source definition within the caller's tenant.
-            description: |-
-                The source type and source_config must match. For example, a
-                TERRAFORM source requires a TerraformConfig.
-
-                Scope: `source:write`
-            operationId: SourceAPI_CreateSource
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1CreateSourceResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: CreateSourceRequest contains the parameters for creating a new source.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1CreateSourceRequest'
-            tags:
-                - SourceAPI
-    /v1/sources/{source.id}:
-        patch:
-            summary: |-
-                UpdateSource updates a source's mutable fields.
-                Use the `update_mask` to specify which fields to update.
-            description: 'Scope: `source:write`'
-            operationId: SourceAPI_UpdateSource
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1UpdateSourceResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source.id
-                  description: Unique identifier for the source (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/SourceAPIUpdateSourceBody'
-            tags:
-                - SourceAPI
-    /v1/sources/{source_id}:
-        get:
-            summary: GetSource retrieves a source by ID.
-            description: 'Scope: `source:read`'
-            operationId: SourceAPI_GetSource
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetSourceResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source_id
-                  description: Unique identifier of the source (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - SourceAPI
-        delete:
-            summary: |-
-                DeleteSource permanently deletes a source definition. Fails if any
-                application components still reference this source. Remove or reassign
-                those components first. This action cannot be undone.
-            description: 'Scope: `source:write`'
-            operationId: SourceAPI_DeleteSource
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1DeleteSourceResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source_id
-                  description: |-
-                    Unique identifier of the source to delete (UUID).
-                    Fails if any components still reference this source.
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - SourceAPI
-    /v1/sources/{source_id}/test:
-        post:
-            summary: |-
-                TestSource validates the attached credential against the source URL by
-                performing an authenticated probe against the external system. Writes the
-                outcome (success or failure) and timestamp to the source record.
-            description: |-
-                A credential in isolation cannot be meaningfully tested. A GitHub PAT is
-                just a string until a target URL is known. TestSource is where the
-                "attach credential, verify it works" flow lives.
-
-                This operation queries the external system in real time and may take
-                several seconds.
-
-                Scope: `source:write`
-            operationId: SourceAPI_TestSource
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1TestSourceResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source_id
-                  description: Unique identifier of the source to test (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/SourceAPITestSourceBody'
-            tags:
-                - SourceAPI
-    /v1/sources/{source_id}/versions:
-        get:
-            summary: |-
-                ListSourceVersions queries the external system for available versions of
-                this source's artifact.
-            description: |-
-                For Terraform registry sources, this calls the Module Registry Protocol's
-                version listing endpoint. For Helm repositories, it parses the index.yaml.
-                For OCI sources, it lists tags. For Git sources, it lists branches and
-                tags via ls-remote, each annotated with the commit it currently resolves
-                to.
-
-                This operation queries the external system in real time and may take
-                several seconds.
-
-                Scope: `source:read`
-            operationId: SourceAPI_ListSourceVersions
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ListSourceVersionsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: source_id
-                  description: Unique identifier of the source to query versions for (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of versions to return per page. Defaults to 50 when omitted
-                    or 0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token for fetching additional versions.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - SourceAPI
     /v1/tenant:
         get:
             summary: GetTenant returns the caller's own tenant.
@@ -3370,59 +3152,48 @@ definitions:
                 properties:
                     name:
                         type: string
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                            Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                            start with a letter and end with an alphanumeric character (1-63 chars).
+                        description: Unique within the tenant.
                     description:
                         type: string
-                        description: |-
-                            Optional longer-form description of what this credential is for
-                            (e.g., "Read-only access to the platform team's GitHub org").
                     type:
                         $ref: '#/definitions/v1CredentialType'
-                        description: |-
-                            The type of external system and authentication mechanism.
-                            Immutable after creation.
+                        description: Immutable after creation.
                     auth_config:
                         $ref: '#/definitions/v1AuthConfig'
-                        description: |-
-                            Auth material corresponding to `type`. Sensitive fields are write-only
-                            and masked in responses.
+                        description: Write-only. Empty in every response.
                     labels:
                         type: object
                         additionalProperties:
                             type: string
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering credentials
-                            (e.g., `{"team": "platform", "environment": "prod"}`).
                     created_by:
                         $ref: '#/definitions/v1ActorRef'
-                        description: The user or agent who created this credential (server-populated from token).
                         readOnly: true
                     created_at:
                         type: string
                         format: date-time
-                        description: When the credential was created.
                         readOnly: true
                     updated_at:
                         type: string
                         format: date-time
-                        description: When the credential was last updated.
                         readOnly: true
+                    allowed_hosts:
+                        type: array
+                        items:
+                            type: string
+                        description: |-
+                            Hosts this credential may be presented to, as a guard: empty means any
+                            host its type fits; set means the platform refuses to present it
+                            anywhere else, whatever it is attached to. Hostnames, optionally with
+                            a port: `github.acme.example`, `harbor.acme.example:8443`. No scheme,
+                            no path.
                 description: |-
-                    The credential with updated fields.
-                    Only fields specified in `update_mask` are updated.
-
-                    When updating auth_config, the entire auth config is replaced.
-                    Omitting auth_config from the update_mask leaves credentials unchanged.
+                    Credential is a registered credential's metadata. The secret is set
+                    through `auth_config` and never read back; responses carry it empty.
             update_mask:
                 type: string
                 description: |-
-                    The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Pass `*` for full replacement. Supported fields: `name`,
-                    `description`, `auth_config`, `labels`.
-        description: UpdateCredentialRequest contains the credential fields to update.
+                    Paths from `description`, `labels`, `allowed_hosts`, `auth_config`.
+                    Empty means every updatable field the message carries.
         required:
             - credential
     EnvironmentAPIUpdateEnvironmentBody:
@@ -3500,6 +3271,73 @@ definitions:
     InvitationAPIRevokeInvitationBody:
         type: object
         description: RevokeInvitationRequest names one invitation in the caller's tenant.
+    PullSourceArchive:
+        type: object
+        properties:
+            url:
+                type: string
+        description: An archive at a URL, unpacked by its extension.
+        required:
+            - url
+    PullSourceGitTree:
+        type: object
+        properties:
+            url:
+                type: string
+                description: '`https://github.com/acme/infra.git`, `ssh://git@github.com/acme/infra.git`.'
+            ref:
+                type: string
+                description: A branch, tag or commit. Empty is the default branch.
+            path:
+                type: string
+                description: A directory within the repository. Empty is the root.
+        description: A git repository at a ref, optionally a directory of it.
+        required:
+            - url
+    PullSourceHelmChart:
+        type: object
+        properties:
+            repository:
+                type: string
+            chart:
+                type: string
+            version:
+                type: string
+        description: |-
+            A chart in an HTTP repository: the repository URL, the chart's name in
+            its index, and an exact version.
+        required:
+            - repository
+            - chart
+            - version
+    PullSourceOCIChart:
+        type: object
+        properties:
+            reference:
+                type: string
+            version:
+                type: string
+        description: |-
+            A chart in an OCI registry: `oci://ghcr.io/argoproj/argo-helm/argo-cd`
+            at a version, which is its tag.
+        required:
+            - reference
+            - version
+    PullSourceRegistryModule:
+        type: object
+        properties:
+            address:
+                type: string
+            version:
+                type: string
+        description: |-
+            A module in a module registry: the address as a module call would
+            write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
+            host-qualified, optionally `//subdir`) and a version constraint, which
+            resolves to the newest version satisfying it at pull time, or exactly
+            one version.
+        required:
+            - address
     RegistryAPIDeprecateRevisionBody:
         type: object
         properties:
@@ -3548,112 +3386,6 @@ definitions:
     RunAPIRetryRevisionBody:
         type: object
         description: RetryRevisionRequest retries a failed revision.
-    SourceAPITestSourceBody:
-        type: object
-        description: TestSourceRequest identifies a source to test.
-    SourceAPIUpdateSourceBody:
-        type: object
-        properties:
-            source:
-                type: object
-                properties:
-                    name:
-                        type: string
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "corporate-rds", "nginx-chart").
-                            Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                            start with a letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        description: |-
-                            Optional longer-form description of the source's purpose
-                            (e.g., "Corporate-approved RDS module with encryption and backups").
-                    type:
-                        $ref: '#/definitions/v1SourceType'
-                        description: The kind of artifact and fetch protocol. Immutable after creation.
-                    url:
-                        type: string
-                        description: |-
-                            Base URL for the source. The meaning varies by source type:
-                              - GIT: Git repo URL (https:// or git@host:...)
-                              - TERRAFORM: registry hostname (e.g., "registry.terraform.io")
-                              - HELM: chart repo URL (e.g., "https://charts.bitnami.com/bitnami")
-                              - OCI: OCI repository URL (e.g., "oci://ghcr.io/myorg/charts/my-app")
-                              - HTTP: full HTTP(S) URL to the archive (tar/zip). Covers plain
-                                HTTP hosts and presigned S3/GCS/Azure Blob URLs.
-                    credential_id:
-                        type: string
-                        description: |-
-                            Reference to the credential providing authentication for this source (UUID).
-                            Optional. Null for public sources that require no authentication
-                            (e.g., public Terraform registry, public Helm repos).
-                    source_config:
-                        $ref: '#/definitions/v1SourceConfig'
-                        description: |-
-                            Type-specific configuration. Only set for source types whose location is
-                            not fully expressed by `url` alone (currently TERRAFORM and HELM, which
-                            both host multiple artifacts and need a selector). Other source types
-                            (GIT, OCI, HTTP) carry all location information in `url`.
-                    labels:
-                        type: object
-                        additionalProperties:
-                            type: string
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering sources
-                            (e.g., `{"team": "platform", "category": "database"}`).
-                    last_test_status:
-                        $ref: '#/definitions/v1SourceTestStatus'
-                        description: |-
-                            Outcome of the most recent TestSource invocation. Reflects whether the
-                            attached credential successfully authenticated against `url` the last time
-                            a test was run. UNSPECIFIED if the source has never been tested.
-                        readOnly: true
-                    last_test_error:
-                        type: string
-                        description: |-
-                            Human-readable error message from the most recent failed TestSource.
-                            Empty when `last_test_status` is SUCCESS or unset.
-                        readOnly: true
-                    last_tested_at:
-                        type: string
-                        format: date-time
-                        description: |-
-                            When TestSource was last explicitly invoked against this source. Absent if
-                            never tested. This reflects the last on-demand test, not the last time the
-                            source was used in a deployment fetch/render.
-                        readOnly: true
-                    credential_name:
-                        type: string
-                        description: |-
-                            Display name of the attached credential. Denormalized for display.
-                            Empty when `credential_id` is unset (public sources).
-                        readOnly: true
-                    created_by:
-                        $ref: '#/definitions/v1ActorRef'
-                        description: The user or agent who created this source (server-populated from token).
-                        readOnly: true
-                    created_at:
-                        type: string
-                        format: date-time
-                        description: When the source was created.
-                        readOnly: true
-                    updated_at:
-                        type: string
-                        format: date-time
-                        description: When the source was last updated.
-                        readOnly: true
-                description: |-
-                    The source with updated fields. Only fields specified in `update_mask`
-                    are updated.
-            update_mask:
-                type: string
-                description: |-
-                    The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Pass `*` for full replacement. Supported fields: `name`,
-                    `description`, `url`, `credential_id`, `source_config`, `labels`.
-        description: UpdateSourceRequest contains the source fields to update.
-        required:
-            - source
     UserAPIUpdateApiKeyBody:
         type: object
         properties:
@@ -4656,40 +4388,27 @@ definitions:
                 $ref: '#/definitions/v1BasicAuth'
             bearer_token:
                 $ref: '#/definitions/v1BearerTokenAuth'
-        description: |-
-            AuthConfig is the polymorphic auth configuration attached to a Credential.
-            Exactly one variant is populated, corresponding to the credential's type.
-            Sensitive fields within each variant are write-only.
+            github_app:
+                $ref: '#/definitions/v1GitHubAppAuth'
+        description: AuthConfig is the secret, one variant matching the credential's type.
     v1BasicAuth:
         type: object
         properties:
             username:
                 type: string
-                description: Username for authentication.
             password:
                 type: string
-                description: |-
-                    Password (or PAT / registry-scoped token / app password).
-                    Write-only: masked in responses.
+                description: Write-only.
         description: |-
-            BasicAuth holds HTTP Basic credentials (username + password). Reused across
-            any Source type that accepts HTTP Basic (Helm, OCI, HTTP archive, Git
-            HTTPS).
+            BasicAuth is a username and password, or a username and a token that the
+            host takes as a password (a registry-scoped token, an app password).
     v1BearerTokenAuth:
         type: object
         properties:
             token:
                 type: string
-                description: |-
-                    Token value.
-                    Write-only: masked in responses.
-        title: |-
-            BearerTokenAuth holds a single token value. Presentation is per target
-            protocol:
-              - Terraform registries, Helm bearer, OCI bearer, HTTP archives:
-                `Authorization: Bearer <token>`
-              - Git HTTPS (GitHub PAT, GitLab PAT): HTTP Basic with the token as
-                password and a dummy username
+                description: Write-only.
+        description: BearerTokenAuth is one token.
     v1BindingType:
         type: string
         enum:
@@ -5311,25 +5030,20 @@ definitions:
         properties:
             name:
                 type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                    start with a letter and end with an alphanumeric character (1-63 chars).
             description:
                 type: string
-                description: Optional description of the credential's purpose.
             type:
                 $ref: '#/definitions/v1CredentialType'
-                description: The type of external system and authentication mechanism.
             auth_config:
                 $ref: '#/definitions/v1AuthConfig'
-                description: Auth material corresponding to `type`.
             labels:
                 type: object
                 additionalProperties:
                     type: string
-                description: Arbitrary key-value labels for organizing and filtering credentials.
-        description: CreateCredentialRequest contains the parameters for creating a new credential.
+            allowed_hosts:
+                type: array
+                items:
+                    type: string
         required:
             - name
             - type
@@ -5339,8 +5053,6 @@ definitions:
         properties:
             credential:
                 $ref: '#/definitions/v1Credential'
-                description: The created credential. Auth config sensitive fields are masked.
-        description: CreateCredentialResponse contains the newly created credential.
     v1CreateEnvironmentRequest:
         type: object
         properties:
@@ -5430,107 +5142,51 @@ definitions:
                 $ref: '#/definitions/v1Run'
                 description: The created run. Status will be PENDING initially.
         description: CreateRunResponse contains the newly created run.
-    v1CreateSourceRequest:
-        type: object
-        properties:
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "corporate-rds", "nginx-chart").
-                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                    start with a letter and end with an alphanumeric character (1-63 chars).
-            description:
-                type: string
-                description: Optional description of the source's purpose.
-            type:
-                $ref: '#/definitions/v1SourceType'
-                description: The kind of artifact and fetch protocol.
-            url:
-                type: string
-                description: Base URL for the source (see Source.url for per-type semantics).
-            credential_id:
-                type: string
-                description: |-
-                    Reference to the credential providing authentication (UUID). Optional for
-                    public sources.
-            source_config:
-                $ref: '#/definitions/v1SourceConfig'
-                description: |-
-                    Type-specific configuration. Only required for TERRAFORM and HELM;
-                    omit for GIT, OCI, HTTP.
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: Arbitrary key-value labels.
-        description: CreateSourceRequest contains the parameters for creating a new source.
-        required:
-            - name
-            - type
-            - url
-    v1CreateSourceResponse:
-        type: object
-        properties:
-            source:
-                $ref: '#/definitions/v1Source'
-                description: The created source.
-        description: CreateSourceResponse contains the newly created source.
     v1Credential:
         type: object
         properties:
             id:
                 type: string
-                description: Unique identifier for the credential (UUID).
                 readOnly: true
             name:
                 type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                    start with a letter and end with an alphanumeric character (1-63 chars).
+                description: Unique within the tenant.
             description:
                 type: string
-                description: |-
-                    Optional longer-form description of what this credential is for
-                    (e.g., "Read-only access to the platform team's GitHub org").
             type:
                 $ref: '#/definitions/v1CredentialType'
-                description: |-
-                    The type of external system and authentication mechanism.
-                    Immutable after creation.
+                description: Immutable after creation.
             auth_config:
                 $ref: '#/definitions/v1AuthConfig'
-                description: |-
-                    Auth material corresponding to `type`. Sensitive fields are write-only
-                    and masked in responses.
+                description: Write-only. Empty in every response.
             labels:
                 type: object
                 additionalProperties:
                     type: string
-                description: |-
-                    Arbitrary key-value labels for organizing and filtering credentials
-                    (e.g., `{"team": "platform", "environment": "prod"}`).
             created_by:
                 $ref: '#/definitions/v1ActorRef'
-                description: The user or agent who created this credential (server-populated from token).
                 readOnly: true
             created_at:
                 type: string
                 format: date-time
-                description: When the credential was created.
                 readOnly: true
             updated_at:
                 type: string
                 format: date-time
-                description: When the credential was last updated.
                 readOnly: true
+            allowed_hosts:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Hosts this credential may be presented to, as a guard: empty means any
+                    host its type fits; set means the platform refuses to present it
+                    anywhere else, whatever it is attached to. Hostnames, optionally with
+                    a port: `github.acme.example`, `harbor.acme.example:8443`. No scheme,
+                    no path.
         description: |-
-            Credential represents stored authentication configuration for accessing an
-            external system. Credentials are tenant-scoped and referenced by sources
-            when fetching artifacts.
-
-            Sensitive fields within auth_config are write-only: accepted on create and
-            update but never returned in API responses.
+            Credential is a registered credential's metadata. The secret is set
+            through `auth_config` and never read back; responses carry it empty.
     v1CredentialType:
         type: string
         enum:
@@ -5538,23 +5194,25 @@ definitions:
             - CREDENTIAL_TYPE_SSH_KEY
             - CREDENTIAL_TYPE_BASIC_AUTH
             - CREDENTIAL_TYPE_BEARER_TOKEN
+            - CREDENTIAL_TYPE_GITHUB_APP
         default: CREDENTIAL_TYPE_UNSPECIFIED
         description: |-
-            CredentialType identifies the shape of the stored auth material (the
-            mechanism), not the system it targets. The target system is determined by
-            the Source that references the credential. One credential can be reused
-            across multiple Sources of different types, provided the Source accepts
-            that credential type (see the Source compatibility matrix).
+            CredentialType is the protocol family a credential is presented as. Each
+            fetch takes the families its protocol speaks: a module registry, an
+            archive and an OCI token take a bearer token; git over https, a Helm
+            repository and an OCI login take basic auth; git over ssh takes a key.
 
-             - CREDENTIAL_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - CREDENTIAL_TYPE_SSH_KEY: SSH private key (with optional passphrase). Used for SSH-protocol Git
-            sources.
-             - CREDENTIAL_TYPE_BASIC_AUTH: HTTP Basic auth (username + password). Used for Helm HTTP repos, OCI
-            registries, authenticated HTTP archives, and Git HTTPS.
-             - CREDENTIAL_TYPE_BEARER_TOKEN: Single token value. Presented per target protocol: as
-            `Authorization: Bearer <token>` for Terraform / Helm / OCI bearer-auth
-            endpoints, or as the HTTP Basic password (with a dummy username) for
-            Git HTTPS tokens (GitHub PAT, GitLab PAT, Bitbucket app password).
+             - CREDENTIAL_TYPE_SSH_KEY: An SSH private key, for git over ssh.
+             - CREDENTIAL_TYPE_BASIC_AUTH: A username and password: git over https, a Helm repository, an OCI
+            registry, an authenticated archive.
+             - CREDENTIAL_TYPE_BEARER_TOKEN: One token. Presented as `Authorization: Bearer` to a module registry,
+            a Helm repository, an OCI registry or an archive host, and as the
+            basic-auth password with the `x-access-token` username to git over
+            https, which is how GitHub and GitLab take a token.
+             - CREDENTIAL_TYPE_GITHUB_APP: A GitHub App installation. Not a secret that is presented: the platform
+            mints a short-lived installation token from the app's private key at
+            fetch time and presents that as a bearer token. Works for github.com,
+            GitHub Enterprise Cloud and GitHub Enterprise Server.
     v1DeleteAgentResponse:
         type: object
         description: DeleteAgentResponse is empty on success.
@@ -5566,13 +5224,9 @@ definitions:
         description: DeleteComponentResponse is empty.
     v1DeleteCredentialResponse:
         type: object
-        description: DeleteCredentialResponse is empty on success.
     v1DeleteEnvironmentResponse:
         type: object
         description: DeleteEnvironmentResponse is empty on success.
-    v1DeleteSourceResponse:
-        type: object
-        description: DeleteSourceResponse is empty on success.
     v1DeleteTagResponse:
         type: object
         description: DeleteTagResponse is empty.
@@ -5947,8 +5601,6 @@ definitions:
         properties:
             credential:
                 $ref: '#/definitions/v1Credential'
-                description: The retrieved credential. Sensitive fields are masked.
-        description: GetCredentialResponse contains the credential record.
     v1GetEnvironmentResponse:
         type: object
         properties:
@@ -5984,13 +5636,6 @@ definitions:
                 $ref: '#/definitions/v1Run'
                 description: The run record with current status.
         description: GetRunResponse contains the run record.
-    v1GetSourceResponse:
-        type: object
-        properties:
-            source:
-                $ref: '#/definitions/v1Source'
-                description: The retrieved source.
-        description: GetSourceResponse contains the source record.
     v1GetTenantResponse:
         type: object
         properties:
@@ -6010,6 +5655,28 @@ definitions:
                 $ref: '#/definitions/v1Workload'
                 description: The workload with full detail.
         description: GetWorkloadResponse contains the workload with full detail.
+    v1GitHubAppAuth:
+        type: object
+        properties:
+            app_id:
+                type: string
+                format: int64
+                description: The app's numeric id, from the app's settings page.
+            installation_id:
+                type: string
+                format: int64
+                description: The installation's numeric id, from the installation's URL.
+            private_key:
+                type: string
+                description: The app's PEM-encoded RSA private key. Write-only.
+            api_url:
+                type: string
+                description: |-
+                    The REST API base, for GitHub Enterprise Server:
+                    `https://github.acme.example/api/v3`. Empty is `https://api.github.com`.
+        description: |-
+            GitHubAppAuth identifies a GitHub App installation and holds the app's
+            private key, from which the platform mints installation tokens.
     v1HeartbeatRequest:
         type: object
         properties:
@@ -6038,18 +5705,6 @@ definitions:
                 format: int32
                 description: Server-controlled interval (seconds) before the next heartbeat.
         description: HeartbeatResponse acknowledges the heartbeat.
-    v1HelmConfig:
-        type: object
-        properties:
-            chart_name:
-                type: string
-                description: The chart name within the repository (e.g., "nginx-ingress", "redis").
-        description: |-
-            HelmConfig identifies which chart within a Helm HTTP repository the source
-            points to. A single Helm repository hosts many charts; the chart name
-            selects one.
-        required:
-            - chart_name
     v1Hook:
         type: object
         properties:
@@ -6531,11 +6186,8 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1Credential'
-                description: The list of credentials. Sensitive fields are masked.
             next_page_token:
                 type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListCredentialsResponse contains a page of credentials.
     v1ListEnvironmentComponentsResponse:
         type: object
         properties:
@@ -6601,32 +6253,6 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListRunsResponse contains a page of runs.
-    v1ListSourceVersionsResponse:
-        type: object
-        properties:
-            versions:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1SourceVersion'
-                description: Available versions, ordered from newest to oldest.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListSourceVersionsResponse contains available versions from the external system.
-    v1ListSourcesResponse:
-        type: object
-        properties:
-            sources:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Source'
-                description: The list of sources.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListSourcesResponse contains a page of sources.
     v1ListUsersResponse:
         type: object
         properties:
@@ -6811,6 +6437,69 @@ definitions:
                     True when the digest was already published under this name and nothing
                     was written. Tags in the request were still applied.
         description: PublishComponentResponse is the recorded revision.
+    v1PullComponentRequest:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    Empty means the artifact's own name: the chart's, the module's, the
+                    repository's or directory's. Bare, which resolves to the default
+                    namespace.
+            source:
+                $ref: '#/definitions/v1PullSource'
+            credential_ids:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    The credentials this pull may present, chosen by the caller. Each is
+                    presented only where its type fits and its `allowed_hosts` permit. A
+                    fetch that reaches a host none of them covers fails naming the host.
+            tags:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Tags to set on the resulting revision. A chart's version and a
+                    module's resolved version are applied as tags whether or not named.
+            description:
+                type: string
+                description: Applied when the pull creates the component; ignored otherwise.
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+        required:
+            - source
+    v1PullComponentResponse:
+        type: object
+        properties:
+            component:
+                $ref: '#/definitions/apiRegistryV1Component'
+            revision:
+                $ref: '#/definitions/apiRegistryV1Revision'
+            unchanged:
+                type: boolean
+                description: The resolution was already published under this name; nothing was written.
+    v1PullSource:
+        type: object
+        properties:
+            oci_chart:
+                $ref: '#/definitions/PullSourceOCIChart'
+            helm_chart:
+                $ref: '#/definitions/PullSourceHelmChart'
+            registry_module:
+                $ref: '#/definitions/PullSourceRegistryModule'
+            git_tree:
+                $ref: '#/definitions/PullSourceGitTree'
+            archive:
+                $ref: '#/definitions/PullSourceArchive'
+        description: |-
+            PullSource names an artifact to pull. One variant. The kind of the
+            resulting component follows from it: a chart from OCI or a Helm
+            repository, a module from a module registry, whatever inspection finds in
+            a git tree or an archive.
     v1RemoveEntryResponse:
         type: object
         description: RemoveEntryResponse is empty on success.
@@ -7253,15 +6942,11 @@ definitions:
         properties:
             private_key:
                 type: string
-                description: |-
-                    PEM-encoded SSH private key.
-                    Write-only: masked in responses.
+                description: Write-only.
             passphrase:
                 type: string
-                description: |-
-                    Optional passphrase for the private key.
-                    Write-only: masked in responses.
-        description: SSHKeyAuth holds an SSH private key and optional passphrase.
+                description: Write-only.
+        description: SSHKeyAuth is a PEM-encoded private key and its passphrase, if any.
     v1SetEntryResponse:
         type: object
         properties:
@@ -7282,220 +6967,6 @@ definitions:
                 $ref: '#/definitions/v1ChangeSetVariableEntry'
                 description: The variable entry as recorded on the change set.
         description: SetVariableResponse contains the created or replaced variable entry.
-    v1Source:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the source (UUID).
-                readOnly: true
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "corporate-rds", "nginx-chart").
-                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                    start with a letter and end with an alphanumeric character (1-63 chars).
-            description:
-                type: string
-                description: |-
-                    Optional longer-form description of the source's purpose
-                    (e.g., "Corporate-approved RDS module with encryption and backups").
-            type:
-                $ref: '#/definitions/v1SourceType'
-                description: The kind of artifact and fetch protocol. Immutable after creation.
-            url:
-                type: string
-                description: |-
-                    Base URL for the source. The meaning varies by source type:
-                      - GIT: Git repo URL (https:// or git@host:...)
-                      - TERRAFORM: registry hostname (e.g., "registry.terraform.io")
-                      - HELM: chart repo URL (e.g., "https://charts.bitnami.com/bitnami")
-                      - OCI: OCI repository URL (e.g., "oci://ghcr.io/myorg/charts/my-app")
-                      - HTTP: full HTTP(S) URL to the archive (tar/zip). Covers plain
-                        HTTP hosts and presigned S3/GCS/Azure Blob URLs.
-            credential_id:
-                type: string
-                description: |-
-                    Reference to the credential providing authentication for this source (UUID).
-                    Optional. Null for public sources that require no authentication
-                    (e.g., public Terraform registry, public Helm repos).
-            source_config:
-                $ref: '#/definitions/v1SourceConfig'
-                description: |-
-                    Type-specific configuration. Only set for source types whose location is
-                    not fully expressed by `url` alone (currently TERRAFORM and HELM, which
-                    both host multiple artifacts and need a selector). Other source types
-                    (GIT, OCI, HTTP) carry all location information in `url`.
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: |-
-                    Arbitrary key-value labels for organizing and filtering sources
-                    (e.g., `{"team": "platform", "category": "database"}`).
-            last_test_status:
-                $ref: '#/definitions/v1SourceTestStatus'
-                description: |-
-                    Outcome of the most recent TestSource invocation. Reflects whether the
-                    attached credential successfully authenticated against `url` the last time
-                    a test was run. UNSPECIFIED if the source has never been tested.
-                readOnly: true
-            last_test_error:
-                type: string
-                description: |-
-                    Human-readable error message from the most recent failed TestSource.
-                    Empty when `last_test_status` is SUCCESS or unset.
-                readOnly: true
-            last_tested_at:
-                type: string
-                format: date-time
-                description: |-
-                    When TestSource was last explicitly invoked against this source. Absent if
-                    never tested. This reflects the last on-demand test, not the last time the
-                    source was used in a deployment fetch/render.
-                readOnly: true
-            credential_name:
-                type: string
-                description: |-
-                    Display name of the attached credential. Denormalized for display.
-                    Empty when `credential_id` is unset (public sources).
-                readOnly: true
-            created_by:
-                $ref: '#/definitions/v1ActorRef'
-                description: The user or agent who created this source (server-populated from token).
-                readOnly: true
-            created_at:
-                type: string
-                format: date-time
-                description: When the source was created.
-                readOnly: true
-            updated_at:
-                type: string
-                format: date-time
-                description: When the source was last updated.
-                readOnly: true
-        description: |-
-            Source represents a fetchable artifact definition: a pointer to an external
-            module, chart, or manifest set that Admiral can fetch, inspect, and render
-            into deployment snapshots.
-
-            Sources are tenant-scoped.
-    v1SourceConfig:
-        type: object
-        properties:
-            terraform:
-                $ref: '#/definitions/v1TerraformConfig'
-                description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
-            helm:
-                $ref: '#/definitions/v1HelmConfig'
-                description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
-        description: |-
-            SourceConfig is the type-specific configuration attached to a Source. Only
-            source types whose location is not fully expressed by `url` alone (TERRAFORM,
-            HELM) populate a variant. Source types whose URL is self-contained (GIT, OCI,
-            HTTP) leave this message unset.
-    v1SourceRefKind:
-        type: string
-        enum:
-            - SOURCE_REF_KIND_UNSPECIFIED
-            - SOURCE_REF_KIND_TAG
-            - SOURCE_REF_KIND_BRANCH
-            - SOURCE_REF_KIND_SEMVER
-            - SOURCE_REF_KIND_DIGEST
-        default: SOURCE_REF_KIND_UNSPECIFIED
-        description: |-
-            SourceRefKind classifies a discovered ref by what it is, so a single
-            version list can carry branches, tags, and registry versions together and
-            the consumer can bucket them. The kind also signals mutability: BRANCH is a
-            moving pointer that re-resolves over time, while TAG, SEMVER, and DIGEST are
-            conventionally stable.
-
-             - SOURCE_REF_KIND_UNSPECIFIED: Default. The backend did not classify the ref.
-             - SOURCE_REF_KIND_TAG: A Git tag. Conventionally immutable.
-             - SOURCE_REF_KIND_BRANCH: A Git branch. A moving pointer; resolves to a different commit over time.
-             - SOURCE_REF_KIND_SEMVER: A registry semantic version (Terraform module or Helm chart). Immutable.
-             - SOURCE_REF_KIND_DIGEST: An OCI content digest. Immutable and content-addressed.
-    v1SourceTestStatus:
-        type: string
-        enum:
-            - SOURCE_TEST_STATUS_UNSPECIFIED
-            - SOURCE_TEST_STATUS_SUCCESS
-            - SOURCE_TEST_STATUS_FAILURE
-        default: SOURCE_TEST_STATUS_UNSPECIFIED
-        description: |-
-            SourceTestStatus reports the outcome of the last TestSource invocation.
-
-             - SOURCE_TEST_STATUS_UNSPECIFIED: Default. Used when no test has been recorded.
-             - SOURCE_TEST_STATUS_SUCCESS: The credential authenticated successfully against the source URL.
-             - SOURCE_TEST_STATUS_FAILURE: The credential failed to authenticate or the URL was unreachable. See
-            `last_test_error` for details.
-    v1SourceType:
-        type: string
-        enum:
-            - SOURCE_TYPE_UNSPECIFIED
-            - SOURCE_TYPE_GIT
-            - SOURCE_TYPE_TERRAFORM
-            - SOURCE_TYPE_HELM
-            - SOURCE_TYPE_OCI
-            - SOURCE_TYPE_HTTP
-        default: SOURCE_TYPE_UNSPECIFIED
-        description: |-
-            SourceType identifies the fetch protocol: how Admiral retrieves content from
-            the source URL. Types are carved by wire protocol, not by content semantics.
-            "This is a Terraform module" vs "this is a Helm chart" is a Catalog/Component
-            concern, not a Source concern.
-
-             - SOURCE_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - SOURCE_TYPE_GIT: Git repository over smart HTTP(S) or SSH. Any repo regardless of what
-            it contains: Terraform modules, Helm charts, Kustomize overlays, raw
-            manifests, plain source code. Catalog/Component decides how to interpret.
-             - SOURCE_TYPE_TERRAFORM: Terraform Module/Provider Registry Protocol. A JSON HTTP API for version
-            discovery and download (public registry.terraform.io, HCP Terraform,
-            GitLab module registries, etc.).
-             - SOURCE_TYPE_HELM: Helm HTTP chart repository (index.yaml-based). Served over HTTP(S).
-             - SOURCE_TYPE_OCI: OCI Distribution Spec registry. Covers container images, OCI-wrapped Helm
-            charts, and any other artifact pushed to an OCI registry. The content
-            interpretation is a Component concern.
-             - SOURCE_TYPE_HTTP: Bare HTTP(S) GET against a URL returning a tar/zip archive, which is
-            extracted by the Fetcher. No discovery protocol on top; the URL is the
-            artifact. Covers presigned S3/GCS/Azure Blob URLs as well as plain
-            artifact hosts.
-    v1SourceVersion:
-        type: object
-        properties:
-            version:
-                type: string
-                description: |-
-                    Version identifier. For registry sources, this is a semver string
-                    (e.g., "1.2.3"). For Git sources, this is a branch or tag name
-                    (e.g., "main", "v1.2.3"). For OCI, this is a tag.
-            published_at:
-                type: string
-                format: date-time
-                description: |-
-                    When this version was published or tagged. May not be available for all
-                    source types.
-            description:
-                type: string
-                description: |-
-                    Optional description or release notes for this version. Typically only
-                    available from registry sources.
-            kind:
-                $ref: '#/definitions/v1SourceRefKind'
-                description: |-
-                    What kind of ref this is. Lets a single list carry mixed kinds (branches,
-                    tags, registry versions) so consumers can bucket them.
-            resolved:
-                type: string
-                description: |-
-                    The immutable handle this ref currently points to: a Git commit SHA for
-                    BRANCH and TAG, an OCI digest for a tag. Empty when not applicable (registry
-                    SEMVER, where `version` is already the immutable identifier) or not cheaply
-                    resolvable. For a BRANCH this is a snapshot that changes as the branch
-                    moves; pinning by `resolved` captures an exact, reproducible point.
-        description: |-
-            SourceVersion represents an available ref of a source artifact, as reported
-            by the external system (registry versions, Git branches and tags, OCI tags).
     v1SyncState:
         type: string
         enum:
@@ -7622,39 +7093,6 @@ definitions:
             TerraformAgentStatus contains capacity and telemetry metrics for a TERRAFORM
             agent, as reported via Heartbeat. Used in both the push payload
             (HeartbeatRequest) and the read response (GetAgentStatusResponse).
-    v1TerraformConfig:
-        type: object
-        properties:
-            namespace:
-                type: string
-                description: Module namespace in the registry (e.g., "hashicorp", "myorg").
-            module_name:
-                type: string
-                description: Module name in the registry (e.g., "consul", "rds").
-            system:
-                type: string
-                description: Target system / provider (e.g., "aws", "azurerm", "google").
-        description: TerraformConfig identifies a module within a Terraform registry.
-        required:
-            - namespace
-            - module_name
-            - system
-    v1TestSourceResponse:
-        type: object
-        properties:
-            status:
-                $ref: '#/definitions/v1SourceTestStatus'
-                description: The outcome of the test.
-            error:
-                type: string
-                description: Human-readable error message when `status` is FAILURE. Empty on success.
-            source:
-                $ref: '#/definitions/v1Source'
-                description: The source with test status fields refreshed.
-        description: |-
-            TestSourceResponse reports the outcome of the test against the external
-            system. The same outcome is persisted on the Source (`last_test_status`,
-            `last_test_error`, `last_tested_at`).
     v1UpdateAgentResponse:
         type: object
         properties:
@@ -7696,8 +7134,6 @@ definitions:
         properties:
             credential:
                 $ref: '#/definitions/v1Credential'
-                description: The updated credential. Sensitive fields are masked.
-        description: UpdateCredentialResponse contains the updated credential.
     v1UpdateEnvironmentResponse:
         type: object
         properties:
@@ -7705,13 +7141,6 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The updated environment.
         description: UpdateEnvironmentResponse contains the updated environment.
-    v1UpdateSourceResponse:
-        type: object
-        properties:
-            source:
-                $ref: '#/definitions/v1Source'
-                description: The updated source.
-        description: UpdateSourceResponse contains the updated source.
     v1UpdateTenantRequest:
         type: object
         properties:

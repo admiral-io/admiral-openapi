@@ -1678,6 +1678,26 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.registry.v1.PublishComponentResponse'
+    /v1/components:pull:
+        post:
+            tags:
+                - Components
+            summary: Pull and publish an artifact from a registry, repository or URL
+            description: 'Scope: `component:publish`'
+            operationId: RegistryAPI_PullComponent
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.registry.v1.PullComponentRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.PullComponentResponse'
     /v1/credentials:
         get:
             tags:
@@ -1688,25 +1708,14 @@ paths:
             parameters:
                 - name: filter
                   in: query
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                     API documentation for the full operator and predicate reference).
-
-                     Filterable fields:
-                       - `name`: filter by credential name.
-                       - `type`: filter by credential type (SSH_KEY, BASIC_AUTH, BEARER_TOKEN).
-                       - `labels.key`: filter by label key.
-
-                     Example: `field['type'] = 'BEARER_TOKEN'`
+                  description: Reserved for a filter expression; nothing reads it yet.
                   schema:
                     type: string
                     title: filter
                     maxLength: 1024
                 - name: page_size
                   in: query
-                  description: |-
-                    Maximum number of credentials to return per page. Defaults to 50 when
-                     omitted or 0; must not exceed 100.
+                  description: The page_size query parameter.
                   schema:
                     type: integer
                     title: page_size
@@ -1715,10 +1724,17 @@ paths:
                     format: int32
                 - name: page_token
                   in: query
-                  description: Opaque pagination token from a previous response.
+                  description: The page_token query parameter.
                   schema:
                     type: string
                     title: page_token
+                - name: type
+                  in: query
+                  description: Only credentials of this type, when set.
+                  schema:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
+                    title: type
             responses:
                 "200":
                     description: Success
@@ -1731,8 +1747,7 @@ paths:
                 - Credentials
             summary: Create a credential
             description: |-
-                The credential type and auth config must match. For example, a GIT_TOKEN
-                 credential requires a matching auth_config (e.g. BEARER_TOKEN → bearer_token).
+                The `type` and the populated `auth_config` variant must agree.
 
                  Scope: `credential:write`
             operationId: CredentialAPI_CreateCredential
@@ -1754,17 +1769,12 @@ paths:
             tags:
                 - Credentials
             summary: Update a credential
-            description: |-
-                When updating auth_config, the entire auth config is replaced. Partial
-                 updates within the auth config oneof are not supported. Omitting auth_config
-                 from the update_mask leaves credentials unchanged.
-
-                 Scope: `credential:write`
+            description: 'Scope: `credential:write`'
             operationId: CredentialAPI_UpdateCredential
             parameters:
                 - name: credential.id
                   in: path
-                  description: Unique identifier for the credential (UUID).
+                  description: The credential.id path parameter.
                   required: true
                   schema:
                     type: string
@@ -1782,12 +1792,10 @@ paths:
                                         - $ref: '#/components/schemas/google.protobuf.FieldMask'
                                     title: update_mask
                                     description: |-
-                                        The set of fields to update. Optional; if omitted, all populated fields
-                                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                                         `description`, `auth_config`, `labels`.
+                                        Paths from `description`, `labels`, `allowed_hosts`, `auth_config`.
+                                         Empty means every updatable field the message carries.
                             title: UpdateCredentialRequest
                             additionalProperties: false
-                            description: UpdateCredentialRequest contains the credential fields to update.
                 required: true
             responses:
                 "200":
@@ -1800,17 +1808,13 @@ paths:
         get:
             tags:
                 - Credentials
-            summary: Retrieve a credential
-            description: |-
-                Returns credential metadata only. Sensitive fields are never included
-                 in the response.
-
-                 Scope: `credential:read`
+            summary: Get a credential
+            description: 'Scope: `credential:read`'
             operationId: CredentialAPI_GetCredential
             parameters:
                 - name: credential_id
                   in: path
-                  description: The unique identifier of the credential (UUID).
+                  description: The credential_id path parameter.
                   required: true
                   schema:
                     type: string
@@ -1832,9 +1836,7 @@ paths:
             parameters:
                 - name: credential_id
                   in: path
-                  description: |-
-                    The unique identifier of the credential to delete (UUID).
-                     Fails if any sources still reference this credential.
+                  description: The credential_id path parameter.
                   required: true
                   schema:
                     type: string
@@ -2475,247 +2477,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.RetryRevisionResponse'
-    /v1/sources:
-        get:
-            tags:
-                - Sources
-            summary: List sources
-            description: 'Scope: `source:read`'
-            operationId: SourceAPI_ListSources
-            parameters:
-                - name: filter
-                  in: query
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                     API documentation for the full operator and predicate reference).
-
-                     Filterable fields:
-                       - `name`: filter by source name.
-                       - `type`: filter by source type (GIT, TERRAFORM, HELM, OCI, HTTP).
-                       - `labels.key`: filter by label key.
-
-                     Example: `field['type'] = 'TERRAFORM' AND field['labels.team'] = 'platform'`
-                  schema:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                - name: page_size
-                  in: query
-                  description: |-
-                    Maximum number of sources to return per page. Defaults to 50 when omitted
-                     or 0; must not exceed 100.
-                  schema:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                - name: page_token
-                  in: query
-                  description: Opaque pagination token from a previous response.
-                  schema:
-                    type: string
-                    title: page_token
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.source.v1.ListSourcesResponse'
-        post:
-            tags:
-                - Sources
-            summary: Create a source
-            description: |-
-                The source type and source_config must match. For example, a
-                 TERRAFORM source requires a TerraformConfig.
-
-                 Scope: `source:write`
-            operationId: SourceAPI_CreateSource
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.source.v1.CreateSourceRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.source.v1.CreateSourceResponse'
-    /v1/sources/{source.id}:
-        patch:
-            tags:
-                - Sources
-            summary: Update a source
-            description: 'Scope: `source:write`'
-            operationId: SourceAPI_UpdateSource
-            parameters:
-                - name: source.id
-                  in: path
-                  description: Unique identifier for the source (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: id
-                    format: uuid
-                    readOnly: true
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                update_mask:
-                                    allOf:
-                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
-                                    title: update_mask
-                                    description: |-
-                                        The set of fields to update. Optional; if omitted, all populated fields
-                                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                                         `description`, `url`, `credential_id`, `source_config`, `labels`.
-                            title: UpdateSourceRequest
-                            additionalProperties: false
-                            description: UpdateSourceRequest contains the source fields to update.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.source.v1.UpdateSourceResponse'
-    /v1/sources/{source_id}:
-        get:
-            tags:
-                - Sources
-            summary: Retrieve a source
-            description: 'Scope: `source:read`'
-            operationId: SourceAPI_GetSource
-            parameters:
-                - name: source_id
-                  in: path
-                  description: Unique identifier of the source (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: source_id
-                    format: uuid
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.source.v1.GetSourceResponse'
-        delete:
-            tags:
-                - Sources
-            summary: Delete a source
-            description: 'Scope: `source:write`'
-            operationId: SourceAPI_DeleteSource
-            parameters:
-                - name: source_id
-                  in: path
-                  description: |-
-                    Unique identifier of the source to delete (UUID).
-                     Fails if any components still reference this source.
-                  required: true
-                  schema:
-                    type: string
-                    title: source_id
-                    format: uuid
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.source.v1.DeleteSourceResponse'
-    /v1/sources/{source_id}/test:
-        post:
-            tags:
-                - Sources
-            summary: Test a source
-            description: |-
-                A credential in isolation cannot be meaningfully tested. A GitHub PAT is
-                 just a string until a target URL is known. TestSource is where the
-                 "attach credential, verify it works" flow lives.
-
-                 This operation queries the external system in real time and may take
-                 several seconds.
-
-                 Scope: `source:write`
-            operationId: SourceAPI_TestSource
-            parameters:
-                - name: source_id
-                  in: path
-                  description: Unique identifier of the source to test (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: source_id
-                    format: uuid
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.source.v1.TestSourceResponse'
-    /v1/sources/{source_id}/versions:
-        get:
-            tags:
-                - Sources
-            summary: List source versions
-            description: |-
-                For Terraform registry sources, this calls the Module Registry Protocol's
-                 version listing endpoint. For Helm repositories, it parses the index.yaml.
-                 For OCI sources, it lists tags. For Git sources, it lists branches and
-                 tags via ls-remote, each annotated with the commit it currently resolves
-                 to.
-
-                 This operation queries the external system in real time and may take
-                 several seconds.
-
-                 Scope: `source:read`
-            operationId: SourceAPI_ListSourceVersions
-            parameters:
-                - name: source_id
-                  in: path
-                  description: Unique identifier of the source to query versions for (UUID).
-                  required: true
-                  schema:
-                    type: string
-                    title: source_id
-                    format: uuid
-                - name: page_size
-                  in: query
-                  description: |-
-                    Maximum number of versions to return per page. Defaults to 50 when omitted
-                     or 0; must not exceed 100.
-                  schema:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                - name: page_token
-                  in: query
-                  description: Opaque pagination token for fetching additional versions.
-                  schema:
-                    type: string
-                    title: page_token
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.source.v1.ListSourceVersionsResponse'
     /v1/tenant:
         get:
             tags:
@@ -6777,6 +6538,13 @@ components:
                   title: bearer_token
                 - type: object
                   properties:
+                    github_app:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.credential.v1.GitHubAppAuth'
+                        title: github_app
+                  title: github_app
+                - type: object
+                  properties:
                     ssh_key:
                         allOf:
                             - $ref: '#/components/schemas/admiral.api.credential.v1.SSHKeyAuth'
@@ -6791,6 +6559,8 @@ components:
                         - required:
                             - bearer_token
                         - required:
+                            - github_app
+                        - required:
                             - ssh_key
                     - not:
                         oneOf:
@@ -6799,52 +6569,42 @@ components:
                             - required:
                                 - bearer_token
                             - required:
+                                - github_app
+                            - required:
                                 - ssh_key
             title: AuthConfig
-            description: |-
-                AuthConfig is the polymorphic auth configuration attached to a Credential.
-                 Exactly one variant is populated, corresponding to the credential's type.
-                 Sensitive fields within each variant are write-only.
+            description: AuthConfig is the secret, one variant matching the credential's type.
         admiral.api.credential.v1.BasicAuth:
             type: object
             properties:
                 username:
                     type: string
                     title: username
+                    maxLength: 256
                     minLength: 1
-                    description: Username for authentication.
                 password:
                     type: string
                     title: password
-                    description: |-
-                        Password (or PAT / registry-scoped token / app password).
-                         Write-only: masked in responses.
+                    maxLength: 4096
+                    description: Write-only.
                     writeOnly: true
             title: BasicAuth
             additionalProperties: false
             description: |-
-                BasicAuth holds HTTP Basic credentials (username + password). Reused across
-                 any Source type that accepts HTTP Basic (Helm, OCI, HTTP archive, Git
-                 HTTPS).
+                BasicAuth is a username and password, or a username and a token that the
+                 host takes as a password (a registry-scoped token, an app password).
         admiral.api.credential.v1.BearerTokenAuth:
             type: object
             properties:
                 token:
                     type: string
                     title: token
-                    description: |-
-                        Token value.
-                         Write-only: masked in responses.
+                    maxLength: 4096
+                    description: Write-only.
                     writeOnly: true
             title: BearerTokenAuth
             additionalProperties: false
-            description: |-
-                BearerTokenAuth holds a single token value. Presentation is per target
-                 protocol:
-                   - Terraform registries, Helm bearer, OCI bearer, HTTP archives:
-                     `Authorization: Bearer <token>`
-                   - Git HTTPS (GitHub PAT, GitLab PAT): HTTP Basic with the token as
-                     password and a dummy username
+            description: BearerTokenAuth is one token.
         admiral.api.credential.v1.CreateCredentialRequest:
             type: object
             properties:
@@ -6854,15 +6614,10 @@ components:
                     maxLength: 63
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                         start with a letter and end with an alphanumeric character (1-63 chars).
                 description:
                     type: string
                     title: description
                     maxLength: 1024
-                    description: Optional description of the credential's purpose.
                 type:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
@@ -6870,12 +6625,10 @@ components:
                         enum:
                             - CREDENTIAL_TYPE_UNSPECIFIED
                     title: type
-                    description: The type of external system and authentication mechanism.
                 auth_config:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.AuthConfig'
                     title: auth_config
-                    description: Auth material corresponding to `type`.
                 labels:
                     type: object
                     title: labels
@@ -6884,14 +6637,21 @@ components:
                         type: string
                         title: value
                         maxLength: 256
-                    description: Arbitrary key-value labels for organizing and filtering credentials.
+                allowed_hosts:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 270
+                        pattern: ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)*(:[0-9]{1,5})?$
+                    title: allowed_hosts
+                    maxItems: 32
+                    uniqueItems: true
             title: CreateCredentialRequest
             required:
                 - name
                 - type
                 - auth_config
             additionalProperties: false
-            description: CreateCredentialRequest contains the parameters for creating a new credential.
         admiral.api.credential.v1.CreateCredentialResponse:
             type: object
             properties:
@@ -6899,10 +6659,8 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
-                    description: The created credential. Auth config sensitive fields are masked.
             title: CreateCredentialResponse
             additionalProperties: false
-            description: CreateCredentialResponse contains the newly created credential.
         admiral.api.credential.v1.Credential:
             type: object
             properties:
@@ -6910,7 +6668,6 @@ components:
                     type: string
                     title: id
                     format: uuid
-                    description: Unique identifier for the credential (UUID).
                     readOnly: true
                 name:
                     type: string
@@ -6918,31 +6675,22 @@ components:
                     maxLength: 63
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier (e.g., "github-org", "ecr-prod").
-                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                         start with a letter and end with an alphanumeric character (1-63 chars).
+                    description: Unique within the tenant.
                 description:
                     type: string
                     title: description
                     maxLength: 1024
-                    description: |-
-                        Optional longer-form description of what this credential is for
-                         (e.g., "Read-only access to the platform team's GitHub org").
                 type:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
                     title: type
-                    description: |-
-                        (IMMUTABLE) The type of external system and authentication mechanism.
-                         Immutable after creation.
+                    description: (IMMUTABLE) Immutable after creation.
                 auth_config:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.AuthConfig'
                     title: auth_config
-                    description: |-
-                        Auth material corresponding to `type`. Sensitive fields are write-only
-                         and masked in responses.
+                    description: Write-only. Empty in every response.
+                    writeOnly: true
                 labels:
                     type: object
                     title: labels
@@ -6951,36 +6699,41 @@ components:
                         type: string
                         title: value
                         maxLength: 256
-                    description: |-
-                        Arbitrary key-value labels for organizing and filtering credentials
-                         (e.g., `{"team": "platform", "environment": "prod"}`).
                 created_by:
                     allOf:
                         - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
                     title: created_by
-                    description: The user or agent who created this credential (server-populated from token).
                     readOnly: true
                 created_at:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
-                    description: When the credential was created.
                     readOnly: true
                 updated_at:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
-                    description: When the credential was last updated.
                     readOnly: true
+                allowed_hosts:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 270
+                        pattern: ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)*(:[0-9]{1,5})?$
+                    title: allowed_hosts
+                    maxItems: 32
+                    uniqueItems: true
+                    description: |-
+                        Hosts this credential may be presented to, as a guard: empty means any
+                         host its type fits; set means the platform refuses to present it
+                         anywhere else, whatever it is attached to. Hostnames, optionally with
+                         a port: `github.acme.example`, `harbor.acme.example:8443`. No scheme,
+                         no path.
             title: Credential
             additionalProperties: false
             description: |-
-                Credential represents stored authentication configuration for accessing an
-                 external system. Credentials are tenant-scoped and referenced by sources
-                 when fetching artifacts.
-
-                 Sensitive fields within auth_config are write-only: accepted on create and
-                 update but never returned in API responses.
+                Credential is a registered credential's metadata. The secret is set
+                 through `auth_config` and never read back; responses carry it empty.
         admiral.api.credential.v1.CredentialType:
             type: string
             title: CredentialType
@@ -6989,12 +6742,12 @@ components:
                 - CREDENTIAL_TYPE_SSH_KEY
                 - CREDENTIAL_TYPE_BASIC_AUTH
                 - CREDENTIAL_TYPE_BEARER_TOKEN
+                - CREDENTIAL_TYPE_GITHUB_APP
             description: |-
-                CredentialType identifies the shape of the stored auth material (the
-                 mechanism), not the system it targets. The target system is determined by
-                 the Source that references the credential. One credential can be reused
-                 across multiple Sources of different types, provided the Source accepts
-                 that credential type (see the Source compatibility matrix).
+                CredentialType is the protocol family a credential is presented as. Each
+                 fetch takes the families its protocol speaks: a module registry, an
+                 archive and an OCI token take a bearer token; git over https, a Helm
+                 repository and an OCI login take basic auth; git over ssh takes a key.
         admiral.api.credential.v1.DeleteCredentialRequest:
             type: object
             properties:
@@ -7002,19 +6755,14 @@ components:
                     type: string
                     title: credential_id
                     format: uuid
-                    description: |-
-                        The unique identifier of the credential to delete (UUID).
-                         Fails if any sources still reference this credential.
             title: DeleteCredentialRequest
             required:
                 - credential_id
             additionalProperties: false
-            description: DeleteCredentialRequest identifies a credential to delete.
         admiral.api.credential.v1.DeleteCredentialResponse:
             type: object
             title: DeleteCredentialResponse
             additionalProperties: false
-            description: DeleteCredentialResponse is empty on success.
         admiral.api.credential.v1.GetCredentialRequest:
             type: object
             properties:
@@ -7022,12 +6770,10 @@ components:
                     type: string
                     title: credential_id
                     format: uuid
-                    description: The unique identifier of the credential (UUID).
             title: GetCredentialRequest
             required:
                 - credential_id
             additionalProperties: false
-            description: GetCredentialRequest identifies a credential to retrieve.
         admiral.api.credential.v1.GetCredentialResponse:
             type: object
             properties:
@@ -7035,10 +6781,42 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
-                    description: The retrieved credential. Sensitive fields are masked.
             title: GetCredentialResponse
             additionalProperties: false
-            description: GetCredentialResponse contains the credential record.
+        admiral.api.credential.v1.GitHubAppAuth:
+            type: object
+            properties:
+                app_id:
+                    exclusiveMinimum: 0
+                    type: string
+                    title: app_id
+                    format: int64
+                    description: The app's numeric id, from the app's settings page.
+                installation_id:
+                    exclusiveMinimum: 0
+                    type: string
+                    title: installation_id
+                    format: int64
+                    description: The installation's numeric id, from the installation's URL.
+                private_key:
+                    type: string
+                    title: private_key
+                    maxLength: 16384
+                    description: The app's PEM-encoded RSA private key. Write-only.
+                    writeOnly: true
+                api_url:
+                    type: string
+                    title: api_url
+                    maxLength: 512
+                    format: uri
+                    description: |-
+                        The REST API base, for GitHub Enterprise Server:
+                         `https://github.acme.example/api/v3`. Empty is `https://api.github.com`.
+            title: GitHubAppAuth
+            additionalProperties: false
+            description: |-
+                GitHubAppAuth identifies a GitHub App installation and holds the app's
+                 private key, from which the platform mints installation tokens.
         admiral.api.credential.v1.ListCredentialsRequest:
             type: object
             properties:
@@ -7046,32 +6824,23 @@ components:
                     type: string
                     title: filter
                     maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                         API documentation for the full operator and predicate reference).
-
-                         Filterable fields:
-                           - `name`: filter by credential name.
-                           - `type`: filter by credential type (SSH_KEY, BASIC_AUTH, BEARER_TOKEN).
-                           - `labels.key`: filter by label key.
-
-                         Example: `field['type'] = 'BEARER_TOKEN'`
+                    description: Reserved for a filter expression; nothing reads it yet.
                 page_size:
                     type: integer
                     title: page_size
                     maximum: 100
                     minimum: 0
                     format: int32
-                    description: |-
-                        Maximum number of credentials to return per page. Defaults to 50 when
-                         omitted or 0; must not exceed 100.
                 page_token:
                     type: string
                     title: page_token
-                    description: Opaque pagination token from a previous response.
+                type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
+                    title: type
+                    description: Only credentials of this type, when set.
             title: ListCredentialsRequest
             additionalProperties: false
-            description: ListCredentialsRequest contains pagination and filter parameters.
         admiral.api.credential.v1.ListCredentialsResponse:
             type: object
             properties:
@@ -7080,34 +6849,29 @@ components:
                     items:
                         $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credentials
-                    description: The list of credentials. Sensitive fields are masked.
                 next_page_token:
                     type: string
                     title: next_page_token
-                    description: Pagination token for the next page. Empty when there are no more results.
             title: ListCredentialsResponse
             additionalProperties: false
-            description: ListCredentialsResponse contains a page of credentials.
         admiral.api.credential.v1.SSHKeyAuth:
             type: object
             properties:
                 private_key:
                     type: string
                     title: private_key
-                    description: |-
-                        PEM-encoded SSH private key.
-                         Write-only: masked in responses.
+                    maxLength: 16384
+                    description: Write-only.
                     writeOnly: true
                 passphrase:
                     type: string
                     title: passphrase
-                    description: |-
-                        Optional passphrase for the private key.
-                         Write-only: masked in responses.
+                    maxLength: 1024
+                    description: Write-only.
                     writeOnly: true
             title: SSHKeyAuth
             additionalProperties: false
-            description: SSHKeyAuth holds an SSH private key and optional passphrase.
+            description: SSHKeyAuth is a PEM-encoded private key and its passphrase, if any.
         admiral.api.credential.v1.UpdateCredentialRequest:
             type: object
             properties:
@@ -7115,25 +6879,17 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
-                    description: |-
-                        The credential with updated fields.
-                         Only fields specified in `update_mask` are updated.
-
-                         When updating auth_config, the entire auth config is replaced.
-                         Omitting auth_config from the update_mask leaves credentials unchanged.
                 update_mask:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.FieldMask'
                     title: update_mask
                     description: |-
-                        The set of fields to update. Optional; if omitted, all populated fields
-                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                         `description`, `auth_config`, `labels`.
+                        Paths from `description`, `labels`, `allowed_hosts`, `auth_config`.
+                         Empty means every updatable field the message carries.
             title: UpdateCredentialRequest
             required:
                 - credential
             additionalProperties: false
-            description: UpdateCredentialRequest contains the credential fields to update.
         admiral.api.credential.v1.UpdateCredentialResponse:
             type: object
             properties:
@@ -7141,10 +6897,8 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.Credential'
                     title: credential
-                    description: The updated credential. Sensitive fields are masked.
             title: UpdateCredentialResponse
             additionalProperties: false
-            description: UpdateCredentialResponse contains the updated credential.
         admiral.api.environment.v1.CreateEnvironmentRequest:
             type: object
             properties:
@@ -8340,6 +8094,257 @@ components:
             title: PublishComponentResponse
             additionalProperties: false
             description: PublishComponentResponse is the recorded revision.
+        admiral.api.registry.v1.PullComponentRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?)?$
+                    description: |-
+                        Empty means the artifact's own name: the chart's, the module's, the
+                         repository's or directory's. Bare, which resolves to the default
+                         namespace.
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource'
+                    title: source
+                credential_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    title: credential_ids
+                    maxItems: 16
+                    uniqueItems: true
+                    description: |-
+                        The credentials this pull may present, chosen by the caller. Each is
+                         presented only where its type fits and its `allowed_hosts` permit. A
+                         fetch that reaches a host none of them covers fails naming the host.
+                tags:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+                    title: tags
+                    maxItems: 16
+                    description: |-
+                        Tags to set on the resulting revision. A chart's version and a
+                         module's resolved version are applied as tags whether or not named.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: Applied when the pull creates the component; ignored otherwise.
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+            title: PullComponentRequest
+            required:
+                - source
+            additionalProperties: false
+        admiral.api.registry.v1.PullComponentResponse:
+            type: object
+            properties:
+                component:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Component'
+                    title: component
+                revision:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Revision'
+                    title: revision
+                unchanged:
+                    type: boolean
+                    title: unchanged
+                    description: The resolution was already published under this name; nothing was written.
+            title: PullComponentResponse
+            additionalProperties: false
+        admiral.api.registry.v1.PullSource:
+            type: object
+            anyOf:
+                - type: object
+                  properties:
+                    archive:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.Archive'
+                        title: archive
+                  title: archive
+                - type: object
+                  properties:
+                    git_tree:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.GitTree'
+                        title: git_tree
+                  title: git_tree
+                - type: object
+                  properties:
+                    helm_chart:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.HelmChart'
+                        title: helm_chart
+                  title: helm_chart
+                - type: object
+                  properties:
+                    oci_chart:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.OCIChart'
+                        title: oci_chart
+                  title: oci_chart
+                - type: object
+                  properties:
+                    registry_module:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.RegistryModule'
+                        title: registry_module
+                  title: registry_module
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - archive
+                        - required:
+                            - git_tree
+                        - required:
+                            - helm_chart
+                        - required:
+                            - oci_chart
+                        - required:
+                            - registry_module
+                    - not:
+                        oneOf:
+                            - required:
+                                - archive
+                            - required:
+                                - git_tree
+                            - required:
+                                - helm_chart
+                            - required:
+                                - oci_chart
+                            - required:
+                                - registry_module
+            title: PullSource
+            description: |-
+                PullSource names an artifact to pull. One variant. The kind of the
+                 resulting component follows from it: a chart from OCI or a Helm
+                 repository, a module from a module registry, whatever inspection finds in
+                 a git tree or an archive.
+        admiral.api.registry.v1.PullSource.Archive:
+            type: object
+            properties:
+                url:
+                    type: string
+                    title: url
+                    maxLength: 512
+                    format: uri
+            title: Archive
+            required:
+                - url
+            additionalProperties: false
+            description: An archive at a URL, unpacked by its extension.
+        admiral.api.registry.v1.PullSource.GitTree:
+            type: object
+            properties:
+                url:
+                    type: string
+                    title: url
+                    maxLength: 512
+                    format: uri
+                    description: '`https://github.com/acme/infra.git`, `ssh://git@github.com/acme/infra.git`.'
+                ref:
+                    type: string
+                    title: ref
+                    maxLength: 256
+                    description: A branch, tag or commit. Empty is the default branch.
+                path:
+                    type: string
+                    title: path
+                    maxLength: 512
+                    description: |
+                        A directory within the repository. Empty is the root.
+                        string.not_contains = ".."
+            title: GitTree
+            required:
+                - url
+            additionalProperties: false
+            description: A git repository at a ref, optionally a directory of it.
+        admiral.api.registry.v1.PullSource.HelmChart:
+            type: object
+            properties:
+                repository:
+                    type: string
+                    title: repository
+                    maxLength: 512
+                    format: uri
+                chart:
+                    type: string
+                    title: chart
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
+                version:
+                    type: string
+                    title: version
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            title: HelmChart
+            required:
+                - repository
+                - chart
+                - version
+            additionalProperties: false
+            description: |-
+                A chart in an HTTP repository: the repository URL, the chart's name in
+                 its index, and an exact version.
+        admiral.api.registry.v1.PullSource.OCIChart:
+            type: object
+            properties:
+                reference:
+                    type: string
+                    title: reference
+                    maxLength: 512
+                    minLength: 7
+                    description: |
+                        string.prefix = "oci://"
+                version:
+                    type: string
+                    title: version
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            title: OCIChart
+            required:
+                - reference
+                - version
+            additionalProperties: false
+            description: |-
+                A chart in an OCI registry: `oci://ghcr.io/argoproj/argo-helm/argo-cd`
+                 at a version, which is its tag.
+        admiral.api.registry.v1.PullSource.RegistryModule:
+            type: object
+            properties:
+                address:
+                    type: string
+                    title: address
+                    maxLength: 512
+                    minLength: 5
+                version:
+                    type: string
+                    title: version
+                    maxLength: 128
+            title: RegistryModule
+            required:
+                - address
+            additionalProperties: false
+            description: |-
+                A module in a module registry: the address as a module call would
+                 write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
+                 host-qualified, optionally `//subdir`) and a version constraint, which
+                 resolves to the newest version satisfying it at pull time, or exactly
+                 one version.
         admiral.api.registry.v1.Revision:
             type: object
             properties:
@@ -9394,598 +9399,6 @@ components:
             description: |-
                 RunStatus represents the composite status of a run, derived from the
                  statuses of all its component revisions.
-        admiral.api.source.v1.CreateSourceRequest:
-            type: object
-            properties:
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier (e.g., "corporate-rds", "nginx-chart").
-                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                         start with a letter and end with an alphanumeric character (1-63 chars).
-                description:
-                    type: string
-                    title: description
-                    maxLength: 1024
-                    description: Optional description of the source's purpose.
-                type:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceType'
-                    not:
-                        enum:
-                            - SOURCE_TYPE_UNSPECIFIED
-                    title: type
-                    description: The kind of artifact and fetch protocol.
-                url:
-                    type: string
-                    title: url
-                    minLength: 1
-                    description: Base URL for the source (see Source.url for per-type semantics).
-                credential_id:
-                    type:
-                        - string
-                        - "null"
-                    title: credential_id
-                    format: uuid
-                    description: |-
-                        Reference to the credential providing authentication (UUID). Optional for
-                         public sources.
-                source_config:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceConfig'
-                    title: source_config
-                    description: |-
-                        Type-specific configuration. Only required for TERRAFORM and HELM;
-                         omit for GIT, OCI, HTTP.
-                labels:
-                    type: object
-                    title: labels
-                    maxProperties: 64
-                    additionalProperties:
-                        type: string
-                        title: value
-                        maxLength: 256
-                    description: Arbitrary key-value labels.
-            title: CreateSourceRequest
-            required:
-                - name
-                - type
-                - url
-            additionalProperties: false
-            description: CreateSourceRequest contains the parameters for creating a new source.
-        admiral.api.source.v1.CreateSourceResponse:
-            type: object
-            properties:
-                source:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
-                    title: source
-                    description: The created source.
-            title: CreateSourceResponse
-            additionalProperties: false
-            description: CreateSourceResponse contains the newly created source.
-        admiral.api.source.v1.DeleteSourceRequest:
-            type: object
-            properties:
-                source_id:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: |-
-                        Unique identifier of the source to delete (UUID).
-                         Fails if any components still reference this source.
-            title: DeleteSourceRequest
-            required:
-                - source_id
-            additionalProperties: false
-            description: DeleteSourceRequest identifies a source to delete.
-        admiral.api.source.v1.DeleteSourceResponse:
-            type: object
-            title: DeleteSourceResponse
-            additionalProperties: false
-            description: DeleteSourceResponse is empty on success.
-        admiral.api.source.v1.GetSourceRequest:
-            type: object
-            properties:
-                source_id:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: Unique identifier of the source (UUID).
-            title: GetSourceRequest
-            required:
-                - source_id
-            additionalProperties: false
-            description: GetSourceRequest identifies a source to retrieve.
-        admiral.api.source.v1.GetSourceResponse:
-            type: object
-            properties:
-                source:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
-                    title: source
-                    description: The retrieved source.
-            title: GetSourceResponse
-            additionalProperties: false
-            description: GetSourceResponse contains the source record.
-        admiral.api.source.v1.HelmConfig:
-            type: object
-            properties:
-                chart_name:
-                    type: string
-                    title: chart_name
-                    minLength: 1
-                    description: The chart name within the repository (e.g., "nginx-ingress", "redis").
-            title: HelmConfig
-            required:
-                - chart_name
-            additionalProperties: false
-            description: |-
-                HelmConfig identifies which chart within a Helm HTTP repository the source
-                 points to. A single Helm repository hosts many charts; the chart name
-                 selects one.
-        admiral.api.source.v1.ListSourceVersionsRequest:
-            type: object
-            properties:
-                source_id:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: Unique identifier of the source to query versions for (UUID).
-                page_size:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                    description: |-
-                        Maximum number of versions to return per page. Defaults to 50 when omitted
-                         or 0; must not exceed 100.
-                page_token:
-                    type: string
-                    title: page_token
-                    description: Opaque pagination token for fetching additional versions.
-            title: ListSourceVersionsRequest
-            required:
-                - source_id
-            additionalProperties: false
-            description: ListSourceVersionsRequest queries available versions for a source.
-        admiral.api.source.v1.ListSourceVersionsResponse:
-            type: object
-            properties:
-                versions:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.api.source.v1.SourceVersion'
-                    title: versions
-                    description: Available versions, ordered from newest to oldest.
-                next_page_token:
-                    type: string
-                    title: next_page_token
-                    description: Pagination token for the next page. Empty when there are no more results.
-            title: ListSourceVersionsResponse
-            additionalProperties: false
-            description: ListSourceVersionsResponse contains available versions from the external system.
-        admiral.api.source.v1.ListSourcesRequest:
-            type: object
-            properties:
-                filter:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                         API documentation for the full operator and predicate reference).
-
-                         Filterable fields:
-                           - `name`: filter by source name.
-                           - `type`: filter by source type (GIT, TERRAFORM, HELM, OCI, HTTP).
-                           - `labels.key`: filter by label key.
-
-                         Example: `field['type'] = 'TERRAFORM' AND field['labels.team'] = 'platform'`
-                page_size:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                    description: |-
-                        Maximum number of sources to return per page. Defaults to 50 when omitted
-                         or 0; must not exceed 100.
-                page_token:
-                    type: string
-                    title: page_token
-                    description: Opaque pagination token from a previous response.
-            title: ListSourcesRequest
-            additionalProperties: false
-            description: ListSourcesRequest contains pagination and filter parameters.
-        admiral.api.source.v1.ListSourcesResponse:
-            type: object
-            properties:
-                sources:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.api.source.v1.Source'
-                    title: sources
-                    description: The list of sources.
-                next_page_token:
-                    type: string
-                    title: next_page_token
-                    description: Pagination token for the next page. Empty when there are no more results.
-            title: ListSourcesResponse
-            additionalProperties: false
-            description: ListSourcesResponse contains a page of sources.
-        admiral.api.source.v1.Source:
-            type: object
-            properties:
-                id:
-                    type: string
-                    title: id
-                    format: uuid
-                    description: Unique identifier for the source (UUID).
-                    readOnly: true
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier (e.g., "corporate-rds", "nginx-chart").
-                         Unique within the tenant. Lowercase alphanumeric and hyphens only, must
-                         start with a letter and end with an alphanumeric character (1-63 chars).
-                description:
-                    type: string
-                    title: description
-                    maxLength: 1024
-                    description: |-
-                        Optional longer-form description of the source's purpose
-                         (e.g., "Corporate-approved RDS module with encryption and backups").
-                type:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceType'
-                    title: type
-                    description: (IMMUTABLE) The kind of artifact and fetch protocol. Immutable after creation.
-                url:
-                    type: string
-                    title: url
-                    minLength: 1
-                    description: |-
-                        Base URL for the source. The meaning varies by source type:
-                           - GIT: Git repo URL (https:// or git@host:...)
-                           - TERRAFORM: registry hostname (e.g., "registry.terraform.io")
-                           - HELM: chart repo URL (e.g., "https://charts.bitnami.com/bitnami")
-                           - OCI: OCI repository URL (e.g., "oci://ghcr.io/myorg/charts/my-app")
-                           - HTTP: full HTTP(S) URL to the archive (tar/zip). Covers plain
-                             HTTP hosts and presigned S3/GCS/Azure Blob URLs.
-                credential_id:
-                    type:
-                        - string
-                        - "null"
-                    title: credential_id
-                    format: uuid
-                    description: |-
-                        Reference to the credential providing authentication for this source (UUID).
-                         Optional. Null for public sources that require no authentication
-                         (e.g., public Terraform registry, public Helm repos).
-                source_config:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceConfig'
-                    title: source_config
-                    description: |-
-                        Type-specific configuration. Only set for source types whose location is
-                         not fully expressed by `url` alone (currently TERRAFORM and HELM, which
-                         both host multiple artifacts and need a selector). Other source types
-                         (GIT, OCI, HTTP) carry all location information in `url`.
-                labels:
-                    type: object
-                    title: labels
-                    maxProperties: 64
-                    additionalProperties:
-                        type: string
-                        title: value
-                        maxLength: 256
-                    description: |-
-                        Arbitrary key-value labels for organizing and filtering sources
-                         (e.g., `{"team": "platform", "category": "database"}`).
-                last_test_status:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceTestStatus'
-                    title: last_test_status
-                    description: |-
-                        Outcome of the most recent TestSource invocation. Reflects whether the
-                         attached credential successfully authenticated against `url` the last time
-                         a test was run. UNSPECIFIED if the source has never been tested.
-                    readOnly: true
-                last_test_error:
-                    type: string
-                    title: last_test_error
-                    description: |-
-                        Human-readable error message from the most recent failed TestSource.
-                         Empty when `last_test_status` is SUCCESS or unset.
-                    readOnly: true
-                last_tested_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: last_tested_at
-                    description: |-
-                        When TestSource was last explicitly invoked against this source. Absent if
-                         never tested. This reflects the last on-demand test, not the last time the
-                         source was used in a deployment fetch/render.
-                    readOnly: true
-                credential_name:
-                    type: string
-                    title: credential_name
-                    description: |-
-                        Display name of the attached credential. Denormalized for display.
-                         Empty when `credential_id` is unset (public sources).
-                    readOnly: true
-                created_by:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    title: created_by
-                    description: The user or agent who created this source (server-populated from token).
-                    readOnly: true
-                created_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: created_at
-                    description: When the source was created.
-                    readOnly: true
-                updated_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: updated_at
-                    description: When the source was last updated.
-                    readOnly: true
-            title: Source
-            additionalProperties: false
-            description: |-
-                Source represents a fetchable artifact definition: a pointer to an external
-                 module, chart, or manifest set that Admiral can fetch, inspect, and render
-                 into deployment snapshots.
-
-                 Sources are tenant-scoped.
-            example:
-                id: "f6a7b8c9-0123-4def-5678-901234567890"
-                name: "nginx-ingress"
-                description: "NGINX Ingress Controller Helm chart from the official repository."
-                type: "SOURCE_TYPE_HELM"
-                url: "https://kubernetes.github.io/ingress-nginx"
-                source_config:
-                    helm:
-                        chart_name: "ingress-nginx"
-                labels:
-                    category: "networking"
-                    team: "platform"
-                last_test_status: "SOURCE_TEST_STATUS_SUCCESS"
-                last_tested_at: "2025-11-01T08:00:00Z"
-                created_by:
-                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
-                    display_name: "Alex Chen"
-                    email: "alex.chen@example.com"
-                created_at: "2025-08-01T12:00:00Z"
-                updated_at: "2025-10-20T09:00:00Z"
-        admiral.api.source.v1.SourceConfig:
-            type: object
-            anyOf:
-                - type: object
-                  properties:
-                    helm:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.source.v1.HelmConfig'
-                        title: helm
-                        description: Helm HTTP repository config (for SOURCE_TYPE_HELM).
-                  title: helm
-                - type: object
-                  properties:
-                    terraform:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.source.v1.TerraformConfig'
-                        title: terraform
-                        description: Terraform Registry Protocol config (for SOURCE_TYPE_TERRAFORM).
-                  title: terraform
-            unevaluatedProperties: false
-            not:
-                allOf:
-                    - anyOf:
-                        - required:
-                            - helm
-                        - required:
-                            - terraform
-                    - not:
-                        oneOf:
-                            - required:
-                                - helm
-                            - required:
-                                - terraform
-            title: SourceConfig
-            description: |-
-                SourceConfig is the type-specific configuration attached to a Source. Only
-                 source types whose location is not fully expressed by `url` alone (TERRAFORM,
-                 HELM) populate a variant. Source types whose URL is self-contained (GIT, OCI,
-                 HTTP) leave this message unset.
-        admiral.api.source.v1.SourceRefKind:
-            type: string
-            title: SourceRefKind
-            enum:
-                - SOURCE_REF_KIND_UNSPECIFIED
-                - SOURCE_REF_KIND_TAG
-                - SOURCE_REF_KIND_BRANCH
-                - SOURCE_REF_KIND_SEMVER
-                - SOURCE_REF_KIND_DIGEST
-            description: |-
-                SourceRefKind classifies a discovered ref by what it is, so a single
-                 version list can carry branches, tags, and registry versions together and
-                 the consumer can bucket them. The kind also signals mutability: BRANCH is a
-                 moving pointer that re-resolves over time, while TAG, SEMVER, and DIGEST are
-                 conventionally stable.
-        admiral.api.source.v1.SourceTestStatus:
-            type: string
-            title: SourceTestStatus
-            enum:
-                - SOURCE_TEST_STATUS_UNSPECIFIED
-                - SOURCE_TEST_STATUS_SUCCESS
-                - SOURCE_TEST_STATUS_FAILURE
-            description: SourceTestStatus reports the outcome of the last TestSource invocation.
-        admiral.api.source.v1.SourceType:
-            type: string
-            title: SourceType
-            enum:
-                - SOURCE_TYPE_UNSPECIFIED
-                - SOURCE_TYPE_GIT
-                - SOURCE_TYPE_TERRAFORM
-                - SOURCE_TYPE_HELM
-                - SOURCE_TYPE_OCI
-                - SOURCE_TYPE_HTTP
-            description: |-
-                SourceType identifies the fetch protocol: how Admiral retrieves content from
-                 the source URL. Types are carved by wire protocol, not by content semantics.
-                 "This is a Terraform module" vs "this is a Helm chart" is a Catalog/Component
-                 concern, not a Source concern.
-        admiral.api.source.v1.SourceVersion:
-            type: object
-            properties:
-                version:
-                    type: string
-                    title: version
-                    description: |-
-                        Version identifier. For registry sources, this is a semver string
-                         (e.g., "1.2.3"). For Git sources, this is a branch or tag name
-                         (e.g., "main", "v1.2.3"). For OCI, this is a tag.
-                published_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: published_at
-                    description: |-
-                        When this version was published or tagged. May not be available for all
-                         source types.
-                description:
-                    type: string
-                    title: description
-                    description: |-
-                        Optional description or release notes for this version. Typically only
-                         available from registry sources.
-                kind:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceRefKind'
-                    title: kind
-                    description: |-
-                        What kind of ref this is. Lets a single list carry mixed kinds (branches,
-                         tags, registry versions) so consumers can bucket them.
-                resolved:
-                    type: string
-                    title: resolved
-                    description: |-
-                        The immutable handle this ref currently points to: a Git commit SHA for
-                         BRANCH and TAG, an OCI digest for a tag. Empty when not applicable (registry
-                         SEMVER, where `version` is already the immutable identifier) or not cheaply
-                         resolvable. For a BRANCH this is a snapshot that changes as the branch
-                         moves; pinning by `resolved` captures an exact, reproducible point.
-            title: SourceVersion
-            additionalProperties: false
-            description: |-
-                SourceVersion represents an available ref of a source artifact, as reported
-                 by the external system (registry versions, Git branches and tags, OCI tags).
-        admiral.api.source.v1.TerraformConfig:
-            type: object
-            properties:
-                namespace:
-                    type: string
-                    title: namespace
-                    minLength: 1
-                    description: Module namespace in the registry (e.g., "hashicorp", "myorg").
-                module_name:
-                    type: string
-                    title: module_name
-                    minLength: 1
-                    description: Module name in the registry (e.g., "consul", "rds").
-                system:
-                    type: string
-                    title: system
-                    minLength: 1
-                    description: Target system / provider (e.g., "aws", "azurerm", "google").
-            title: TerraformConfig
-            required:
-                - namespace
-                - module_name
-                - system
-            additionalProperties: false
-            description: TerraformConfig identifies a module within a Terraform registry.
-        admiral.api.source.v1.TestSourceRequest:
-            type: object
-            properties:
-                source_id:
-                    type: string
-                    title: source_id
-                    format: uuid
-                    description: Unique identifier of the source to test (UUID).
-            title: TestSourceRequest
-            required:
-                - source_id
-            additionalProperties: false
-            description: TestSourceRequest identifies a source to test.
-        admiral.api.source.v1.TestSourceResponse:
-            type: object
-            properties:
-                status:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceTestStatus'
-                    title: status
-                    description: The outcome of the test.
-                error:
-                    type: string
-                    title: error
-                    description: Human-readable error message when `status` is FAILURE. Empty on success.
-                source:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
-                    title: source
-                    description: The source with test status fields refreshed.
-            title: TestSourceResponse
-            additionalProperties: false
-            description: |-
-                TestSourceResponse reports the outcome of the test against the external
-                 system. The same outcome is persisted on the Source (`last_test_status`,
-                 `last_test_error`, `last_tested_at`).
-        admiral.api.source.v1.UpdateSourceRequest:
-            type: object
-            properties:
-                source:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
-                    title: source
-                    description: |-
-                        The source with updated fields. Only fields specified in `update_mask`
-                         are updated.
-                update_mask:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
-                    title: update_mask
-                    description: |-
-                        The set of fields to update. Optional; if omitted, all populated fields
-                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                         `description`, `url`, `credential_id`, `source_config`, `labels`.
-            title: UpdateSourceRequest
-            required:
-                - source
-            additionalProperties: false
-            description: UpdateSourceRequest contains the source fields to update.
-        admiral.api.source.v1.UpdateSourceResponse:
-            type: object
-            properties:
-                source:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
-                    title: source
-                    description: The updated source.
-            title: UpdateSourceResponse
-            additionalProperties: false
-            description: UpdateSourceResponse contains the updated source.
         admiral.api.tenant.v1.GetTenantRequest:
             type: object
             title: GetTenantRequest

@@ -25,10 +25,6 @@
       "description": "Runs of change sets, plan through apply."
     },
     {
-      "name": "source",
-      "description": "External artifact sources."
-    },
-    {
       "name": "tenant",
       "description": "Your tenant."
     },
@@ -129,17 +125,6 @@
       "description": "Create, apply, and cancel runs; retry revisions.",
       "implies": [
         "run:read"
-      ]
-    },
-    {
-      "name": "source:read",
-      "description": "Read sources and source versions."
-    },
-    {
-      "name": "source:write",
-      "description": "Create, update, delete, and test sources.",
-      "implies": [
-        "source:read"
       ]
     },
     {
