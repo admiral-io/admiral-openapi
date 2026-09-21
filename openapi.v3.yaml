@@ -7953,6 +7953,26 @@ components:
             title: Pin
             additionalProperties: false
             description: Pin is one dependency the closure step resolved and vendored.
+        admiral.api.registry.v1.PresentedCredential:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                name:
+                    type: string
+                    title: name
+                hosts:
+                    type: array
+                    items:
+                        type: string
+                    title: hosts
+                    description: The hosts it was presented to during this pull.
+            title: PresentedCredential
+            additionalProperties: false
+            description: |-
+                PresentedCredential is one credential a pull presented, as it was named at
+                 the time; the credential may since have been renamed or deleted.
         admiral.api.registry.v1.Provenance:
             type: object
             properties:
@@ -7995,6 +8015,16 @@ components:
                     description: |-
                         Every remote module or chart the closure step vendored into the bundle,
                          pinned to what it resolved.
+                credentials:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.PresentedCredential'
+                    title: credentials
+                    description: |-
+                        The credentials the platform presented while fetching, for PULL: which
+                         secret reached which hosts. Lineage, not a grant; a later pull attaches
+                         its own. Set by the server; ignored on a publish request.
+                    readOnly: true
             title: Provenance
             additionalProperties: false
             description: |-

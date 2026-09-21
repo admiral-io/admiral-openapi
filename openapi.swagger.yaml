@@ -6325,6 +6325,21 @@ definitions:
                 type: string
                 description: 'What it resolved to: an exact version or commit.'
         description: Pin is one dependency the closure step resolved and vendored.
+    v1PresentedCredential:
+        type: object
+        properties:
+            id:
+                type: string
+            name:
+                type: string
+            hosts:
+                type: array
+                items:
+                    type: string
+                description: The hosts it was presented to during this pull.
+        description: |-
+            PresentedCredential is one credential a pull presented, as it was named at
+            the time; the credential may since have been renamed or deleted.
     v1Provenance:
         type: object
         properties:
@@ -6360,6 +6375,16 @@ definitions:
                 description: |-
                     Every remote module or chart the closure step vendored into the bundle,
                     pinned to what it resolved.
+            credentials:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PresentedCredential'
+                description: |-
+                    The credentials the platform presented while fetching, for PULL: which
+                    secret reached which hosts. Lineage, not a grant; a later pull attaches
+                    its own. Set by the server; ignored on a publish request.
+                readOnly: true
         description: |-
             Provenance is where a revision's bytes came from: the audit trail behind
             the digest.
