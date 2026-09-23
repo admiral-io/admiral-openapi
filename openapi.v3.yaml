@@ -1419,7 +1419,7 @@ paths:
                   description: |-
                     Filter expression. Filterable fields:
                        - `kind`: TERRAFORM, HELM, MANIFESTS.
-                       - `status`: PUBLISHED, DEPRECATED.
+                       - `status`: PUBLISHED, DEPRECATED, REVOKED.
 
                      Example: `field['status'] = 'PUBLISHED'`
                   schema:
@@ -1448,13 +1448,13 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.registry.v1.ListRevisionsResponse'
-    /v1/components/{component_id}/revisions/{digest}:deprecate:
+    /v1/components/{component_id}/revisions/{digest}:setStatus:
         post:
             tags:
                 - Components
-            summary: Deprecate a revision
+            summary: Set a revision's status
             description: 'Scope: `component:write`'
-            operationId: RegistryAPI_DeprecateRevision
+            operationId: RegistryAPI_SetRevisionStatus
             parameters:
                 - name: component_id
                   in: path
@@ -1467,9 +1467,9 @@ paths:
                 - name: digest
                   in: path
                   description: |-
-                    `sha256:<hex>`. A digest, not a tag: what is being deprecated is the
-                     bytes, and a floating tag might name different bytes by the time anyone
-                     reads the reason.
+                    `sha256:<hex>`. A digest, not a tag: the status belongs to the bytes, and
+                     a floating tag might name different bytes by the time anyone reads the
+                     reason.
                   required: true
                   schema:
                     type: string
@@ -1481,19 +1481,29 @@ paths:
                         schema:
                             type: object
                             properties:
+                                status:
+                                    allOf:
+                                        - $ref: '#/components/schemas/admiral.api.registry.v1.RevisionStatus'
+                                    not:
+                                        enum:
+                                            - REVISION_STATUS_UNSPECIFIED
+                                    title: status
                                 reason:
                                     type: string
                                     title: reason
                                     maxLength: 1024
                                     minLength: 1
                                     description: |-
-                                        Shown to anyone who tries to adopt the revision, and to every
-                                         environment still running it.
-                            title: DeprecateRevisionRequest
+                                        Shown to anyone who adopts or tries to adopt the revision, and to every
+                                         environment running it.
+                            title: SetRevisionStatusRequest
                             required:
+                                - status
                                 - reason
                             additionalProperties: false
-                            description: DeprecateRevisionRequest names a revision by digest and says why.
+                            description: |-
+                                SetRevisionStatusRequest names a revision by digest, its new status, and
+                                 why.
                 required: true
             responses:
                 "200":
@@ -1501,7 +1511,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/admiral.api.registry.v1.DeprecateRevisionResponse'
+                                $ref: '#/components/schemas/admiral.api.registry.v1.SetRevisionStatusResponse'
     /v1/components/{component_id}/revisions/{reference}:
         get:
             tags:
@@ -7746,46 +7756,6 @@ components:
             title: DeleteTagResponse
             additionalProperties: false
             description: DeleteTagResponse is empty.
-        admiral.api.registry.v1.DeprecateRevisionRequest:
-            type: object
-            properties:
-                component_id:
-                    type: string
-                    title: component_id
-                    format: uuid
-                digest:
-                    type: string
-                    title: digest
-                    pattern: ^sha256:[0-9a-f]{64}$
-                    description: |-
-                        `sha256:<hex>`. A digest, not a tag: what is being deprecated is the
-                         bytes, and a floating tag might name different bytes by the time anyone
-                         reads the reason.
-                reason:
-                    type: string
-                    title: reason
-                    maxLength: 1024
-                    minLength: 1
-                    description: |-
-                        Shown to anyone who tries to adopt the revision, and to every
-                         environment still running it.
-            title: DeprecateRevisionRequest
-            required:
-                - component_id
-                - digest
-                - reason
-            additionalProperties: false
-            description: DeprecateRevisionRequest names a revision by digest and says why.
-        admiral.api.registry.v1.DeprecateRevisionResponse:
-            type: object
-            properties:
-                revision:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.registry.v1.Revision'
-                    title: revision
-            title: DeprecateRevisionResponse
-            additionalProperties: false
-            description: DeprecateRevisionResponse contains the revision with its new status.
         admiral.api.registry.v1.Finding:
             type: object
             properties:
@@ -7944,7 +7914,7 @@ components:
                     description: |-
                         Filter expression. Filterable fields:
                            - `kind`: TERRAFORM, HELM, MANIFESTS.
-                           - `status`: PUBLISHED, DEPRECATED.
+                           - `status`: PUBLISHED, DEPRECATED, REVOKED.
 
                          Example: `field['status'] = 'PUBLISHED'`
                 page_size:
@@ -8488,15 +8458,17 @@ components:
                         - $ref: '#/components/schemas/admiral.api.registry.v1.RevisionStatus'
                     title: status
                     readOnly: true
-                deprecated_at:
+                status_changed_at:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: deprecated_at
-                    description: Set only when DEPRECATED.
+                    title: status_changed_at
+                    description: |-
+                        When and why the status last changed. Unset on a revision that has only
+                         ever been PUBLISHED.
                     readOnly: true
-                deprecation_reason:
+                status_reason:
                     type: string
-                    title: deprecation_reason
+                    title: status_reason
                     readOnly: true
                 tags:
                     type: array
@@ -8518,7 +8490,7 @@ components:
                     readOnly: true
             title: Revision
             additionalProperties: false
-            description: Revision is one published artifact. Immutable except for deprecation.
+            description: Revision is one published artifact. Immutable except for its status.
         admiral.api.registry.v1.RevisionStatus:
             type: string
             title: RevisionStatus
@@ -8526,7 +8498,58 @@ components:
                 - REVISION_STATUS_UNSPECIFIED
                 - PUBLISHED
                 - DEPRECATED
+                - REVOKED
             description: RevisionStatus is a revision's lifecycle. There is no deleted state.
+        admiral.api.registry.v1.SetRevisionStatusRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    format: uuid
+                digest:
+                    type: string
+                    title: digest
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    description: |-
+                        `sha256:<hex>`. A digest, not a tag: the status belongs to the bytes, and
+                         a floating tag might name different bytes by the time anyone reads the
+                         reason.
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.RevisionStatus'
+                    not:
+                        enum:
+                            - REVISION_STATUS_UNSPECIFIED
+                    title: status
+                reason:
+                    type: string
+                    title: reason
+                    maxLength: 1024
+                    minLength: 1
+                    description: |-
+                        Shown to anyone who adopts or tries to adopt the revision, and to every
+                         environment running it.
+            title: SetRevisionStatusRequest
+            required:
+                - component_id
+                - digest
+                - status
+                - reason
+            additionalProperties: false
+            description: |-
+                SetRevisionStatusRequest names a revision by digest, its new status, and
+                 why.
+        admiral.api.registry.v1.SetRevisionStatusResponse:
+            type: object
+            properties:
+                revision:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Revision'
+                    title: revision
+            title: SetRevisionStatusResponse
+            additionalProperties: false
+            description: SetRevisionStatusResponse contains the revision with its new status.
         admiral.api.registry.v1.SetTagRequest:
             type: object
             properties:

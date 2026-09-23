@@ -134,8 +134,8 @@ tags:
         A component here is a REGISTRY ENTRY -- the thing `admiral component
         publish` creates and later publishes land under -- not an instance running
         in an environment. Both are called component on purpose; the verbs and the
-        address forms carry the distinction. Publish, tag and deprecate act on the
-        registry (this service); add, update and copy act inside a change set.
+        address forms carry the distinction. Publish, tag and status changes act on
+        the registry (this service); add, update and copy act inside a change set.
         `cloud-sql:v1.2.0` is registry-speak, `my-api/prod/users-db` is
         environment-speak.
 
@@ -146,8 +146,8 @@ tags:
         once assigned, floating tags (latest, main) may.
 
         Publishing the same bytes under the same name twice yields the same
-        revision. Revisions are never deleted; deprecation refuses new adoption
-        while what already pins the revision keeps running.
+        revision. Revisions are never deleted; revoking one refuses new adoption
+        while what already pins it keeps running.
     - name: EnvironmentAPI
       description: |-
         EnvironmentAPI manages environments within an application.
@@ -1437,7 +1437,7 @@ paths:
                   description: |-
                     Filter expression. Filterable fields:
                       - `kind`: TERRAFORM, HELM, MANIFESTS.
-                      - `status`: PUBLISHED, DEPRECATED.
+                      - `status`: PUBLISHED, DEPRECATED, REVOKED.
 
                     Example: `field['status'] = 'PUBLISHED'`
                   in: query
@@ -1454,20 +1454,18 @@ paths:
                   type: string
             tags:
                 - RegistryAPI
-    /v1/components/{component_id}/revisions/{digest}:deprecate:
+    /v1/components/{component_id}/revisions/{digest}:setStatus:
         post:
             summary: |-
-                DeprecateRevision refuses new adoption of a revision with a recorded
-                reason. Environments already pinned to it keep running and warn.
-                One-way: FAILED_PRECONDITION if already deprecated, with the reason that
-                was recorded first.
+                SetRevisionStatus moves a revision between PUBLISHED, DEPRECATED and
+                REVOKED, recording why. Any move is allowed, including back to PUBLISHED.
             description: 'Scope: `component:write`'
-            operationId: RegistryAPI_DeprecateRevision
+            operationId: RegistryAPI_SetRevisionStatus
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1DeprecateRevisionResponse'
+                        $ref: '#/definitions/v1SetRevisionStatusResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -1479,9 +1477,9 @@ paths:
                   type: string
                 - name: digest
                   description: |-
-                    `sha256:<hex>`. A digest, not a tag: what is being deprecated is the
-                    bytes, and a floating tag might name different bytes by the time anyone
-                    reads the reason.
+                    `sha256:<hex>`. A digest, not a tag: the status belongs to the bytes, and
+                    a floating tag might name different bytes by the time anyone reads the
+                    reason.
                   in: path
                   required: true
                   type: string
@@ -1489,7 +1487,7 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/RegistryAPIDeprecateRevisionBody'
+                    $ref: '#/definitions/RegistryAPISetRevisionStatusBody'
             tags:
                 - RegistryAPI
     /v1/components/{component_id}/revisions/{reference}:
@@ -3338,16 +3336,21 @@ definitions:
             one version.
         required:
             - address
-    RegistryAPIDeprecateRevisionBody:
+    RegistryAPISetRevisionStatusBody:
         type: object
         properties:
+            status:
+                $ref: '#/definitions/apiRegistryV1RevisionStatus'
             reason:
                 type: string
                 description: |-
-                    Shown to anyone who tries to adopt the revision, and to every
-                    environment still running it.
-        description: DeprecateRevisionRequest names a revision by digest and says why.
+                    Shown to anyone who adopts or tries to adopt the revision, and to every
+                    environment running it.
+        description: |-
+            SetRevisionStatusRequest names a revision by digest, its new status, and
+            why.
         required:
+            - status
             - reason
     RegistryAPISetTagBody:
         type: object
@@ -3561,12 +3564,14 @@ definitions:
             status:
                 $ref: '#/definitions/apiRegistryV1RevisionStatus'
                 readOnly: true
-            deprecated_at:
+            status_changed_at:
                 type: string
                 format: date-time
-                description: Set only when DEPRECATED.
+                description: |-
+                    When and why the status last changed. Unset on a revision that has only
+                    ever been PUBLISHED.
                 readOnly: true
-            deprecation_reason:
+            status_reason:
                 type: string
                 readOnly: true
             tags:
@@ -3582,19 +3587,21 @@ definitions:
                 type: string
                 format: date-time
                 readOnly: true
-        description: Revision is one published artifact. Immutable except for deprecation.
+        description: Revision is one published artifact. Immutable except for its status.
     apiRegistryV1RevisionStatus:
         type: string
         enum:
             - REVISION_STATUS_UNSPECIFIED
             - PUBLISHED
             - DEPRECATED
+            - REVOKED
         default: REVISION_STATUS_UNSPECIFIED
         description: |-
             RevisionStatus is a revision's lifecycle. There is no deleted state.
 
              - PUBLISHED: Adoptable: a change set may pin it.
-             - DEPRECATED: Refuses new adoption; what already pins it keeps running with a warning.
+             - DEPRECATED: Still adoptable, with a warning; what already pins it warns too.
+             - REVOKED: Refuses new adoption; what already pins it keeps running with a warning.
     apiRunV1GetRevisionResponse:
         type: object
         properties:
@@ -5260,12 +5267,6 @@ definitions:
     v1DeleteTagResponse:
         type: object
         description: DeleteTagResponse is empty.
-    v1DeprecateRevisionResponse:
-        type: object
-        properties:
-            revision:
-                $ref: '#/definitions/apiRegistryV1Revision'
-        description: DeprecateRevisionResponse contains the revision with its new status.
     v1DiffChangeSetResponse:
         type: object
         properties:
@@ -7020,6 +7021,12 @@ definitions:
                 $ref: '#/definitions/v1ChangeSetEntry'
                 description: The entry as recorded on the change set.
         description: SetEntryResponse contains the created or replaced entry.
+    v1SetRevisionStatusResponse:
+        type: object
+        properties:
+            revision:
+                $ref: '#/definitions/apiRegistryV1Revision'
+        description: SetRevisionStatusResponse contains the revision with its new status.
     v1SetTagResponse:
         type: object
         properties:
