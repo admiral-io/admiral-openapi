@@ -8025,6 +8025,21 @@ components:
                          secret reached which hosts. Lineage, not a grant; a later pull attaches
                          its own. Set by the server; ignored on a publish request.
                     readOnly: true
+                commit_message:
+                    type: string
+                    title: commit_message
+                    maxLength: 4096
+                    description: |-
+                        The message of the commit that produced these bytes, as written, so a
+                         reader deciding whether to move to this revision can see what changed.
+                         Captured at publish because it cannot be recovered after a force-push or
+                         once the source is gone. Empty when there is no commit, or upstream
+                         carried no notes.
+                commit_author:
+                    type: string
+                    title: commit_author
+                    maxLength: 256
+                    description: Who wrote that commit, by name. Not the email address.
             title: Provenance
             additionalProperties: false
             description: |-
