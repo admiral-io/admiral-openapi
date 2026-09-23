@@ -7620,9 +7620,9 @@ components:
                     type: string
                     title: type
                     description: |-
-                        The type as the bundle declares it, in the bundle's own vocabulary
-                         (Terraform type expressions, JSON Schema types for charts). Informational
-                         until the contract format settles what validation reads.
+                        The type as the bundle declares it: a Terraform type expression, or for a
+                         chart one of bool, number, string, list, object or null. A chart's full
+                         constraint is in schema.
                 description:
                     type: string
                     title: description
@@ -7647,6 +7647,31 @@ components:
                     description: |-
                         The value must not land in plan or state (Terraform 1.10+ ephemeral
                          inputs). Implies sensitive.
+                nullable:
+                    type:
+                        - boolean
+                        - "null"
+                    title: nullable
+                    description: |-
+                        Whether null is an accepted value. Unset when the bundle does not say,
+                         which is a chart input with no schema.
+                deprecated:
+                    type: string
+                    title: deprecated
+                    description: The bundle's own deprecation message for this input.
+                validations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.ContractValidation'
+                    title: validations
+                    description: A Terraform variable's validation blocks, in declaration order.
+                schema:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Struct'
+                    title: schema
+                    description: |-
+                        The JSON Schema a chart's values.schema.json declares for this input,
+                         verbatim, so a value can be checked the way Helm will check it.
             title: ContractInput
             additionalProperties: false
             description: ContractInput is one value the bundle accepts.
@@ -7665,6 +7690,21 @@ components:
             title: ContractOutput
             additionalProperties: false
             description: ContractOutput is one value the bundle produces.
+        admiral.api.registry.v1.ContractValidation:
+            type: object
+            properties:
+                condition:
+                    type: string
+                    title: condition
+                error_message:
+                    type: string
+                    title: error_message
+            title: ContractValidation
+            additionalProperties: false
+            description: |-
+                ContractValidation is one validation block on a Terraform variable, as
+                 written. Evaluating the condition needs the Terraform language runtime,
+                 which the registry does not run.
         admiral.api.registry.v1.DeleteComponentRequest:
             type: object
             properties:

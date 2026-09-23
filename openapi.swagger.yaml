@@ -4891,9 +4891,9 @@ definitions:
             type:
                 type: string
                 description: |-
-                    The type as the bundle declares it, in the bundle's own vocabulary
-                    (Terraform type expressions, JSON Schema types for charts). Informational
-                    until the contract format settles what validation reads.
+                    The type as the bundle declares it: a Terraform type expression, or for a
+                    chart one of bool, number, string, list, object or null. A chart's full
+                    constraint is in schema.
             description:
                 type: string
             required:
@@ -4911,6 +4911,25 @@ definitions:
                 description: |-
                     The value must not land in plan or state (Terraform 1.10+ ephemeral
                     inputs). Implies sensitive.
+            nullable:
+                type: boolean
+                description: |-
+                    Whether null is an accepted value. Unset when the bundle does not say,
+                    which is a chart input with no schema.
+            deprecated:
+                type: string
+                description: The bundle's own deprecation message for this input.
+            validations:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ContractValidation'
+                description: A Terraform variable's validation blocks, in declaration order.
+            schema:
+                type: object
+                description: |-
+                    The JSON Schema a chart's values.schema.json declares for this input,
+                    verbatim, so a value can be checked the way Helm will check it.
         description: ContractInput is one value the bundle accepts.
     v1ContractOutput:
         type: object
@@ -4922,6 +4941,17 @@ definitions:
             sensitive:
                 type: boolean
         description: ContractOutput is one value the bundle produces.
+    v1ContractValidation:
+        type: object
+        properties:
+            condition:
+                type: string
+            error_message:
+                type: string
+        description: |-
+            ContractValidation is one validation block on a Terraform variable, as
+            written. Evaluating the condition needs the Terraform language runtime,
+            which the registry does not run.
     v1CopyChangeSetResponse:
         type: object
         properties:
