@@ -6,7 +6,11 @@
     },
     {
       "name": "app",
-      "description": "Applications and their change sets."
+      "description": "Applications."
+    },
+    {
+      "name": "changeset",
+      "description": "Change sets, their revisions, and the component values they propose."
     },
     {
       "name": "component",
@@ -67,13 +71,24 @@
     },
     {
       "name": "app:read",
-      "description": "Read applications, change sets, and change set diffs."
+      "description": "Read applications."
     },
     {
       "name": "app:write",
-      "description": "Create, update, and delete applications; manage change sets and their entries and variables.",
+      "description": "Create, update, and delete applications.",
       "implies": [
         "app:read"
+      ]
+    },
+    {
+      "name": "changeset:read",
+      "description": "Read change sets, their revisions and diffs, and the values they propose."
+    },
+    {
+      "name": "changeset:write",
+      "description": "Create, edit, and discard change sets.",
+      "implies": [
+        "changeset:read"
       ]
     },
     {

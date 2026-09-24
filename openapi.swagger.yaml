@@ -95,21 +95,17 @@ tags:
         environments.
     - name: ChangeSetAPI
       description: |-
-        ChangeSetAPI manages change sets: scoped, isolated proposals to mutate the
-        deployed state of an application within a single environment.
+        ChangeSetAPI manages change sets: proposals against the components of one
+        environment. Add a component from the registry, move its pin, set or
+        remove values, remove it; each request cuts one immutable revision.
+        Nothing here plans or applies.
 
-        A change set bundles component changes (add a component, change a version,
-        destroy a component) and variable changes (set or remove a key) into one
-        reviewable, deployable unit. Multiple change sets can be open simultaneously
-        for the same application+environment by different authors. They isolate
-        the editing phase so concurrent work does not collide.
+        A change set is addressed by its id, `cs-` and twelve base36 characters.
 
-        Change sets are immutable once they leave OPEN status. Mutations
-        (SetEntry, RemoveEntry, SetVariable, RemoveVariable, UpdateChangeSet,
-        DiscardChangeSet) all reject when the change set is DEPLOYED or DISCARDED.
-
-        Lifecycle: OPEN -> DEPLOYED (via deploy) or OPEN -> DISCARDED (explicit
-        abandon). No backtracking.
+        Values are JSON text in `*_json` fields, so an integer above 2^53 keeps
+        every digit. A map whose only key is `$ref` is a reference to another
+        component's output (`{"$ref": "users-db.connection_name"}`); a real value
+        of that shape is written with `$$ref`.
     - name: CredentialAPI
       description: |-
         CredentialAPI manages the credentials a tenant registers for reaching
@@ -909,13 +905,10 @@ paths:
                 - ApplicationAPI
     /v1/changesets:
         get:
-            summary: ListChangeSets returns a paginated list of change sets.
-            description: |-
-                Common filter fields: `application_id`, `environment_id`, `status`. The
-                returned `ChangeSet` records do not include entries or variable entries;
-                call GetChangeSet for the full record.
-
-                Scope: `app:read`
+            summary: |-
+                ListChangeSets pages through one environment's change sets, oldest
+                first.
+            description: 'Scope: `changeset:read`'
             operationId: ChangeSetAPI_ListChangeSets
             responses:
                 "200":
@@ -927,30 +920,26 @@ paths:
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `application_id`: change sets for a specific application (UUID).
-                      - `environment_id`: change sets for a specific environment (UUID).
-                      - `status`: filter by status (OPEN, DEPLOYED, DISCARDED).
-
-                    Example: `field['environment_id'] = '<uuid>' AND field['status'] = 'OPEN'`
+                - name: environment_id
+                  in: query
+                  required: true
+                  type: string
+                - name: status
+                  description: UNSPECIFIED lists every status.
                   in: query
                   required: false
                   type: string
+                  enum:
+                    - CHANGE_SET_STATUS_UNSPECIFIED
+                    - DRAFT
+                    - DISCARDED
+                  default: CHANGE_SET_STATUS_UNSPECIFIED
                 - name: page_size
-                  description: |-
-                    Maximum number of change sets to return per page. Defaults to 50 when
-                    omitted or 0; must not exceed 100.
                   in: query
                   required: false
                   type: integer
                   format: int32
                 - name: page_token
-                  description: Opaque pagination token from a previous response.
                   in: query
                   required: false
                   type: string
@@ -958,13 +947,10 @@ paths:
                 - ChangeSetAPI
         post:
             summary: |-
-                CreateChangeSet opens a new change set for an (application, environment)
-                pair.
-            description: |-
-                Multiple change sets can be open against the same target simultaneously.
-                Conflicts are detected at deploy time, not at create time.
-
-                Scope: `app:write`
+                CreateChangeSet opens a draft against an environment. Edits given here
+                cut revision 1 in the same request; with none, the draft has no revision
+                until its first edit.
+            description: 'Scope: `changeset:write`'
             operationId: ChangeSetAPI_CreateChangeSet
             responses:
                 "200":
@@ -977,55 +963,16 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: body
-                  description: |-
-                    CreateChangeSetRequest opens a new change set for an (application,
-                    environment) pair.
                   in: body
                   required: true
                   schema:
                     $ref: '#/definitions/v1CreateChangeSetRequest'
             tags:
                 - ChangeSetAPI
-    /v1/changesets/{change_set.id}:
-        patch:
-            summary: |-
-                UpdateChangeSet updates a change set's mutable metadata.
-                Use `update_mask` to specify which fields to update. Only `title` and
-                `description` are mutable; all other fields are immutable or transitioned
-                via dedicated RPCs.
-            description: |-
-                Rejected when the change set is not OPEN.
-
-                Scope: `app:write`
-            operationId: ChangeSetAPI_UpdateChangeSet
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1UpdateChangeSetResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: change_set.id
-                  description: Unique identifier for the change set (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/ChangeSetAPIUpdateChangeSetBody'
-            tags:
-                - ChangeSetAPI
     /v1/changesets/{change_set_id}:
         get:
-            summary: |-
-                GetChangeSet retrieves a change set by ID, including all of its component
-                entries and variable entries inline.
-            description: 'Scope: `app:read`'
+            summary: GetChangeSet returns a change set and its head revision with entries.
+            description: 'Scope: `changeset:read`'
             operationId: ChangeSetAPI_GetChangeSet
             responses:
                 "200":
@@ -1038,70 +985,46 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: change_set_id
-                  description: |-
-                    Identifier of the change set. Accepts either the short ID
-                    (`cs-<suffix>`) or the canonical UUID.
                   in: path
                   required: true
                   type: string
             tags:
                 - ChangeSetAPI
-    /v1/changesets/{change_set_id}/copy:
-        post:
+    /v1/changesets/{change_set_id}/components/{component}/values:
+        get:
             summary: |-
-                CopyChangeSet creates a new OPEN change set in a target environment by
-                copying every entry and variable entry from the source. The new change
-                set's `copied_from_id` points back to the source for audit (promotion
-                chain). The source change set is not modified.
-            description: |-
-                The target application is the source's application; only the environment
-                can be retargeted. After copying, the resulting change set can be
-                modified (entries added, removed, or rewritten) before being deployed.
-
-                Scope: `app:write`
-            operationId: ChangeSetAPI_CopyChangeSet
+                GetComponentValues returns one component's values as the head revision
+                leaves them, with the head's number, which an upload sends back as
+                `from_revision`.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetComponentValues
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1CopyChangeSetResponse'
+                        $ref: '#/definitions/v1GetComponentValuesResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: change_set_id
-                  description: |-
-                    Identifier of the source change set to copy. Accepts either the short
-                    ID (`cs-<suffix>`) or the canonical UUID. Can be in any status.
                   in: path
                   required: true
                   type: string
-                - name: body
-                  in: body
+                - name: component
+                  in: path
                   required: true
-                  schema:
-                    $ref: '#/definitions/ChangeSetAPICopyChangeSetBody'
+                  type: string
             tags:
                 - ChangeSetAPI
     /v1/changesets/{change_set_id}/diff:
         get:
             summary: |-
-                DiffChangeSet computes a structural diff for an OPEN change set: the
-                per-entry deltas relative to current env HEAD, the per-variable deltas
-                relative to current env variables, and the deployed components whose
-                `values_template` references a name touched by this change set ("if you
-                apply this, these other components will also re-plan").
-            description: |-
-                Sensitive values are never returned. Changed-but-masked entries set
-                `sensitive=true` and omit `old`/`new` so the reviewer knows a change is
-                present without seeing the value.
-
-                Available for change sets in any status; for non-OPEN change sets the
-                result reflects the diff against the env's CURRENT HEAD, not the env's
-                state at the time the change set was deployed.
-
-                Scope: `app:read`
+                DiffChangeSet returns, per component the head revision touches, the
+                action, the pin before and after, each changed path before and after,
+                and the component's violations.
+            description: 'Scope: `changeset:read`'
             operationId: ChangeSetAPI_DiffChangeSet
             responses:
                 "200":
@@ -1114,9 +1037,6 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: change_set_id
-                  description: |-
-                    Identifier of the change set. Accepts either the short ID
-                    (`cs-<suffix>`) or the canonical UUID.
                   in: path
                   required: true
                   type: string
@@ -1125,10 +1045,9 @@ paths:
     /v1/changesets/{change_set_id}/discard:
         post:
             summary: |-
-                DiscardChangeSet abandons an OPEN change set. The record is preserved for
-                audit but no entries can be added or modified. Status becomes DISCARDED
-                (terminal). Rejected when the change set is not OPEN.
-            description: 'Scope: `app:write`'
+                DiscardChangeSet abandons a draft and releases the component names it
+                reserved. FAILED_PRECONDITION when it is already discarded.
+            description: 'Scope: `changeset:write`'
             operationId: ChangeSetAPI_DiscardChangeSet
             responses:
                 "200":
@@ -1141,9 +1060,6 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: change_set_id
-                  description: |-
-                    Identifier of the change set to discard. Accepts either the short ID
-                    (`cs-<suffix>`) or the canonical UUID.
                   in: path
                   required: true
                   type: string
@@ -1154,80 +1070,30 @@ paths:
                     $ref: '#/definitions/ChangeSetAPIDiscardChangeSetBody'
             tags:
                 - ChangeSetAPI
-    /v1/changesets/{change_set_id}/entries/{component_name}:
-        delete:
-            summary: |-
-                RemoveEntry deletes a single component entry from an OPEN change set.
-                Removes the proposal entirely; this does NOT mark the component for
-                destruction. To destroy a component, use SetEntry with `change_type =
-                DESTROY`.
+    /v1/changesets/{change_set_id}/edit:
+        post:
+            summary: EditChangeSet applies the edits in order and cuts exactly one revision.
             description: |-
-                Rejected when the change set is not OPEN.
+                FAILED_PRECONDITION when `if_revision` or an upload's `from_revision` is
+                not the head (the message names the head), when the change set is not a
+                draft, and when a pin names a revoked revision (the message carries the
+                recorded reason). ALREADY_EXISTS when a component name is live or held
+                by another draft (the message names which). A contract violation is
+                accepted: it is stored on the revision and returned.
 
-                Scope: `app:write`
-            operationId: ChangeSetAPI_RemoveEntry
+                Scope: `changeset:write`
+            operationId: ChangeSetAPI_EditChangeSet
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1RemoveEntryResponse'
+                        $ref: '#/definitions/v1EditChangeSetResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: change_set_id
-                  description: |-
-                    Identifier of the change set. Accepts either the short ID
-                    (`cs-<suffix>`) or the canonical UUID.
-                  in: path
-                  required: true
-                  type: string
-                - name: component_name
-                  description: Component name of the entry to remove.
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - ChangeSetAPI
-        put:
-            summary: |-
-                SetEntry creates or replaces an entry for a component name within the
-                change set. One name = one entry; calling SetEntry for an existing name
-                overwrites the prior entry.
-            description: |-
-                The `change_type` field selects the operation:
-                  - CREATE: add a new component. Requires `catalog_item_id`. Rejects if a
-                    component with the same name already exists in the application.
-                  - UPDATE: change an existing component. The name must match an
-                    existing component in the application. Only non-empty optional
-                    fields are recorded as changes.
-                  - DESTROY: schedule the component for terraform destroy at deploy.
-                  - ORPHAN: detach from management without destroying infrastructure.
-
-                Rejected when the change set is not OPEN.
-
-                Scope: `app:write`
-            operationId: ChangeSetAPI_SetEntry
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1SetEntryResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: change_set_id
-                  description: |-
-                    Identifier of the change set. Accepts either the short ID
-                    (`cs-<suffix>`) or the canonical UUID.
-                  in: path
-                  required: true
-                  type: string
-                - name: component_name
-                  description: Component name (stable identifier set at creation). Required.
                   in: path
                   required: true
                   type: string
@@ -1235,87 +1101,65 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/ChangeSetAPISetEntryBody'
+                    $ref: '#/definitions/ChangeSetAPIEditChangeSetBody'
             tags:
                 - ChangeSetAPI
-    /v1/changesets/{change_set_id}/variables/{key}:
-        delete:
+    /v1/changesets/{change_set_id}/revisions:
+        get:
             summary: |-
-                RemoveVariable records the intent to delete a variable on apply. Writes
-                a tombstone variable entry (value absent) so the apply phase removes the
-                key from the target environment.
-            description: |-
-                To withdraw the deletion intent before deploy, call SetVariable for the
-                same key with the desired value (which overwrites the tombstone).
-
-                Rejected when the change set is not OPEN.
-
-                Scope: `app:write`
-            operationId: ChangeSetAPI_RemoveVariable
+                ListRevisions pages through a change set's revisions, oldest first,
+                without their entries.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_ListRevisions
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1RemoveVariableResponse'
+                        $ref: '#/definitions/apiChangesetV1ListRevisionsResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: change_set_id
-                  description: |-
-                    Identifier of the change set. Accepts either the short ID
-                    (`cs-<suffix>`) or the canonical UUID.
                   in: path
                   required: true
                   type: string
-                - name: key
-                  description: The variable key to remove on apply.
-                  in: path
-                  required: true
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
                   type: string
             tags:
                 - ChangeSetAPI
-        put:
-            summary: |-
-                SetVariable creates or replaces a variable entry for a key within the
-                change set. One key = one entry. At deploy time, the variable's value is
-                upserted in the target environment.
-            description: |-
-                To delete a variable on apply, use RemoveVariable; it writes a
-                tombstone entry on the change set so the apply phase removes the key.
-
-                Rejected when the change set is not OPEN.
-
-                Scope: `app:write`
-            operationId: ChangeSetAPI_SetVariable
+    /v1/changesets/{change_set_id}/revisions/{number}:
+        get:
+            summary: GetRevision returns one revision with its entries and ops.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetRevision
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1SetVariableResponse'
+                        $ref: '#/definitions/apiChangesetV1GetRevisionResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: change_set_id
-                  description: |-
-                    Identifier of the change set. Accepts either the short ID
-                    (`cs-<suffix>`) or the canonical UUID.
                   in: path
                   required: true
                   type: string
-                - name: key
-                  description: The variable key.
+                - name: number
                   in: path
                   required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/ChangeSetAPISetVariableBody'
+                  type: integer
+                  format: int32
             tags:
                 - ChangeSetAPI
     /v1/components:
@@ -1360,6 +1204,75 @@ paths:
                   in: query
                   required: false
                   type: string
+            tags:
+                - RegistryAPI
+    /v1/components/publish:
+        post:
+            summary: |-
+                PublishComponent uploads a bundle and records it as a revision, creating
+                the component on first use.
+            description: |-
+                The bundle is a gzipped tar of the component root, carried inline and
+                capped at 64 MiB; a fully vendored tree that exceeds it will get a
+                resumable upload path of its own. The server normalizes the bytes
+                (strips `.git`, canonicalizes entry order and timestamps), digests them,
+                runs the publish gate, stores the blob and answers with the revision. If
+                the digest already exists under the name, the existing revision is
+                returned with `unchanged` set and nothing is written, which is what makes
+                a publish-everything CI recipe safe.
+
+                Any tags named in the request are set on the resulting revision.
+                Repointing a semver tag is refused with FAILED_PRECONDITION and the whole
+                publish fails; the bytes are not kept.
+
+                Scope: `component:publish`
+            operationId: RegistryAPI_PublishComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1PublishComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  description: PublishComponentRequest carries what is being published and the bytes.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1PublishComponentRequest'
+            tags:
+                - RegistryAPI
+    /v1/components/pull:
+        post:
+            summary: |-
+                PullComponent publishes an artifact the tenant does not own: a chart in
+                an HTTP repository or an OCI registry, a module in a module registry, a
+                git repository at a ref, an archive. Admiral fetches it with the
+                credentials named, closes it over what it reaches, scans it, and
+                records the revision with provenance saying where it came from. The
+                bytes are a copy: upstream may move the tag and the revision does not.
+                The same resolution under the same name is the same revision, returned
+                with `unchanged` set.
+            description: 'Scope: `component:publish`'
+            operationId: RegistryAPI_PullComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1PullComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1PullComponentRequest'
             tags:
                 - RegistryAPI
     /v1/components/{component_id}:
@@ -1454,7 +1367,7 @@ paths:
                   type: string
             tags:
                 - RegistryAPI
-    /v1/components/{component_id}/revisions/{digest}:setStatus:
+    /v1/components/{component_id}/revisions/{digest}/set-status:
         post:
             summary: |-
                 SetRevisionStatus moves a revision between PUBLISHED, DEPRECATED and
@@ -1601,75 +1514,6 @@ paths:
                   required: true
                   type: string
                   pattern: .+
-            tags:
-                - RegistryAPI
-    /v1/components:publish:
-        post:
-            summary: |-
-                PublishComponent uploads a bundle and records it as a revision, creating
-                the component on first use.
-            description: |-
-                The bundle is a gzipped tar of the component root, carried inline and
-                capped at 64 MiB; a fully vendored tree that exceeds it will get a
-                resumable upload path of its own. The server normalizes the bytes
-                (strips `.git`, canonicalizes entry order and timestamps), digests them,
-                runs the publish gate, stores the blob and answers with the revision. If
-                the digest already exists under the name, the existing revision is
-                returned with `unchanged` set and nothing is written, which is what makes
-                a publish-everything CI recipe safe.
-
-                Any tags named in the request are set on the resulting revision.
-                Repointing a semver tag is refused with FAILED_PRECONDITION and the whole
-                publish fails; the bytes are not kept.
-
-                Scope: `component:publish`
-            operationId: RegistryAPI_PublishComponent
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1PublishComponentResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  description: PublishComponentRequest carries what is being published and the bytes.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1PublishComponentRequest'
-            tags:
-                - RegistryAPI
-    /v1/components:pull:
-        post:
-            summary: |-
-                PullComponent publishes an artifact the tenant does not own: a chart in
-                an HTTP repository or an OCI registry, a module in a module registry, a
-                git repository at a ref, an archive. Admiral fetches it with the
-                credentials named, closes it over what it reaches, scans it, and
-                records the revision with provenance saying where it came from. The
-                bytes are a copy: upstream may move the tag and the revision does not.
-                The same resolution under the same name is the same revision, returned
-                with `unchanged` set.
-            description: 'Scope: `component:publish`'
-            operationId: RegistryAPI_PullComponent
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1PullComponentResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1PullComponentRequest'
             tags:
                 - RegistryAPI
     /v1/credentials:
@@ -2967,181 +2811,20 @@ definitions:
         description: UpdateApplicationRequest contains the application fields to update.
         required:
             - application
-    ChangeSetAPICopyChangeSetBody:
-        type: object
-        properties:
-            environment_id:
-                type: string
-                description: |-
-                    The target environment for the new change set (UUID). Must belong to
-                    the source change set's application.
-            title:
-                type: string
-                description: Optional title override. Defaults to the source's title when empty.
-            description:
-                type: string
-                description: |-
-                    Optional description override. Defaults to the source's description
-                    when empty.
-        description: |-
-            CopyChangeSetRequest creates a new OPEN change set by copying an existing
-            one to a target environment.
-        required:
-            - environment_id
     ChangeSetAPIDiscardChangeSetBody:
         type: object
-        description: DiscardChangeSetRequest abandons an OPEN change set.
-    ChangeSetAPISetEntryBody:
+    ChangeSetAPIEditChangeSetBody:
         type: object
         properties:
-            change_type:
-                $ref: '#/definitions/v1ChangeSetEntryType'
-                description: The change type.
-            catalog_item_id:
-                type: string
-                description: |-
-                    The catalog item to deploy (UUID). Required for CREATE; optional for UPDATE.
-                    Not allowed for DESTROY/ORPHAN.
-            ref:
-                type: string
-                description: The git ref / version selector to deploy.
-            values_template:
-                type: string
-                description: Values template for catalog item inputs.
-            depends_on:
+            if_revision:
+                type: integer
+                format: int32
+                description: When set, refused unless the head is this revision.
+            edits:
                 type: array
                 items:
-                    type: string
-                description: Explicit dependencies (component names). Empty list clears.
-            description:
-                type: string
-                description: Optional description of the proposed change.
-            target:
-                $ref: '#/definitions/v1ComponentTarget'
-                title: |-
-                    Resolved placement for the component, by kind. Required for CREATE (the
-                    component needs a placement); for UPDATE, absent means "no change to
-                    placement."
-        description: SetEntryRequest creates or replaces a component entry within a change set.
-        required:
-            - change_type
-    ChangeSetAPISetVariableBody:
-        type: object
-        properties:
-            value:
-                type: string
-                description: The value to set on apply. For COMPLEX type, must be valid JSON.
-            type:
-                $ref: '#/definitions/v1VariableType'
-                description: How the value should be interpreted. Defaults to STRING when unspecified.
-            sensitive:
-                type: boolean
-                description: When true, the value is encrypted at rest and masked in API responses.
-        description: SetVariableRequest creates or replaces a variable entry within a change set.
-        required:
-            - value
-    ChangeSetAPIUpdateChangeSetBody:
-        type: object
-        properties:
-            change_set:
-                type: object
-                properties:
-                    application_id:
-                        type: string
-                        description: The application this change set targets (UUID).
-                        readOnly: true
-                    environment_id:
-                        type: string
-                        description: The environment this change set targets (UUID).
-                        readOnly: true
-                    status:
-                        $ref: '#/definitions/v1ChangeSetStatus'
-                        description: Lifecycle status of this change set.
-                        readOnly: true
-                    copied_from_id:
-                        type: string
-                        description: |-
-                            If this change set was created via CopyChangeSet, the UUID of the source
-                            change set. Forms the promotion chain (e.g., dev -> staging -> prod).
-                            Empty for change sets created directly via CreateChangeSet.
-                        readOnly: true
-                    title:
-                        type: string
-                        description: Human-readable title for the change set (e.g., "Bump database version").
-                    description:
-                        type: string
-                        description: Optional longer description of what the change set proposes.
-                    deploy_run_id:
-                        type: string
-                        description: |-
-                            The run that deployed this change set (UUID). Populated when status
-                            transitions to DEPLOYED. Empty otherwise. Note: many runs may target a
-                            change set over its life (via runs.change_set_id); this is the single run
-                            that closed it.
-                        readOnly: true
-                    entries:
-                        type: array
-                        items:
-                            type: object
-                            $ref: '#/definitions/v1ChangeSetEntry'
-                        description: |-
-                            Component entries proposed by this change set. Populated by GetChangeSet;
-                            empty in ListChangeSets responses.
-                        readOnly: true
-                    variable_entries:
-                        type: array
-                        items:
-                            type: object
-                            $ref: '#/definitions/v1ChangeSetVariableEntry'
-                        description: |-
-                            Variable entries proposed by this change set. Populated by GetChangeSet;
-                            empty in ListChangeSets responses.
-                        readOnly: true
-                    display_id:
-                        type: string
-                        description: |-
-                            Typed display identifier of the form `cs-<12-char-suffix>` (e.g.,
-                            `cs-3k7m9p2q4rvw`). Server-generated and stable. Prefer this
-                            over `id` for user-facing references; lookups accept either form.
-                        readOnly: true
-                    application_name:
-                        type: string
-                        description: Display name of the parent application. Denormalized for display.
-                        readOnly: true
-                    environment_name:
-                        type: string
-                        description: Display name of the parent environment. Denormalized for display.
-                        readOnly: true
-                    created_by:
-                        $ref: '#/definitions/v1ActorRef'
-                        description: |-
-                            The user or agent that created this change set
-                            (server-populated from token).
-                        readOnly: true
-                    created_at:
-                        type: string
-                        format: date-time
-                        description: When the change set was created.
-                        readOnly: true
-                    updated_at:
-                        type: string
-                        format: date-time
-                        description: |-
-                            When the change set was last updated (metadata, entries, variable
-                            entries, or status).
-                        readOnly: true
-                description: |-
-                    The change set with updated fields. Its `id` identifies the change set;
-                    only fields named in `update_mask` are applied.
-            update_mask:
-                type: string
-                description: |-
-                    The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Pass `*` for full replacement. Supported fields: `title`,
-                    `description`.
-        description: UpdateChangeSetRequest updates a change set's mutable metadata.
-        required:
-            - change_set
+                    type: object
+                    $ref: '#/definitions/v1Edit'
     CredentialAPIUpdateCredentialBody:
         type: object
         properties:
@@ -3446,6 +3129,66 @@ definitions:
                 $ref: '#/definitions/v1ApiKey'
                 description: The key metadata with updated status.
         description: RevokeApiKeyResponse contains the revoked agent API key metadata.
+    apiChangesetV1GetRevisionResponse:
+        type: object
+        properties:
+            revision:
+                $ref: '#/definitions/apiChangesetV1Revision'
+    apiChangesetV1ListRevisionsResponse:
+        type: object
+        properties:
+            revisions:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/apiChangesetV1Revision'
+            next_page_token:
+                type: string
+    apiChangesetV1Pin:
+        type: object
+        properties:
+            revision_id:
+                type: string
+            digest:
+                type: string
+                description: '`sha256:<hex>` of the bundle.'
+            namespace:
+                type: string
+            name:
+                type: string
+        description: Pin is a registry revision, named the ways a person reads it.
+    apiChangesetV1Revision:
+        type: object
+        properties:
+            number:
+                type: integer
+                format: int32
+            change_set_id:
+                type: string
+            base_generation:
+                type: string
+                format: int64
+                description: The environment's generation when the base was taken.
+            cause:
+                $ref: '#/definitions/v1RevisionCause'
+            violations:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Violation'
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+            created_by_kind:
+                $ref: '#/definitions/v1ActorKind'
+            created_at:
+                type: string
+                format: date-time
+            entries:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Entry'
+                description: Empty in a listing.
     apiRegistryV1Component:
         type: object
         properties:
@@ -3518,6 +3261,19 @@ definitions:
             next_page_token:
                 type: string
         description: ListRevisionsResponse contains a page of revisions, newest first.
+    apiRegistryV1Pin:
+        type: object
+        properties:
+            source:
+                type: string
+                description: The source as the bundle declared it, before rewriting.
+            constraint:
+                type: string
+                description: The constraint that was asked for, when any.
+            resolved:
+                type: string
+                description: 'What it resolved to: an exact version or commit.'
+        description: Pin is one dependency the closure step resolved and vendored.
     apiRegistryV1Revision:
         type: object
         properties:
@@ -4041,6 +3797,17 @@ definitions:
         description: |-
             ActiveJobInfo summarizes a job currently being executed by a TERRAFORM agent
             instance. Included in TerraformAgentStatus to provide real-time job progress.
+    v1ActorKind:
+        type: string
+        enum:
+            - ACTOR_KIND_UNSPECIFIED
+            - USER
+            - SERVICE_ACCOUNT
+            - SYSTEM
+        default: ACTOR_KIND_UNSPECIFIED
+        description: |-
+            ActorKind is what cut a revision: a person, a machine's key, or Admiral
+            itself.
     v1ActorRef:
         type: object
         properties:
@@ -4057,6 +3824,23 @@ definitions:
             ActorRef is a lightweight reference to the user or agent that performed an action.
             Server-populated on all resource responses. Clients should never send this;
             use the plain string `created_by` UUID on request messages instead.
+    v1AddComponent:
+        type: object
+        properties:
+            name:
+                type: string
+            source:
+                $ref: '#/definitions/v1RegistryRef'
+            values_json:
+                type: string
+                description: A JSON object. Empty means no values.
+        description: |-
+            AddComponent creates a component instance from the registry. The name is
+            reserved in the environment until the draft is discarded or the component
+            is removed from it.
+        required:
+            - name
+            - source
     v1Agent:
         type: object
         properties:
@@ -4444,313 +4228,54 @@ definitions:
                 $ref: '#/definitions/v1Run'
                 description: The canceled run.
         description: CancelRunResponse contains the updated run.
-    v1CatalogItemVersionDiff:
-        type: object
-        properties:
-            catalog_item_id_old:
-                type: string
-                description: Catalog item UUID before the change.
-            catalog_item_id_new:
-                type: string
-                description: Catalog item UUID after the change.
-            catalog_item_name_old:
-                type: string
-                description: Catalog item name before the change (denormalized for display).
-            catalog_item_name_new:
-                type: string
-                description: Catalog item name after the change (denormalized for display).
-            ref_old:
-                type: string
-                description: Ref (git ref / version selector) before the change.
-            ref_new:
-                type: string
-                description: Ref (git ref / version selector) after the change.
-        description: |-
-            CatalogItemVersionDiff describes a catalog-item-id and/or version change on
-            an entry. Absent halves mean "unset." Both halves can be absent for CREATE
-            entries whose catalog item fields aren't being changed (caller still emits
-            the new values).
     v1ChangeSet:
         type: object
         properties:
             id:
                 type: string
-                description: Unique identifier for the change set (UUID).
+                description: '`cs-` and twelve lowercase base36 characters.'
                 readOnly: true
             application_id:
                 type: string
-                description: The application this change set targets (UUID).
                 readOnly: true
             environment_id:
                 type: string
-                description: The environment this change set targets (UUID).
-                readOnly: true
-            status:
-                $ref: '#/definitions/v1ChangeSetStatus'
-                description: Lifecycle status of this change set.
-                readOnly: true
-            copied_from_id:
-                type: string
-                description: |-
-                    If this change set was created via CopyChangeSet, the UUID of the source
-                    change set. Forms the promotion chain (e.g., dev -> staging -> prod).
-                    Empty for change sets created directly via CreateChangeSet.
                 readOnly: true
             title:
                 type: string
-                description: Human-readable title for the change set (e.g., "Bump database version").
+                readOnly: true
             description:
                 type: string
-                description: Optional longer description of what the change set proposes.
-            deploy_run_id:
-                type: string
-                description: |-
-                    The run that deployed this change set (UUID). Populated when status
-                    transitions to DEPLOYED. Empty otherwise. Note: many runs may target a
-                    change set over its life (via runs.change_set_id); this is the single run
-                    that closed it.
                 readOnly: true
-            entries:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ChangeSetEntry'
-                description: |-
-                    Component entries proposed by this change set. Populated by GetChangeSet;
-                    empty in ListChangeSets responses.
+            status:
+                $ref: '#/definitions/v1ChangeSetStatus'
                 readOnly: true
-            variable_entries:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ChangeSetVariableEntry'
-                description: |-
-                    Variable entries proposed by this change set. Populated by GetChangeSet;
-                    empty in ListChangeSets responses.
-                readOnly: true
-            display_id:
-                type: string
-                description: |-
-                    Typed display identifier of the form `cs-<12-char-suffix>` (e.g.,
-                    `cs-3k7m9p2q4rvw`). Server-generated and stable. Prefer this
-                    over `id` for user-facing references; lookups accept either form.
-                readOnly: true
-            application_name:
-                type: string
-                description: Display name of the parent application. Denormalized for display.
-                readOnly: true
-            environment_name:
-                type: string
-                description: Display name of the parent environment. Denormalized for display.
+            head_revision:
+                type: integer
+                format: int32
+                description: 0 until the first edit.
                 readOnly: true
             created_by:
                 $ref: '#/definitions/v1ActorRef'
-                description: |-
-                    The user or agent that created this change set
-                    (server-populated from token).
+                readOnly: true
+            created_by_kind:
+                $ref: '#/definitions/v1ActorKind'
                 readOnly: true
             created_at:
                 type: string
                 format: date-time
-                description: When the change set was created.
                 readOnly: true
             updated_at:
                 type: string
                 format: date-time
-                description: |-
-                    When the change set was last updated (metadata, entries, variable
-                    entries, or status).
                 readOnly: true
-        description: |-
-            ChangeSet is a scoped, isolated proposal to mutate the deployed state of an
-            application within a single environment.
-
-            The change set holds two kinds of proposals:
-              - Component entries: per-name deltas (CREATE/UPDATE/DESTROY/ORPHAN).
-              - Variable entries: per-key set or delete-on-apply.
-    v1ChangeSetDiff:
-        type: object
-        properties:
-            entries:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1EntryDiff'
-                description: Per-component entry deltas, ordered by component name.
-            variables:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1VariableDiff'
-                description: Per-key variable deltas, ordered by key.
-            downstream:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1DownstreamImpact'
-                description: |-
-                    Deployed components affected by changes to the entries above (static
-                    graph walk over `values_template` references).
-        description: |-
-            ChangeSetDiff describes what a change set would change relative to current
-            environment HEAD: per-component entries, per-key variable changes, and the
-            deployed components whose `values_template` references a name touched by
-            this change set.
-    v1ChangeSetEntry:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the entry (UUID).
-            change_set_id:
-                type: string
-                description: The change set this entry belongs to (UUID).
-            component_id:
-                type: string
-                description: |-
-                    The component this entry targets (UUID). Absent for CREATE entries
-                    (the component does not exist yet).
-            component_name:
-                type: string
-                description: |-
-                    Component name (stable identifier set at creation). Required for all
-                    entries. For CREATE entries, this is the name of the component to be
-                    created. For UPDATE/DESTROY/ORPHAN entries, this matches an existing
-                    component in the application.
-            change_type:
-                $ref: '#/definitions/v1ChangeSetEntryType'
-                description: The change type.
-            catalog_item_id:
-                type: string
-                description: |-
-                    The catalog item to deploy (UUID). Required for CREATE; optional for UPDATE
-                    (if changing the catalog item); not allowed for DESTROY/ORPHAN.
-            ref:
-                type: string
-                title: |-
-                    The git ref / version selector to deploy (e.g., tag, branch, or commit SHA).
-                    On CREATE, defaults to the catalog item's ref when absent. For UPDATE
-                    entries, absent means "no change to ref."
-            values_template:
-                type: string
-                title: |-
-                    Values template for catalog item inputs. For UPDATE entries, absent means
-                    "no change to values_template."
-            depends_on:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    Explicit dependencies (component names). Whatever the client sends is
-                    recorded; an empty list clears existing dependencies. Not allowed for
-                    DESTROY/ORPHAN entries. Names may reference components materialized
-                    earlier in the same change set (their UUIDs do not exist until apply).
-            description:
-                type: string
-                title: |-
-                    Optional description for the proposed change (e.g., "Bump to v2.1.0
-                    for performance fix"). For UPDATE entries, absent means "no change."
-            catalog_item_name:
-                type: string
-                description: |-
-                    Display name of the referenced catalog item. Denormalized for display.
-                    Read-only; ignored on writes.
-            created_at:
-                type: string
-                format: date-time
-                description: When the entry was created.
-            updated_at:
-                type: string
-                format: date-time
-                description: When the entry was last replaced.
-            target:
-                $ref: '#/definitions/v1ComponentTarget'
-                description: |-
-                    Resolved placement for the component: the agent it deploys on (plus a
-                    namespace for WORKLOAD components). Copied onto the component at deploy
-                    time, and the component is the source of truth for placement at runtime.
-        description: |-
-            ChangeSetEntry is a per-component proposal within a change set.
-
-            Patch semantics: optional fields that are absent mean "no change relative
-            to the component's current state at deploy time." Required fields per
-            `change_type`:
-              - CREATE: `catalog_item_id` required; `component_id` must be empty.
-              - UPDATE: `component_id` required; at least one optional field set.
-              - DESTROY / ORPHAN: `component_id` required; no patch fields allowed.
-    v1ChangeSetEntryType:
-        type: string
-        enum:
-            - CHANGE_SET_ENTRY_TYPE_UNSPECIFIED
-            - CHANGE_SET_ENTRY_TYPE_CREATE
-            - CHANGE_SET_ENTRY_TYPE_UPDATE
-            - CHANGE_SET_ENTRY_TYPE_DESTROY
-            - CHANGE_SET_ENTRY_TYPE_ORPHAN
-        default: CHANGE_SET_ENTRY_TYPE_UNSPECIFIED
-        description: |-
-            ChangeSetEntryType selects what the entry does to the targeted component.
-
-             - CHANGE_SET_ENTRY_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - CHANGE_SET_ENTRY_TYPE_CREATE: Add a new component. Requires catalog_item_id; rejects if a component with
-            the same name already exists in the (application, environment) pair.
-             - CHANGE_SET_ENTRY_TYPE_UPDATE: Change an existing component. The name must match an existing component
-            in the (application, environment) pair. Only non-empty optional fields
-            are recorded as changes.
-             - CHANGE_SET_ENTRY_TYPE_DESTROY: Schedule the component for terraform destroy at deploy.
-             - CHANGE_SET_ENTRY_TYPE_ORPHAN: Detach from management without destroying infrastructure.
     v1ChangeSetStatus:
         type: string
         enum:
             - CHANGE_SET_STATUS_UNSPECIFIED
-            - CHANGE_SET_STATUS_OPEN
-            - CHANGE_SET_STATUS_DEPLOYED
-            - CHANGE_SET_STATUS_DISCARDED
+            - DRAFT
+            - DISCARDED
         default: CHANGE_SET_STATUS_UNSPECIFIED
-        description: |-
-            ChangeSetStatus is the lifecycle state of a change set. Only OPEN change
-            sets can be mutated. DEPLOYED is reached when a run referencing the change
-            set succeeds; DISCARDED is reached via DiscardChangeSet.
-
-             - CHANGE_SET_STATUS_UNSPECIFIED: Default value. Must not be used.
-             - CHANGE_SET_STATUS_OPEN: Mutable; entries and variable entries may be added/removed; runs may be
-            planned and applied against this change set.
-             - CHANGE_SET_STATUS_DEPLOYED: Terminal: the change set was successfully applied via a run.
-             - CHANGE_SET_STATUS_DISCARDED: Terminal: the change set was discarded by the operator.
-    v1ChangeSetVariableEntry:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the variable entry (UUID).
-            change_set_id:
-                type: string
-                description: The change set this entry belongs to (UUID).
-            key:
-                type: string
-                description: The variable key (e.g., "TF_VAR_region", "IMAGE_TAG").
-            value:
-                type: string
-                description: |-
-                    The value to set on apply. Absent means "delete this key on apply"
-                    (tombstone). Masked in responses when `sensitive` is true.
-            type:
-                $ref: '#/definitions/v1VariableType'
-                description: |-
-                    How the value should be interpreted by the rendering engine and
-                    displayed in the UI.
-            sensitive:
-                type: boolean
-                description: When true, the value is encrypted at rest and masked in API responses.
-            created_at:
-                type: string
-                format: date-time
-                description: When the variable entry was created or last replaced.
-        description: |-
-            ChangeSetVariableEntry is a per-key variable proposal within a change set.
-
-            At deploy time, each variable entry is applied to the change set's
-            environment: an entry with `value` set upserts the key, and an entry with
-            `value` absent (a tombstone) removes the key.
     v1ChangeSummary:
         type: object
         properties:
@@ -4800,6 +4325,29 @@ definitions:
                 format: date-time
                 description: When the grace window expires.
         description: ClearAgentIdentityBindingResponse acknowledges the rebind window.
+    v1ComponentDiff:
+        type: object
+        properties:
+            component:
+                type: string
+            action:
+                $ref: '#/definitions/v1EntryAction'
+            old_pin:
+                $ref: '#/definitions/apiChangesetV1Pin'
+                description: Absent on CREATE.
+            new_pin:
+                $ref: '#/definitions/apiChangesetV1Pin'
+                description: Absent on DESTROY.
+            paths:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PathDiff'
+            violations:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Violation'
     v1ComponentLabels:
         type: object
         properties:
@@ -4810,23 +4358,6 @@ definitions:
         description: |-
             ComponentLabels wraps a label map so its presence in an update can be told
             from an empty map: present and empty clears the labels.
-    v1ComponentTarget:
-        type: object
-        properties:
-            agent_id:
-                type: string
-                description: |-
-                    The agent this component is placed on (UUID). A KUBERNETES agent for
-                    WORKLOAD components; a TERRAFORM agent for INFRASTRUCTURE components.
-            namespace:
-                type: string
-                description: |-
-                    WORKLOAD only: the target namespace (defaults to the environment name
-                    when empty).
-        description: |-
-            ComponentTarget is a component's resolved placement on an agent, selected by
-            the component's kind. Authored on a Changeset Change and copied onto the
-            component (it is the source of truth at runtime, not the environment).
     v1Condition:
         type: object
         properties:
@@ -4959,13 +4490,6 @@ definitions:
             ContractValidation is one validation block on a Terraform variable, as
             written. Evaluating the condition needs the Terraform language runtime,
             which the registry does not run.
-    v1CopyChangeSetResponse:
-        type: object
-        properties:
-            change_set:
-                $ref: '#/definitions/v1ChangeSet'
-                description: The new change set with `copied_from_id` set to the source.
-        description: CopyChangeSetResponse contains the newly created change set.
     v1CreateAgentRequest:
         type: object
         properties:
@@ -5035,33 +4559,34 @@ definitions:
     v1CreateChangeSetRequest:
         type: object
         properties:
-            application_id:
-                type: string
-                description: The application this change set targets (UUID).
             environment_id:
                 type: string
-                description: The environment this change set targets (UUID).
             title:
                 type: string
-                description: Optional human-readable title (e.g., "Bump database version").
             description:
                 type: string
-                description: Optional longer description of what the change set proposes.
-        description: |-
-            CreateChangeSetRequest opens a new change set for an (application,
-            environment) pair.
+            edits:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Edit'
         required:
-            - application_id
             - environment_id
     v1CreateChangeSetResponse:
         type: object
         properties:
             change_set:
                 $ref: '#/definitions/v1ChangeSet'
+            revision:
+                $ref: '#/definitions/apiChangesetV1Revision'
+                description: Absent when the request carried no edits.
+            warnings:
+                type: array
+                items:
+                    type: string
                 description: |-
-                    The created change set. Status is OPEN; entries and variable entries
-                    are empty.
-        description: CreateChangeSetResponse contains the newly created change set.
+                    Accepted, but worth saying: a deprecated pin, a check the contract could
+                    not make.
     v1CreateCredentialRequest:
         type: object
         properties:
@@ -5270,54 +4795,51 @@ definitions:
     v1DiffChangeSetResponse:
         type: object
         properties:
-            diff:
-                $ref: '#/definitions/v1ChangeSetDiff'
-                description: |-
-                    The structural diff. Empty `entries`, `variables`, and `downstream` lists
-                    mean the change set proposes no changes relative to current state.
-        description: DiffChangeSetResponse contains the computed diff.
-    v1DiffChangeType:
-        type: string
-        enum:
-            - DIFF_CHANGE_TYPE_UNSPECIFIED
-            - DIFF_CHANGE_TYPE_ADDED
-            - DIFF_CHANGE_TYPE_CHANGED
-            - DIFF_CHANGE_TYPE_REMOVED
-        default: DIFF_CHANGE_TYPE_UNSPECIFIED
-        description: |-
-            DiffChangeType classifies a single change inside a ChangeSetDiff:
-            per-key value changes inside an entry's values_template, or per-key
-            variable changes.
-
-             - DIFF_CHANGE_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - DIFF_CHANGE_TYPE_ADDED: The key is set by this change set; absent from the previous state.
-             - DIFF_CHANGE_TYPE_CHANGED: The key has a different value/type/sensitivity in this change set.
-             - DIFF_CHANGE_TYPE_REMOVED: The key was present previously and the change set removes it (a
-            tombstone for variables; an entry removal for value-template keys).
+            revision:
+                type: integer
+                format: int32
+                description: The head revision diffed; 0 when there is none.
+            components:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentDiff'
     v1DiscardChangeSetResponse:
         type: object
         properties:
             change_set:
                 $ref: '#/definitions/v1ChangeSet'
-                description: The change set with status set to DISCARDED.
-        description: DiscardChangeSetResponse contains the discarded change set.
-    v1DownstreamImpact:
+    v1Edit:
         type: object
         properties:
-            component_name:
-                type: string
-                description: Name of the deployed component that will be affected.
-            affected_by:
+            add_component:
+                $ref: '#/definitions/v1AddComponent'
+            set_value:
+                $ref: '#/definitions/v1SetValue'
+            set_null:
+                $ref: '#/definitions/v1SetNull'
+            unset_value:
+                $ref: '#/definitions/v1UnsetValue'
+            set_pin:
+                $ref: '#/definitions/v1SetPin'
+            replace_values:
+                $ref: '#/definitions/v1ReplaceValues'
+            remove_component:
+                $ref: '#/definitions/v1RemoveComponent'
+        description: |-
+            Edit is one change a request makes. A request's edits apply in order and
+            become one revision.
+    v1EditChangeSetResponse:
+        type: object
+        properties:
+            change_set:
+                $ref: '#/definitions/v1ChangeSet'
+            revision:
+                $ref: '#/definitions/apiChangesetV1Revision'
+            warnings:
                 type: array
                 items:
                     type: string
-                description: |-
-                    Names in this change set whose outputs the deployed component
-                    references.
-        description: |-
-            DownstreamImpact lists deployed components whose `values_template`
-            references the outputs of a component touched by this change set. Surfaces
-            the "if you apply this, these other components will also re-plan" set.
     v1Engine:
         type: string
         enum:
@@ -5355,51 +4877,40 @@ definitions:
             (value, type, sensitive) shape generalizes across executors. Lives in run/v1
             so it can be shared by the TERRAFORM and KUBERNETES agent report paths via
             ExecutionReport.
-    v1EntryDiff:
+    v1Entry:
         type: object
         properties:
-            component_name:
+            component_id:
                 type: string
-                description: Component name this entry targets.
-            change_type:
-                $ref: '#/definitions/v1ChangeSetEntryType'
-                description: Change kind.
-            catalog_item:
-                $ref: '#/definitions/v1CatalogItemVersionDiff'
-                description: Catalog item / version delta. Absent when neither field changes.
-            values:
+            component:
+                type: string
+            action:
+                $ref: '#/definitions/v1EntryAction'
+            pin:
+                $ref: '#/definitions/apiChangesetV1Pin'
+                description: |-
+                    The revision the component is pinned to after this change set: set on
+                    CREATE and when the pin moves.
+            base_digest:
+                type: string
+                description: Empty on CREATE.
+            result_digest:
+                type: string
+                description: Empty on DESTROY.
+            ops:
                 type: array
                 items:
                     type: object
-                    $ref: '#/definitions/v1ValueDiff'
-                description: |-
-                    Per-key value-template deltas. Today this contains a single ValueDiff
-                    keyed `values_template` carrying the full template text so reviewers
-                    can read the new template.
-            depends_on_added:
-                type: array
-                items:
-                    type: string
-                description: Names added to depends_on by this entry.
-            depends_on_removed:
-                type: array
-                items:
-                    type: string
-                description: Names removed from depends_on by this entry.
-            description_old:
-                type: string
-                description: Old description (UPDATE only, when the entry sets description).
-            description_new:
-                type: string
-                description: New description (CREATE/UPDATE only).
-        description: |-
-            EntryDiff describes a single component entry's effect.
-
-            For CREATE entries, `catalog_item`/`values`/`depends_on_added` describe the
-            proposed new component; the `_old` halves are absent.
-            For UPDATE entries, only fields the entry actually changes appear; absent
-            patch fields mean "no change."
-            For DESTROY/ORPHAN entries, `catalog_item`/`values`/`depends_on_*` are absent.
+                    $ref: '#/definitions/v1ValueOp'
+        description: Entry is what one revision does to one component.
+    v1EntryAction:
+        type: string
+        enum:
+            - ENTRY_ACTION_UNSPECIFIED
+            - CREATE
+            - UPDATE
+            - DESTROY
+        default: ENTRY_ACTION_UNSPECIFIED
     v1Environment:
         type: object
         properties:
@@ -5619,14 +5130,29 @@ definitions:
         properties:
             change_set:
                 $ref: '#/definitions/v1ChangeSet'
-                description: The change set, with `entries` and `variable_entries` populated.
-        description: GetChangeSetResponse contains the change set with all entries inline.
+            head:
+                $ref: '#/definitions/apiChangesetV1Revision'
+                description: Absent before the first edit.
     v1GetComponentResponse:
         type: object
         properties:
             component:
                 $ref: '#/definitions/apiRegistryV1Component'
         description: GetComponentResponse contains the component with its tags.
+    v1GetComponentValuesResponse:
+        type: object
+        properties:
+            tree_json:
+                type: string
+                description: A JSON object.
+            base_digest:
+                type: string
+                description: The values the change set started from; empty for a component it adds.
+            result_digest:
+                type: string
+            head_revision:
+                type: integer
+                format: int32
     v1GetCredentialResponse:
         type: object
         properties:
@@ -6188,14 +5714,8 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1ChangeSet'
-                description: |-
-                    The list of change sets, ordered from newest to oldest. Each record
-                    omits `entries` and `variable_entries`; call GetChangeSet for the
-                    full record.
             next_page_token:
                 type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListChangeSetsResponse contains a page of change sets.
     v1ListComponentsResponse:
         type: object
         properties:
@@ -6343,19 +5863,31 @@ definitions:
                     Object UID, used to disambiguate references across recreations. Empty when
                     unknown.
         description: ObjectReference is a lightweight reference to a Kubernetes object.
-    v1Pin:
+    v1PathDiff:
         type: object
         properties:
-            source:
+            path:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PathSegment'
+            display_path:
                 type: string
-                description: The source as the bundle declared it, before rewriting.
-            constraint:
+            before_present:
+                type: boolean
+            before_json:
                 type: string
-                description: The constraint that was asked for, when any.
-            resolved:
+            after_present:
+                type: boolean
+            after_json:
                 type: string
-                description: 'What it resolved to: an exact version or commit.'
-        description: Pin is one dependency the closure step resolved and vendored.
+        description: 'PathDiff is one changed path: absent, null or a value on each side.'
+    v1PathSegment:
+        type: object
+        properties:
+            key:
+                type: string
+        description: PathSegment is one step into a values tree. Only map keys exist.
     v1PresentedCredential:
         type: object
         properties:
@@ -6402,7 +5934,7 @@ definitions:
                 type: array
                 items:
                     type: object
-                    $ref: '#/definitions/v1Pin'
+                    $ref: '#/definitions/apiRegistryV1Pin'
                 description: |-
                     Every remote module or chart the closure step vendored into the bundle,
                     pinned to what it resolved.
@@ -6567,16 +6099,51 @@ definitions:
             resulting component follows from it: a chart from OCI or a Helm
             repository, a module from a module registry, whatever inspection finds in
             a git tree or an archive.
-    v1RemoveEntryResponse:
-        type: object
-        description: RemoveEntryResponse is empty on success.
-    v1RemoveVariableResponse:
+    v1RegistryRef:
         type: object
         properties:
-            variable_entry:
-                $ref: '#/definitions/v1ChangeSetVariableEntry'
-                description: The tombstone entry (value absent, marking the key for deletion on apply).
-        description: RemoveVariableResponse contains the tombstone variable entry.
+            namespace:
+                type: string
+                description: Empty means the default namespace.
+            name:
+                type: string
+            reference:
+                type: string
+                description: A tag or a `sha256:` digest.
+        description: |-
+            RegistryRef is a registry component and a tag or digest in it. A tag is
+            resolved when the edit is made; only the revision is stored.
+        required:
+            - name
+            - reference
+    v1RemoveComponent:
+        type: object
+        properties:
+            component:
+                type: string
+        description: |-
+            RemoveComponent drops a component this draft adds, or destroys a live
+            one.
+        required:
+            - component
+    v1ReplaceValues:
+        type: object
+        properties:
+            component:
+                type: string
+            tree_json:
+                type: string
+                description: A JSON object.
+            from_revision:
+                type: integer
+                format: int32
+                description: The head revision GetComponentValues reported; 0 for a draft with none.
+        description: |-
+            ReplaceValues makes a component's values exactly this tree: an upload.
+            Refused unless `from_revision` is the head the tree was downloaded at.
+        required:
+            - component
+            - tree_json
     v1ReportAgentStatusRequest:
         type: object
         properties:
@@ -6779,6 +6346,16 @@ definitions:
         description: |-
             RevisionBundle contains pre-rendered Kubernetes manifests for a workload
             revision, ready for server-side apply by a KUBERNETES agent.
+    v1RevisionCause:
+        type: string
+        enum:
+            - REVISION_CAUSE_UNSPECIFIED
+            - EDIT
+            - REBASE
+        default: REVISION_CAUSE_UNSPECIFIED
+        description: |-
+            RevisionCause says why a revision was cut. Only EDIT is written until
+            rebase exists.
     v1RevisionChangeType:
         type: string
         enum:
@@ -7014,13 +6591,33 @@ definitions:
                 type: string
                 description: Write-only.
         description: SSHKeyAuth is a PEM-encoded private key and its passphrase, if any.
-    v1SetEntryResponse:
+    v1SetNull:
         type: object
         properties:
-            entry:
-                $ref: '#/definitions/v1ChangeSetEntry'
-                description: The entry as recorded on the change set.
-        description: SetEntryResponse contains the created or replaced entry.
+            component:
+                type: string
+            path:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PathSegment'
+        description: SetNull writes null at a path, which clears a chart default.
+        required:
+            - component
+    v1SetPin:
+        type: object
+        properties:
+            component:
+                type: string
+            reference:
+                type: string
+                description: A tag or a `sha256:` digest.
+        description: |-
+            SetPin moves a component to another revision of the same registry
+            component.
+        required:
+            - component
+            - reference
     v1SetRevisionStatusResponse:
         type: object
         properties:
@@ -7033,13 +6630,25 @@ definitions:
             tag:
                 $ref: '#/definitions/v1Tag'
         description: SetTagResponse contains the tag as it now stands.
-    v1SetVariableResponse:
+    v1SetValue:
         type: object
         properties:
-            variable_entry:
-                $ref: '#/definitions/v1ChangeSetVariableEntry'
-                description: The variable entry as recorded on the change set.
-        description: SetVariableResponse contains the created or replaced variable entry.
+            component:
+                type: string
+            path:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PathSegment'
+            value_json:
+                type: string
+                description: 'JSON text, not null: null is SetNull.'
+        description: |-
+            SetValue writes a value at a path, creating maps on the way, as
+            `helm --set` does. A map value replaces what was there.
+        required:
+            - component
+            - value_json
     v1SyncState:
         type: string
         enum:
@@ -7166,6 +6775,19 @@ definitions:
             TerraformAgentStatus contains capacity and telemetry metrics for a TERRAFORM
             agent, as reported via Heartbeat. Used in both the push payload
             (HeartbeatRequest) and the read response (GetAgentStatusResponse).
+    v1UnsetValue:
+        type: object
+        properties:
+            component:
+                type: string
+            path:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PathSegment'
+        description: UnsetValue removes a path, so the default applies.
+        required:
+            - component
     v1UpdateAgentResponse:
         type: object
         properties:
@@ -7187,15 +6809,6 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The updated application.
         description: UpdateApplicationResponse contains the updated application.
-    v1UpdateChangeSetResponse:
-        type: object
-        properties:
-            change_set:
-                $ref: '#/definitions/v1ChangeSet'
-                description: The updated change set.
-        description: |-
-            UpdateChangeSetResponse contains the updated change set (metadata only;
-            entries are not returned; call GetChangeSet for the full record).
     v1UpdateComponentResponse:
         type: object
         properties:
@@ -7317,31 +6930,38 @@ definitions:
              - USER_STATUS_UNSPECIFIED: Default value. Must not be used.
              - USER_STATUS_ACTIVE: Can sign in and act.
              - USER_STATUS_SUSPENDED: Suspended by an administrator; cannot sign in until reactivated.
-    v1ValueDiff:
+    v1ValueOp:
         type: object
         properties:
-            key:
+            path:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PathSegment'
+            op:
+                $ref: '#/definitions/v1ValueOpKind'
+            value_json:
                 type: string
-                description: Key inside the values_template. Always `values_template` today.
-            change_type:
-                $ref: '#/definitions/v1DiffChangeType'
-                description: The change type (ADDED, CHANGED, REMOVED).
-            old:
-                type: string
-                description: Previous value (absent for ADDED, sensitive, or when not tracked).
-            new:
-                type: string
-                description: New value (absent for REMOVED, sensitive, or when not tracked).
-            sensitive:
+                description: JSON text; empty unless op is SET.
+            from_present:
                 type: boolean
-                description: True when the underlying value is sensitive; old/new must be omitted.
-        description: |-
-            ValueDiff describes a single value change inside an entry's
-            `values_template`. EntryDiff emits at most one ValueDiff per entry, keyed
-            `values_template`, carrying the full template text.
-
-            Sensitive values are masked: when `sensitive=true`, both `old` and `new`
-            are absent.
+                description: Whether the base had the key; a null there is present.
+            from_value_json:
+                type: string
+                description: JSON text; empty when from_present is false.
+        description: ValueOp is one change at one path, with what the base held there.
+    v1ValueOpKind:
+        type: string
+        enum:
+            - VALUE_OP_KIND_UNSPECIFIED
+            - SET
+            - SET_NULL
+            - REMOVE
+        default: VALUE_OP_KIND_UNSPECIFIED
+        description: |4-
+             - SET: Writes a value.
+             - SET_NULL: Writes null, which clears a chart default.
+             - REMOVE: Makes the key absent, so the default applies.
     v1Variable:
         type: object
         properties:
@@ -7415,31 +7035,6 @@ definitions:
             / RemoveVariable). They are read via EnvironmentAPI.ListEnvironmentVariables.
 
             Sensitive variables have their values masked in API responses.
-    v1VariableDiff:
-        type: object
-        properties:
-            key:
-                type: string
-                description: The variable key.
-            change_type:
-                $ref: '#/definitions/v1DiffChangeType'
-                description: The change type (ADDED, CHANGED, REMOVED).
-            old:
-                type: string
-                description: Previous value (absent for ADDED or sensitive).
-            new:
-                type: string
-                description: New value (absent for REMOVED or sensitive).
-            sensitive:
-                type: boolean
-                description: True when either side is sensitive; old/new must be omitted.
-        description: |-
-            VariableDiff describes a per-key change to environment variables.
-
-            ADDED: the change set sets a key not currently present in the env.
-            CHANGED: the change set sets a key with a different value/type/sensitivity.
-            REMOVED: the change set carries a tombstone (delete-on-apply) for a key
-            that exists in the env.
     v1VariableSource:
         type: string
         enum:
@@ -7482,6 +7077,19 @@ definitions:
             (e.g., '["us-east-1a","us-east-1b"]' or '{"env":"prod","team":"platform"}').
             Rendered as HCL for infrastructure engines, YAML for Helm, or JSON for
             other consumers. Rendered as a code editor in the UI.
+    v1Violation:
+        type: object
+        properties:
+            component:
+                type: string
+            path:
+                type: string
+                description: 'Display form: `image.tag`, `ingress."a.b"`.'
+            message:
+                type: string
+        description: |-
+            Violation is one way a component's values fail its pinned revision's
+            contract.
     v1Workload:
         type: object
         properties:
