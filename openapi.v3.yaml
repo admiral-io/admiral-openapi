@@ -2977,6 +2977,21 @@ components:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     readOnly: true
+                reported_key_ids:
+                    type: array
+                    items:
+                        type: string
+                        readOnly: true
+                    title: reported_key_ids
+                    description: |-
+                        Key ids an agent reported that are not trusted. An agent's report is never
+                         applied; an admin reviews it and accepts with SetClusterTrust.
+                    readOnly: true
+                keys_reported_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: keys_reported_at
+                    readOnly: true
             title: Cluster
             additionalProperties: false
         admiral.api.agent.v1.ClusterStatus:
@@ -2989,6 +3004,14 @@ components:
         admiral.api.agent.v1.ClusterTrust:
             type: object
             anyOf:
+                - type: object
+                  properties:
+                    accept_reported:
+                        type: boolean
+                        title: accept_reported
+                        description: Trust the key set an agent last reported. Only on SetClusterTrust.
+                        const: true
+                  title: accept_reported
                 - type: object
                   properties:
                     issuer_url:
@@ -3014,11 +3037,15 @@ components:
                 allOf:
                     - anyOf:
                         - required:
+                            - accept_reported
+                        - required:
                             - issuer_url
                         - required:
                             - jwks_json
                     - not:
                         oneOf:
+                            - required:
+                                - accept_reported
                             - required:
                                 - issuer_url
                             - required:
@@ -3699,8 +3726,8 @@ components:
                     title: jwks_json
                     maxLength: 65536
                     description: |-
-                        The cluster's current keys, when the agent can read them. Accepted only
-                         when they still hold the key this call's token was verified with.
+                        The cluster's current keys, when the agent can read them. Never applied:
+                         a set that differs from the trusted one is recorded for an admin.
                 cluster_uid:
                     type: string
                     title: cluster_uid

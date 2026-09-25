@@ -4144,6 +4144,18 @@ definitions:
                 type: string
                 format: date-time
                 readOnly: true
+            reported_key_ids:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Key ids an agent reported that are not trusted. An agent's report is never
+                    applied; an admin reviews it and accepts with SetClusterTrust.
+                readOnly: true
+            keys_reported_at:
+                type: string
+                format: date-time
+                readOnly: true
     v1ClusterStatus:
         type: string
         enum:
@@ -4161,6 +4173,9 @@ definitions:
             jwks_json:
                 type: string
                 description: A JSON Web Key Set, as the cluster serves it at /openid/v1/jwks.
+            accept_reported:
+                type: boolean
+                description: Trust the key set an agent last reported. Only on SetClusterTrust.
         description: ClusterTrust is how a cluster's tokens are verified.
     v1ComponentDiff:
         type: object
@@ -5894,8 +5909,8 @@ definitions:
             jwks_json:
                 type: string
                 description: |-
-                    The cluster's current keys, when the agent can read them. Accepted only
-                    when they still hold the key this call's token was verified with.
+                    The cluster's current keys, when the agent can read them. Never applied:
+                    a set that differs from the trusted one is recorded for an admin.
             cluster_uid:
                 type: string
     v1ReportStatusResponse:
