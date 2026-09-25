@@ -3,87 +3,33 @@ info:
     title: Admiral API
     version: v1
 tags:
-    - name: RunAPI
-      description: |-
-        RunAPI manages runs and their component revisions.
-
-        A run represents a single execution against an application+environment.
-        When triggered, Admiral resolves all components for the
-        application+environment combination (applying overrides), builds a
-        dependency graph, and renders each component into an immutable revision.
-
-        Infrastructure revisions follow a plan -> apply lifecycle, executed by a
-        terraform-semantic engine (Terraform or OpenTofu) on the component's
-        assigned TERRAFORM agent. Workload revisions (Helm, Kustomize, manifests)
-        are applied to the target cluster by the component's KUBERNETES agent. The
-        run engine executes the dependency graph in order: independent components
-        run in parallel, dependent components wait for their upstream to succeed.
-
-        To roll back to a prior known-good state, create a new run with
-        `source_run_id` set to a previous successful run. This re-plans and
-        re-applies the prior configuration against the current infrastructure
-        state, going through the same plan/approve/apply cycle.
     - name: AgentAPI
       description: |-
-        AgentAPI is the management surface for execution agents: their lifecycle,
-        their API keys, and read-only visibility into the work they have done. It is
-        the human-facing half of the agent contract, called with a user's own API key
-        from the CLI, Terraform provider, or web app.
+        AgentAPI manages what runs work in a customer's cluster: the clusters
+        Admiral trusts, the agents in them, who may use each agent, and the jobs the
+        platform hands them.
 
-        An agent's key is bound to the agent's service account
-        (BINDING_TYPE_SERVICE_ACCOUNT), not to the agent record: an agent HAS a
-        service account rather than being one, so its credential rotates without
-        touching the agent.
+        A cluster is trusted, not a token. Admiral holds its service-account token
+        issuer (a public URL it fetches keys from) or its public keys (uploaded), and
+        an agent is one namespace and service account in it. The agent proves who it
+        is with the short-lived token its own cluster issues; no long-lived secret
+        exists. A cluster without keys yet is PENDING until a person sets them or an
+        agent enrolls it with a single-use enrollment key.
 
-        The execution protocol the agents themselves speak lives in AgentRuntimeAPI
-        (runtime.proto). That half is reachable only with a service-account-bound
-        key, excluded from the public OpenAPI
-        surface, and changes with the agent binaries. Keeping the two apart means the
-        documented management contract is not versioned against the churn of job
-        bundles, hooks, and engines.
-
-        Both agent kinds are managed here and share one identity, lifecycle, and
-        key model:
-
-          - TERRAFORM agents are the execution plane for infrastructure operations
-            (plan, apply, destroy) run by a terraform-semantic engine (Terraform or
-            OpenTofu, selected per job via JobBundle.engine).
-
-          - KUBERNETES agents are the control plane for Kubernetes clusters,
-            reporting workload telemetry and applying rendered manifest revisions.
-
-        Administrators create an agent via CreateAgent (passing the kind), which
-        returns an API key for deploying the agent binary. Once the
-        agent boots and begins reporting through AgentRuntimeAPI, the server
-        transitions its health from PENDING to HEALTHY.
-
-        Management routes follow /v1/agents/... (plural, with IDs); the runtime
-        protocol uses /v1/agent/... (singular, no ID; derived from the key's binding).
-
-        Message definitions live in companion files: jobs.proto (TERRAFORM execution)
-        and workloads.proto (KUBERNETES telemetry and revision delivery).
+        An environment deploys through the agent it selects, and may select only an
+        agent whose owner granted use to the whole tenant, one of its teams, or its
+        application.
     - name: AgentRuntimeAPI
       description: |-
-        AgentRuntimeAPI is the execution protocol first-party agents speak while
-        running work. It is SAT-only: every RPC requires a Service Access Token bound
-        to a specific agent, and the agent is identified by that binding rather than
-        by an agent_id in the request.
+        AgentRuntimeAPI is what an agent calls while it works. Its routes live
+        under /v1/agent (singular: the caller is the agent) and are excluded from
+        the public OpenAPI document. The caller is always
+        an agent, identified by its token; no request names an agent.
 
-        This is deliberately separate from AgentAPI (agent.proto), which is the
-        human-facing management surface — creating agents, minting tokens, and
-        reading job/workload history with a PAT. The two have different audiences,
-        different token types, and very different rates of change: the runtime
-        protocol evolves with the agent binaries (job bundles, hooks, engines) and is
-        excluded from the public OpenAPI surface, while the management API is a
-        documented contract.
-
-        Agent-facing routes use /v1/agent/... (singular, no ID; derived from the SAT
-        binding); management routes use /v1/agents/... (plural, with IDs).
-
-        Both agent kinds are served here. TERRAFORM agents pull work: ClaimJob ->
-        GetJobBundle -> execute -> ReportJobResult. KUBERNETES agents push telemetry
-        (ReportAgentStatus) and pull rendered manifest bundles for workload revisions
-        (GetRevisionBundle -> apply -> ReportRevisionResult).
+        Work is claimed as an offer, started before anything touches the cluster,
+        held by renewing a lease, and reported once per attempt. Every call after
+        the claim carries the attempt and its lease token; a call from an attempt
+        that is not the current one, or whose lease lapsed, changes nothing.
     - name: ApplicationAPI
       description: |-
         ApplicationAPI manages applications within a tenant.
@@ -144,6 +90,26 @@ tags:
         Publishing the same bytes under the same name twice yields the same
         revision. Revisions are never deleted; revoking one refuses new adoption
         while what already pins it keeps running.
+    - name: RunAPI
+      description: |-
+        RunAPI manages runs and their component revisions.
+
+        A run represents a single execution against an application+environment.
+        When triggered, Admiral resolves all components for the
+        application+environment combination (applying overrides), builds a
+        dependency graph, and renders each component into an immutable revision.
+
+        Infrastructure revisions follow a plan -> apply lifecycle, executed by a
+        terraform-semantic engine (Terraform or OpenTofu) on the component's
+        assigned TERRAFORM agent. Workload revisions (Helm, Kustomize, manifests)
+        are applied to the target cluster by the component's KUBERNETES agent. The
+        run engine executes the dependency graph in order: independent components
+        run in parallel, dependent components wait for their upstream to succeed.
+
+        To roll back to a prior known-good state, create a new run with
+        `source_run_id` set to a previous successful run. This re-plans and
+        re-applies the prior configuration against the current infrastructure
+        state, going through the same plan/approve/apply cycle.
     - name: EnvironmentAPI
       description: |-
         EnvironmentAPI manages environments within an application.
@@ -201,8 +167,8 @@ paths:
     /v1/agents:
         get:
             summary: |-
-                ListAgents returns a paginated list of agents within the caller's tenant.
-                Filter by `kind` to list only TERRAFORM or KUBERNETES agents.
+                ListAgents lists agents, optionally in one cluster or usable by one
+                application.
             description: 'Scope: `agent:read`'
             operationId: AgentAPI_ListAgents
             responses:
@@ -215,31 +181,21 @@ paths:
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `kind`: filter by agent kind (TERRAFORM, KUBERNETES).
-                      - `name`: filter by agent name.
-                      - `health_status`: filter by health status.
-                      - `labels.key`: filter by label key.
-
-                    Example: `field['kind'] = 'KUBERNETES' AND field['health_status'] = 'HEALTHY'`
+                - name: cluster_id
+                  in: query
+                  required: false
+                  type: string
+                - name: application_id
+                  description: Only agents this application's environments may select.
                   in: query
                   required: false
                   type: string
                 - name: page_size
-                  description: |-
-                    Maximum number of agents to return per page. Defaults to 50 when omitted or
-                    0; must not exceed 100.
                   in: query
                   required: false
                   type: integer
                   format: int32
                 - name: page_token
-                  description: Opaque pagination token from a previous response.
                   in: query
                   required: false
                   type: string
@@ -247,20 +203,10 @@ paths:
                 - AgentAPI
         post:
             summary: |-
-                ---------------------------------------------------------------------------
-                Admin CRUD
-                ---------------------------------------------------------------------------
-                CreateAgent creates a new agent record within the caller's tenant and
-                generates an initial API key. The agent starts in PENDING
-                health status until it begins reporting.
-            description: |-
-                The request's `kind` selects the agent's execution plane (TERRAFORM or KUBERNETES)
-                and determines the key's auto-assigned scopes. The kind is immutable.
-
-                The response includes a `plain_text_key`: the raw API key secret shown
-                exactly once. Deploy this key to the agent binary for authentication.
-
-                Scope: `agent:write`
+                CreateAgent records an agent: a namespace and service account in a
+                cluster. With `enrollment_key` set, the response carries a single-use key
+                the agent enrolls the cluster with.
+            description: 'Scope: `agent:write`'
             operationId: AgentAPI_CreateAgent
             responses:
                 "200":
@@ -273,109 +219,16 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: body
-                  description: CreateAgentRequest contains the parameters for creating a new agent.
                   in: body
                   required: true
                   schema:
                     $ref: '#/definitions/v1CreateAgentRequest'
             tags:
                 - AgentAPI
-    /v1/agents/tokens/{token_id}:
-        get:
-            summary: |-
-                GetApiKey retrieves a single API key by ID. Returns metadata only; the key
-                secret is never included. Key IDs are globally unique, so no agent scoping
-                is required in the path; the server resolves the parent agent from the key
-                ID. Authorization is enforced via the `agent:read` scope, not by path prefix.
-            description: 'Scope: `agent:read`'
-            operationId: AgentAPI_GetApiKey
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/apiAgentV1GetApiKeyResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: token_id
-                  description: The unique identifier of the key (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - AgentAPI
-    /v1/agents/tokens/{token_id}/revoke:
-        post:
-            summary: |-
-                RevokeApiKey permanently revokes an API key bound to this agent. The agent
-                will receive a 401 on its next request. If this is the only active key for
-                the agent, the agent will become disconnected. Key IDs are globally unique,
-                so no agent scoping is required in the path; authorization is enforced via
-                the `agent:write` scope, not by path prefix.
-            description: 'Scope: `agent:write`'
-            operationId: AgentAPI_RevokeApiKey
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/apiAgentV1RevokeApiKeyResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: token_id
-                  description: The unique identifier of the key to revoke (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1AgentAPIRevokeApiKeyBody'
-            tags:
-                - AgentAPI
-    /v1/agents/{agent.id}:
-        patch:
-            summary: |-
-                UpdateAgent updates an agent's mutable fields.
-                Use `update_mask` to specify which fields to update.
-                The `kind` is immutable and cannot be updated.
-            description: 'Scope: `agent:write`'
-            operationId: AgentAPI_UpdateAgent
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1UpdateAgentResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: agent.id
-                  description: Unique identifier for the agent (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/AgentAPIUpdateAgentBody'
-            tags:
-                - AgentAPI
     /v1/agents/{agent_id}:
         get:
-            summary: GetAgent retrieves an agent by ID.
-            description: |-
-                Returns the Agent record with its server-derived health_status. For detailed
-                telemetry (capacity, node/workload counts), use GetAgentStatus instead.
-
-                Scope: `agent:read`
+            summary: GetAgent returns an agent, what it last reported, and its ceiling.
+            description: 'Scope: `agent:read`'
             operationId: AgentAPI_GetAgent
             responses:
                 "200":
@@ -388,7 +241,6 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: The unique identifier of the agent (UUID).
                   in: path
                   required: true
                   type: string
@@ -396,9 +248,8 @@ paths:
                 - AgentAPI
         delete:
             summary: |-
-                DeleteAgent permanently deletes an agent record and revokes all associated
-                API keys. For TERRAFORM agents, any not-yet-completed jobs assigned
-                to this agent will be failed. This action cannot be undone.
+                DeleteAgent removes an agent. Its leases end in the same transaction, and
+                environments that selected it select none.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_DeleteAgent
             responses:
@@ -412,39 +263,28 @@ paths:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: |-
-                    The unique identifier of the agent to delete (UUID). All API keys bound to
-                    its service account are revoked.
                   in: path
                   required: true
                   type: string
             tags:
                 - AgentAPI
-    /v1/agents/{agent_id}/clear-identity-binding:
-        post:
+        patch:
             summary: |-
-                ClearAgentIdentityBinding opens a bounded grace window during which the next
-                KUBERNETES agent telemetry push that reports a different kube-system UID will
-                re-pin the agent's identity. Use for DR, cluster rebuilds, or a mistaken
-                initial binding. The existing pin is left intact, so if no agent reconnects
-                before the window expires the original binding stands. Audit-logged.
-            description: |-
-                Only valid for KUBERNETES agents; TERRAFORM agents have no identity binding.
-
-                Scope: `agent:write`
-            operationId: AgentAPI_ClearAgentIdentityBinding
+                UpdateAgent changes an agent's name and ceiling. The ceiling is set here
+                and only here; an agent never reports it.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_UpdateAgent
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1ClearAgentIdentityBindingResponse'
+                        $ref: '#/definitions/v1UpdateAgentResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: The Admiral agent record ID (UUID), not the kube-system UID.
                   in: path
                   required: true
                   type: string
@@ -452,216 +292,28 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/AgentAPIClearAgentIdentityBindingBody'
+                    $ref: '#/definitions/AgentAPIUpdateAgentBody'
             tags:
                 - AgentAPI
-    /v1/agents/{agent_id}/events:
-        get:
-            summary: |-
-                ListWorkloadEvents returns a paginated list of Kubernetes events observed for
-                a KUBERNETES agent's managed resources, deduplicated by event UID.
-            description: 'Scope: `agent:read`'
-            operationId: AgentAPI_ListWorkloadEvents
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ListWorkloadEventsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: agent_id
-                  description: The agent (cluster) whose events to list (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `type`: filter by event type (Normal, Warning).
-                      - `reason`: filter by event reason.
-                      - `component`: filter by reporting component.
-                      - `host`: filter by node.
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of events to return per page. Defaults to 50 when omitted or
-                    0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token from a previous response.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - AgentAPI
-    /v1/agents/{agent_id}/jobs:
-        get:
-            summary: |-
-                ---------------------------------------------------------------------------
-                Read-only observability. Messages: jobs.proto, workloads.proto.
-                ---------------------------------------------------------------------------
-                ListAgentJobs returns a paginated list of jobs assigned to a TERRAFORM agent.
-                Provides admin read-only visibility into agent workload.
-            description: 'Scope: `agent:read`'
-            operationId: AgentAPI_ListAgentJobs
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ListAgentJobsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: agent_id
-                  description: The agent whose jobs to list (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `status`: filter by job status (PENDING, ASSIGNED, RUNNING, etc.).
-                      - `job_type`: filter by job type (PLAN, APPLY, DESTROY_PLAN, DESTROY_APPLY).
-                      - `run_id`: jobs for a specific run (UUID).
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of jobs to return per page. Defaults to 50 when omitted or
-                    0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token from a previous response.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - AgentAPI
-    /v1/agents/{agent_id}/status:
-        get:
-            summary: |-
-                GetAgentStatus retrieves the current telemetry snapshot for an agent.
-                Returns the server-derived health status plus the latest kind-specific
-                status: capacity metrics for TERRAFORM agents, cluster telemetry for KUBERNETES
-                agents.
-            description: |-
-                Returns NOT_FOUND if the agent does not exist. If the agent exists but has
-                not reported yet, health_status will be PENDING and status will be absent.
-
-                Scope: `agent:read`
-            operationId: AgentAPI_GetAgentStatus
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetAgentStatusResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: agent_id
-                  description: The unique identifier of the agent (UUID).
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - AgentAPI
-    /v1/agents/{agent_id}/tokens:
-        get:
-            summary: |-
-                ListApiKeys returns a paginated list of API keys bound to the specified
-                agent. Secrets are never included.
-            description: 'Scope: `agent:read`'
-            operationId: AgentAPI_ListApiKeys
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/apiAgentV1ListApiKeysResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/rpcStatus'
-            parameters:
-                - name: agent_id
-                  description: The agent to list keys for (UUID).
-                  in: path
-                  required: true
-                  type: string
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `name`: filter by key name.
-                      - `status`: filter by key status (ACTIVE, REVOKED).
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of keys to return per page. Defaults to 50 when omitted or
-                    0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token from a previous response.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - AgentAPI
+    /v1/agents/{agent_id}/enrollment-keys:
         post:
             summary: |-
-                ---------------------------------------------------------------------------
-                API keys
-                ---------------------------------------------------------------------------
-                CreateApiKey creates a new API key bound to the specified agent's service
-                account. Scopes are auto-assigned from the agent's kind and cannot be
-                overridden. The response includes the raw secret, shown exactly once.
-            description: |-
-                Use this to create additional API keys for an existing agent (e.g., for
-                zero-downtime key rotation). The initial key is created automatically by
-                CreateAgent.
-
-                Scope: `agent:write`
-            operationId: AgentAPI_CreateApiKey
+                CreateEnrollmentKey issues a single-use key an agent enrolls its cluster
+                with. It can do nothing else, expires within an hour, and is revoked the
+                moment it is used.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_CreateEnrollmentKey
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/apiAgentV1CreateApiKeyResponse'
+                        $ref: '#/definitions/v1CreateEnrollmentKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: The agent to bind this key to (UUID).
                   in: path
                   required: true
                   type: string
@@ -669,87 +321,83 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/v1AgentAPICreateApiKeyBody'
+                    $ref: '#/definitions/AgentAPICreateEnrollmentKeyBody'
             tags:
                 - AgentAPI
-    /v1/agents/{agent_id}/workloads:
+    /v1/agents/{agent_id}/grants:
         get:
-            summary: |-
-                ListWorkloads returns a paginated list of workloads running on a KUBERNETES
-                agent's cluster.
+            summary: ListAgentGrants lists who may use an agent.
             description: 'Scope: `agent:read`'
-            operationId: AgentAPI_ListWorkloads
+            operationId: AgentAPI_ListAgentGrants
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1ListWorkloadsResponse'
+                        $ref: '#/definitions/v1ListAgentGrantsResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: The agent (cluster) whose workloads to list (UUID).
                   in: path
                   required: true
                   type: string
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `namespace`: filter by Kubernetes namespace.
-                      - `kind`: filter by workload kind (Deployment, StatefulSet, DaemonSet).
-                      - `name`: filter by workload name.
-                      - `health_status`: filter by workload health status.
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of workloads to return per page. Defaults to 50 when omitted
-                    or 0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token from a previous response.
-                  in: query
-                  required: false
-                  type: string
             tags:
                 - AgentAPI
-    /v1/agents/{agent_id}/workloads/{workload_id}:
-        get:
+        post:
             summary: |-
-                GetWorkload returns a single workload with its full detail: the rich snapshot
-                (sync, per-resource inventory with field owners, conditions) that ListWorkloads
-                omits.
-            description: 'Scope: `agent:read`'
-            operationId: AgentAPI_GetWorkload
+                GrantAgentUse lets the whole tenant, a team, or an application's
+                environments select an agent. Only the agent's owner or a tenant admin may.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_GrantAgentUse
             responses:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/v1GetWorkloadResponse'
+                        $ref: '#/definitions/v1GrantAgentUseResponse'
                 default:
                     description: An unexpected error response.
                     schema:
                         $ref: '#/definitions/rpcStatus'
             parameters:
                 - name: agent_id
-                  description: The agent (cluster) the workload belongs to (UUID).
                   in: path
                   required: true
                   type: string
-                - name: workload_id
-                  description: The workload to retrieve (UUID).
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AgentAPIGrantAgentUseBody'
+            tags:
+                - AgentAPI
+    /v1/agents/{agent_id}/grants/revoke:
+        post:
+            summary: |-
+                RevokeAgentUse withdraws a grant. Environments that selected the agent
+                under it keep the selection until they change it, but claim nothing new.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_RevokeAgentUse
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1RevokeAgentUseResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: agent_id
                   in: path
                   required: true
                   type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AgentAPIRevokeAgentUseBody'
             tags:
                 - AgentAPI
     /v1/applications:
@@ -1104,6 +752,42 @@ paths:
                     $ref: '#/definitions/ChangeSetAPIEditChangeSetBody'
             tags:
                 - ChangeSetAPI
+    /v1/changesets/{change_set_id}/plan:
+        post:
+            summary: |-
+                PlanChangeSet asks for a plan of the head revision. The revision is
+                prepared first: every component it touches is rendered into one
+                content-addressed run artifact. The call queues that work and returns
+                at once; GetPrepare reports its progress. Asking again for a revision
+                already asked for returns the same prepare, except that a prepare which
+                failed for an infrastructure reason is queued again.
+            description: |-
+                FAILED_PRECONDITION when the change set is not a draft, has no revision,
+                or `if_revision` is not the head (the message names the head).
+
+                Scope: `changeset:write`
+            operationId: ChangeSetAPI_PlanChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1PlanChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPIPlanChangeSetBody'
+            tags:
+                - ChangeSetAPI
     /v1/changesets/{change_set_id}/revisions:
         get:
             summary: |-
@@ -1162,6 +846,186 @@ paths:
                   format: int32
             tags:
                 - ChangeSetAPI
+    /v1/changesets/{change_set_id}/revisions/{revision}/artifact:
+        get:
+            summary: |-
+                GetArtifact returns a prepared revision's run artifact. Every value
+                under a Secret's `data` and `stringData` is replaced by `sha256:` and
+                the first twelve hex characters of its digest, so a change stays
+                visible and the value does not. FAILED_PRECONDITION when the revision
+                is not prepared.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetArtifact
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetArtifactResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: revision
+                  in: path
+                  required: true
+                  type: integer
+                  format: int32
+            tags:
+                - ChangeSetAPI
+    /v1/changesets/{change_set_id}/revisions/{revision}/prepare:
+        get:
+            summary: |-
+                GetPrepare returns the prepare of one revision: its status, findings,
+                error and artifact digest. NOT_FOUND when that revision was never
+                prepared.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetPrepare
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetPrepareResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: revision
+                  in: path
+                  required: true
+                  type: integer
+                  format: int32
+            tags:
+                - ChangeSetAPI
+    /v1/clusters:
+        get:
+            summary: ListClusters lists the tenant's clusters.
+            description: 'Scope: `agent:read`'
+            operationId: AgentAPI_ListClusters
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListClustersResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - AgentAPI
+        post:
+            summary: |-
+                CreateCluster records a cluster to trust. Give its issuer URL when the
+                issuer is public (GKE, EKS), its keys when not (kind, on-prem), or neither
+                to leave it PENDING for an agent to enroll.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_CreateCluster
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateClusterResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateClusterRequest'
+            tags:
+                - AgentAPI
+    /v1/clusters/{cluster_id}:
+        get:
+            summary: GetCluster returns a cluster and the key ids it trusts.
+            description: 'Scope: `agent:read`'
+            operationId: AgentAPI_GetCluster
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetClusterResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: cluster_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - AgentAPI
+        delete:
+            summary: DeleteCluster removes a cluster and its agents. Their leases end at once.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_DeleteCluster
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteClusterResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: cluster_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - AgentAPI
+    /v1/clusters/{cluster_id}/trust:
+        post:
+            summary: |-
+                SetClusterTrust replaces how a cluster is trusted: an issuer URL, or keys.
+                It is how a person rotates the keys of a cluster whose key was replaced
+                outright.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_SetClusterTrust
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1SetClusterTrustResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: cluster_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AgentAPISetClusterTrustBody'
+            tags:
+                - AgentAPI
     /v1/components:
         get:
             summary: ListComponents pages through the registry.
@@ -2022,6 +1886,106 @@ paths:
                     $ref: '#/definitions/InvitationAPIRevokeInvitationBody'
             tags:
                 - InvitationAPI
+    /v1/jobs:
+        get:
+            summary: ListJobs lists jobs for an agent or an environment, newest first.
+            description: 'Scope: `agent:read`'
+            operationId: AgentAPI_ListJobs
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListJobsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: agent_id
+                  in: query
+                  required: false
+                  type: string
+                - name: environment_id
+                  in: query
+                  required: false
+                  type: string
+                - name: status
+                  description: |-
+                    UNSPECIFIED lists every status.
+
+                     - OFFERED: Offered to an agent, not yet started.
+                  in: query
+                  required: false
+                  type: string
+                  enum:
+                    - JOB_STATUS_UNSPECIFIED
+                    - QUEUED
+                    - OFFERED
+                    - RUNNING
+                    - SUCCEEDED
+                    - FAILED
+                    - CANCELLED
+                  default: JOB_STATUS_UNSPECIFIED
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - AgentAPI
+    /v1/jobs/{job_id}:
+        get:
+            summary: GetJob returns a job, with why it is waiting when it is.
+            description: 'Scope: `agent:read`'
+            operationId: AgentAPI_GetJob
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetJobResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: job_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - AgentAPI
+    /v1/jobs/{job_id}/cancel:
+        post:
+            summary: |-
+                CancelJob asks for a job to stop. A queued job is cancelled at once; a
+                running one learns it on its next lease renewal.
+            description: 'Scope: `agent:write`'
+            operationId: AgentAPI_CancelJob
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CancelJobResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: job_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AgentAPICancelJobBody'
+            tags:
+                - AgentAPI
     /v1/runs:
         get:
             summary: ListRuns returns a paginated list of runs.
@@ -2362,7 +2326,7 @@ paths:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/apiUserV1ListApiKeysResponse'
+                        $ref: '#/definitions/v1ListApiKeysResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -2407,7 +2371,7 @@ paths:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/apiUserV1CreateApiKeyResponse'
+                        $ref: '#/definitions/v1CreateApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -2418,7 +2382,7 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/apiUserV1CreateApiKeyRequest'
+                    $ref: '#/definitions/v1CreateApiKeyRequest'
             tags:
                 - UserAPI
     /v1/user/tokens/{token_id}:
@@ -2432,7 +2396,7 @@ paths:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/apiUserV1GetApiKeyResponse'
+                        $ref: '#/definitions/v1GetApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -2485,7 +2449,7 @@ paths:
                 "200":
                     description: A successful response.
                     schema:
-                        $ref: '#/definitions/apiUserV1RevokeApiKeyResponse'
+                        $ref: '#/definitions/v1RevokeApiKeyResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -2500,7 +2464,7 @@ paths:
                   in: body
                   required: true
                   schema:
-                    $ref: '#/definitions/v1UserAPIRevokeApiKeyBody'
+                    $ref: '#/definitions/UserAPIRevokeApiKeyBody'
             tags:
                 - UserAPI
     /v1/users:
@@ -2658,109 +2622,39 @@ paths:
                 type: string
                 format: uuid
 definitions:
-    AgentAPIClearAgentIdentityBindingBody:
+    AgentAPICancelJobBody:
+        type: object
+    AgentAPICreateEnrollmentKeyBody:
+        type: object
+    AgentAPIGrantAgentUseBody:
         type: object
         properties:
-            reason:
-                type: string
-                description: Free-text audit reason for the rebind (e.g. "DR rebuild 2026-05-30").
-            grace_window:
-                type: string
-                description: How long the grace window stays open. Defaults to 1h server-side if unset.
-        description: |-
-            ClearAgentIdentityBindingRequest opens a rebind grace window for a KUBERNETES
-            agent.
+            grant:
+                $ref: '#/definitions/v1AgentGrant'
+        required:
+            - grant
+    AgentAPIRevokeAgentUseBody:
+        type: object
+        properties:
+            grant:
+                $ref: '#/definitions/v1AgentGrant'
+        required:
+            - grant
+    AgentAPISetClusterTrustBody:
+        type: object
+        properties:
+            trust:
+                $ref: '#/definitions/v1ClusterTrust'
+        required:
+            - trust
     AgentAPIUpdateAgentBody:
         type: object
         properties:
-            agent:
-                type: object
-                properties:
-                    kind:
-                        $ref: '#/definitions/v1AgentKind'
-                        description: |-
-                            The execution plane this agent serves. Set at creation and immutable
-                            (CreateAgentRequest.kind carries the not_in:[0] requirement). Not validated
-                            here so a partial Agent in UpdateAgentRequest (which omits kind) passes.
-                    name:
-                        type: string
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "prod-terraform" or "prod-us-east-1").
-                            Unique within the tenant. Lowercase alphanumeric and hyphens only, must start
-                            with a letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        description: Optional longer-form description of the agent's purpose.
-                    labels:
-                        type: object
-                        additionalProperties:
-                            type: string
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering agents
-                            (e.g., `{"cloud": "aws", "team": "platform"}`).
-                    health_status:
-                        $ref: '#/definitions/v1AgentHealthStatus'
-                        description: Derived health status based on reporting recency and kind-specific signals.
-                        readOnly: true
-                    cluster_uid:
-                        type: string
-                        description: |-
-                            (KUBERNETES only) The Kubernetes kube-system namespace UID, bound at agent
-                            registration using a first-write-wins strategy. Used to detect when a key
-                            is accidentally deployed to a different physical cluster. Empty for TERRAFORM
-                            agents.
-                        readOnly: true
-                    created_by:
-                        $ref: '#/definitions/v1ActorRef'
-                        description: The user or agent who created this agent (server-populated from key).
-                        readOnly: true
-                    created_at:
-                        type: string
-                        format: date-time
-                        description: When the agent record was created.
-                        readOnly: true
-                    updated_at:
-                        type: string
-                        format: date-time
-                        description: |-
-                            When the agent record was last updated via UpdateAgent. Reports/heartbeats
-                            do not bump this field; liveness is exposed separately via GetAgentStatus
-                            and health_status.
-                        readOnly: true
-                description: |-
-                    The agent with updated fields. The `id` field is required. Only fields named
-                    in `update_mask` are updated. `kind` is immutable and cannot be updated.
-            update_mask:
+            name:
                 type: string
-                description: |-
-                    The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Pass `*` for full replacement. Supported fields: `name`,
-                    `description`, `labels`.
-        description: UpdateAgentRequest contains the agent fields to update.
-        required:
-            - agent
-    AgentRuntimeAPIReportJobResultBody:
-        type: object
-        properties:
-            result:
-                $ref: '#/definitions/v1ExecutionReport'
-                description: |-
-                    The execution report with status, normalized summary, outputs, transcript,
-                    and error information.
-        description: ReportJobResultRequest contains the outcome of a completed job.
-        required:
-            - result
-    AgentRuntimeAPIReportRevisionResultBody:
-        type: object
-        properties:
-            result:
-                $ref: '#/definitions/v1ExecutionReport'
-                description: The result of applying the revision.
-        description: |-
-            ReportRevisionResultRequest contains the outcome of applying a workload revision
-            to the cluster.
-        required:
-            - result
+            ceiling:
+                $ref: '#/definitions/v1AgentCeiling'
+                description: Replaces the ceiling when set.
     ApplicationAPIUpdateApplicationBody:
         type: object
         properties:
@@ -2825,6 +2719,16 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1Edit'
+            plan:
+                type: boolean
+                description: Ask for a plan of the revision this cuts, as PlanChangeSet does.
+    ChangeSetAPIPlanChangeSetBody:
+        type: object
+        properties:
+            if_revision:
+                type: integer
+                format: int32
+                description: When set, refused unless the head is this revision.
     CredentialAPIUpdateCredentialBody:
         type: object
         properties:
@@ -2937,6 +2841,9 @@ definitions:
                         format: date-time
                         description: When the environment was last updated.
                         readOnly: true
+                    kubernetes:
+                        $ref: '#/definitions/v1KubernetesTarget'
+                        description: Where workload components go. Omitted fields keep their defaults.
                 description: |-
                     The environment with updated fields.
                     Only fields specified in `update_mask` are updated.
@@ -2945,7 +2852,8 @@ definitions:
                 description: |-
                     The set of fields to update. Optional; if omitted, all populated fields
                     are updated. Pass `*` for full replacement. Supported fields: `name`,
-                    `description`, `labels`.
+                    `description`, `labels`, `kubernetes.namespace`,
+                    `kubernetes.create_namespaces`, `kubernetes.agent_id`.
         description: UpdateEnvironmentRequest contains the environment fields to update.
         required:
             - environment
@@ -3072,6 +2980,9 @@ definitions:
     RunAPIRetryRevisionBody:
         type: object
         description: RetryRevisionRequest retries a failed revision.
+    UserAPIRevokeApiKeyBody:
+        type: object
+        description: RevokeApiKeyRequest identifies an API key to revoke.
     UserAPIUpdateApiKeyBody:
         type: object
         properties:
@@ -3092,43 +3003,21 @@ definitions:
         description: |-
             UpdateApiKeyRequest contains the fields to update on an API key.
             Only provided fields are updated; omitted fields remain unchanged.
-    apiAgentV1CreateApiKeyResponse:
+    apiChangesetV1Finding:
         type: object
         properties:
-            api_key:
-                $ref: '#/definitions/v1ApiKey'
-                description: The created key metadata. Scopes are auto-assigned from the agent's kind.
-            plain_text_key:
+            component:
                 type: string
-                description: The raw secret. Shown exactly once and cannot be retrieved again.
-        description: CreateApiKeyResponse contains the newly created API key.
-    apiAgentV1GetApiKeyResponse:
-        type: object
-        properties:
-            api_key:
-                $ref: '#/definitions/v1ApiKey'
-                description: The key metadata. The key secret is never included.
-        description: GetApiKeyResponse contains the requested agent API key metadata.
-    apiAgentV1ListApiKeysResponse:
-        type: object
-        properties:
-            api_keys:
+            code:
+                $ref: '#/definitions/v1FindingCode'
+            message:
+                type: string
+            details:
                 type: array
                 items:
-                    type: object
-                    $ref: '#/definitions/v1ApiKey'
-                description: The list of keys. Secrets are never included.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListApiKeysResponse contains a page of agent API key metadata.
-    apiAgentV1RevokeApiKeyResponse:
-        type: object
-        properties:
-            api_key:
-                $ref: '#/definitions/v1ApiKey'
-                description: The key metadata with updated status.
-        description: RevokeApiKeyResponse contains the revoked agent API key metadata.
+                    type: string
+                description: For NONDETERMINISTIC, each `Kind/namespace/name field` that differs.
+        description: Finding is something a prepare noticed about one component.
     apiChangesetV1GetRevisionResponse:
         type: object
         properties:
@@ -3244,6 +3133,25 @@ definitions:
             ComponentKind is what a revision's bundle is, detected by inspection at
             publish: a Chart.yaml means HELM, .tf files mean TERRAFORM, anything else
             that is Kubernetes YAML means MANIFESTS.
+    apiRegistryV1Finding:
+        type: object
+        properties:
+            severity:
+                $ref: '#/definitions/v1FindingSeverity'
+            source:
+                type: string
+                description: 'What produced it: `provider-constraint`, `checkov`, `trivy`, `image-ref`.'
+            code:
+                type: string
+                description: |-
+                    The producer's own identifier for the rule, when it has one
+                    (e.g. `CKV_AWS_18`).
+            message:
+                type: string
+            path:
+                type: string
+                description: Where in the bundle, when it applies.
+        description: Finding is one thing the publish gate noticed.
     apiRegistryV1GetRevisionResponse:
         type: object
         properties:
@@ -3311,7 +3219,7 @@ definitions:
                 type: array
                 items:
                     type: object
-                    $ref: '#/definitions/v1Finding'
+                    $ref: '#/definitions/apiRegistryV1Finding'
                 description: |-
                     What the publish gate found. Informational findings do not block a
                     publish; a revision with findings is published with them attached, and
@@ -3570,71 +3478,6 @@ definitions:
             the liveness/STALE reaper; see Phase D.)
              - REVISION_STATUS_AWAITING_APPROVAL: The revision has planned and is awaiting explicit approval before its
             apply runs (gating policy != auto-continue). (Set by the gating flow.)
-    apiUserV1CreateApiKeyRequest:
-        type: object
-        properties:
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier for the key (e.g., "postman-testing").
-                    Unique per user within the tenant. Lowercase alphanumeric and hyphens only,
-                    must start with a letter and end with an alphanumeric character (1-63 chars).
-            scopes:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    The scopes to grant this key. Must be scopes assignable to a user-bound key.
-                    The server enforces that issued scopes are a subset of the caller's own
-                    scopes. A key cannot grant more access than the user holds.
-            expires_at:
-                type: string
-                format: date-time
-                description: |-
-                    Optional expiration time. If unset, the key does not expire.
-                    Tenant policies may enforce a maximum lifetime.
-        description: CreateApiKeyRequest contains the parameters for creating a new API key.
-        required:
-            - name
-    apiUserV1CreateApiKeyResponse:
-        type: object
-        properties:
-            api_key:
-                $ref: '#/definitions/v1ApiKey'
-                description: The created key metadata.
-            plain_text_key:
-                type: string
-                description: |-
-                    The raw secret (e.g., "admp_7kH3mNqR2xFb..."). This value is
-                    shown exactly once and cannot be retrieved again. Store it securely.
-        description: CreateApiKeyResponse contains the newly created API key.
-    apiUserV1GetApiKeyResponse:
-        type: object
-        properties:
-            api_key:
-                $ref: '#/definitions/v1ApiKey'
-                description: The key metadata. The key secret is never included.
-        description: GetApiKeyResponse contains the requested API key metadata.
-    apiUserV1ListApiKeysResponse:
-        type: object
-        properties:
-            api_keys:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ApiKey'
-                description: The list of keys. Secrets are never included.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListApiKeysResponse contains a page of API key metadata.
-    apiUserV1RevokeApiKeyResponse:
-        type: object
-        properties:
-            api_key:
-                $ref: '#/definitions/v1ApiKey'
-                description: The key metadata with updated status.
-        description: RevokeApiKeyResponse contains the revoked API key metadata.
     protobufAny:
         type: object
         properties:
@@ -3781,22 +3624,6 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/protobufAny'
-    v1ActiveJobInfo:
-        type: object
-        properties:
-            job_id:
-                type: string
-                description: The job being executed (UUID).
-            phase:
-                $ref: '#/definitions/v1JobPhase'
-                description: Current execution phase reported by the worker thread.
-            started_at:
-                type: string
-                format: date-time
-                description: When execution of this job started (when the agent claimed it).
-        description: |-
-            ActiveJobInfo summarizes a job currently being executed by a TERRAFORM agent
-            instance. Included in TerraformAgentStatus to provide real-time job progress.
     v1ActorKind:
         type: string
         enum:
@@ -3846,126 +3673,107 @@ definitions:
         properties:
             id:
                 type: string
-                description: Unique identifier for the agent (UUID).
                 readOnly: true
-            kind:
-                $ref: '#/definitions/v1AgentKind'
-                description: |-
-                    The execution plane this agent serves. Set at creation and immutable
-                    (CreateAgentRequest.kind carries the not_in:[0] requirement). Not validated
-                    here so a partial Agent in UpdateAgentRequest (which omits kind) passes.
+            cluster_id:
+                type: string
+                readOnly: true
             name:
                 type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "prod-terraform" or "prod-us-east-1").
-                    Unique within the tenant. Lowercase alphanumeric and hyphens only, must start
-                    with a letter and end with an alphanumeric character (1-63 chars).
-            description:
+            namespace:
                 type: string
-                description: Optional longer-form description of the agent's purpose.
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: |-
-                    Arbitrary key-value labels for organizing and filtering agents
-                    (e.g., `{"cloud": "aws", "team": "platform"}`).
-            health_status:
-                $ref: '#/definitions/v1AgentHealthStatus'
-                description: Derived health status based on reporting recency and kind-specific signals.
                 readOnly: true
-            cluster_uid:
+            service_account:
                 type: string
-                description: |-
-                    (KUBERNETES only) The Kubernetes kube-system namespace UID, bound at agent
-                    registration using a first-write-wins strategy. Used to detect when a key
-                    is accidentally deployed to a different physical cluster. Empty for TERRAFORM
-                    agents.
+                readOnly: true
+            ceiling:
+                $ref: '#/definitions/v1AgentCeiling'
+            health:
+                $ref: '#/definitions/v1AgentHealth'
+                readOnly: true
+            report:
+                $ref: '#/definitions/v1AgentReport'
+                description: What the agent last reported. Absent until it does.
                 readOnly: true
             created_by:
                 $ref: '#/definitions/v1ActorRef'
-                description: The user or agent who created this agent (server-populated from key).
                 readOnly: true
             created_at:
                 type: string
                 format: date-time
-                description: When the agent record was created.
                 readOnly: true
-            updated_at:
-                type: string
-                format: date-time
-                description: |-
-                    When the agent record was last updated via UpdateAgent. Reports/heartbeats
-                    do not bump this field; liveness is exposed separately via GetAgentStatus
-                    and health_status.
-                readOnly: true
-        description: |-
-            Agent represents a registered execution agent within a tenant. The `kind`
-            selects its execution plane: TERRAFORM agents claim and execute infrastructure
-            jobs; KUBERNETES agents report Kubernetes telemetry and apply manifest revisions.
-    v1AgentAPICreateApiKeyBody:
+    v1AgentCapabilities:
         type: object
         properties:
-            name:
+            can_create_namespaces:
+                type: boolean
+            writable_namespaces:
+                type: array
+                items:
+                    type: string
+                description: Namespaces it may write; empty with `all_namespaces` means everywhere.
+            all_namespaces:
+                type: boolean
+            can_write_cluster_scoped:
+                type: boolean
+        description: AgentCapabilities is what the agent's own RBAC lets it do, as it measured.
+    v1AgentCeiling:
+        type: object
+        properties:
+            allow_namespace_creation:
+                type: boolean
+            allowed_namespaces:
+                type: array
+                items:
+                    type: string
+                description: Glob patterns; empty allows every namespace.
+            denied_namespaces:
+                type: array
+                items:
+                    type: string
+        description: |-
+            AgentCeiling is what the agent's owner allows it, whatever its RBAC allows.
+            The plan refuses what falls outside it.
+    v1AgentGrant:
+        type: object
+        properties:
+            tenant:
+                type: boolean
+                description: Every environment in the tenant. Only `true` means anything.
+            group_id:
                 type: string
-                description: |-
-                    URL-safe, human-readable identifier for the key (e.g., "prod-agent-key").
-                    Unique within the agent's keys. Lowercase alphanumeric and hyphens only,
-                    must start with a letter and end with an alphanumeric character (1-63 chars).
-            expires_at:
+            application_id:
+                type: string
+        description: AgentGrant is who may select an agent.
+    v1AgentHealth:
+        type: string
+        enum:
+            - AGENT_HEALTH_UNSPECIFIED
+            - NEW
+            - ONLINE
+            - OFFLINE
+        default: AGENT_HEALTH_UNSPECIFIED
+        description: |4-
+             - NEW: Never reported.
+             - OFFLINE: Has not reported for longer than twice its reporting interval.
+    v1AgentReport:
+        type: object
+        properties:
+            agent_version:
+                type: string
+            protocol_version:
+                type: integer
+                format: int32
+            kube_version:
+                type: string
+            api_versions:
+                type: array
+                items:
+                    type: string
+            capabilities:
+                $ref: '#/definitions/v1AgentCapabilities'
+            reported_at:
                 type: string
                 format: date-time
-                description: Optional expiration time. If unset, the key does not expire.
-        description: |-
-            CreateApiKeyRequest contains the parameters for creating a new API key bound to
-            an agent.
-        required:
-            - name
-    v1AgentAPIRevokeApiKeyBody:
-        type: object
-        description: |-
-            RevokeApiKeyRequest identifies an agent API key to revoke. Key IDs are
-            globally unique; the server resolves the parent agent from the key ID.
-    v1AgentHealthStatus:
-        type: string
-        enum:
-            - AGENT_HEALTH_STATUS_UNSPECIFIED
-            - AGENT_HEALTH_STATUS_PENDING
-            - AGENT_HEALTH_STATUS_HEALTHY
-            - AGENT_HEALTH_STATUS_DEGRADED
-            - AGENT_HEALTH_STATUS_ERROR
-            - AGENT_HEALTH_STATUS_UNREACHABLE
-        default: AGENT_HEALTH_STATUS_UNSPECIFIED
-        description: |-
-            AgentHealthStatus represents the derived health state of an agent. The status
-            is computed from reporting recency and kind-specific signals (capacity for
-            TERRAFORM; node readiness and workload health for KUBERNETES). The ERROR state is
-            only emitted by KUBERNETES agents.
-
-             - AGENT_HEALTH_STATUS_UNSPECIFIED: Default value. Must not be used.
-             - AGENT_HEALTH_STATUS_PENDING: Agent record exists but no report has been received yet.
-             - AGENT_HEALTH_STATUS_HEALTHY: Reporting within the expected interval; agent operational.
-             - AGENT_HEALTH_STATUS_DEGRADED: Operational but reporting constraints: capacity near limits (TERRAFORM), or some
-            nodes not ready / workloads degraded (KUBERNETES).
-             - AGENT_HEALTH_STATUS_ERROR: (KUBERNETES only) More than 25% nodes not ready or workloads in error state.
-             - AGENT_HEALTH_STATUS_UNREACHABLE: No report received within 3x the expected interval.
-    v1AgentKind:
-        type: string
-        enum:
-            - AGENT_KIND_UNSPECIFIED
-            - AGENT_KIND_TERRAFORM
-            - AGENT_KIND_KUBERNETES
-        default: AGENT_KIND_UNSPECIFIED
-        description: |-
-            AgentKind names the execution contract an agent serves, by its canonical tool.
-            The engine is a sub-axis within a kind (TERRAFORM runs terraform/tofu;
-            KUBERNETES runs helm/kustomize/raw), so a new tool is a new value, not a refactor.
-
-             - AGENT_KIND_UNSPECIFIED: Default value. Must not be used.
-             - AGENT_KIND_TERRAFORM: Terraform-semantic infrastructure agent (plan/apply/destroy jobs; engines:
-            terraform, tofu). Managed-service deploys (Lambda/ECS/Cloud Run) also run here
-            as terraform components.
-             - AGENT_KIND_KUBERNETES: Kubernetes agent (cluster telemetry + manifest revision delivery/reconcile).
     v1ApiKey:
         type: object
         properties:
@@ -4116,18 +3924,6 @@ definitions:
             Application represents a deployable unit within a tenant. An application
             groups manifests, dependencies, and environment configuration into a single
             entity that Admiral orchestrates across environments.
-    v1ApplicationRef:
-        type: object
-        properties:
-            namespace:
-                type: string
-                description: Kubernetes namespace of the Application.
-            name:
-                type: string
-                description: Application name.
-        description: |-
-            ApplicationRef is a lightweight (namespace, name) reference to an Admiral
-            Application, used to tag workload metrics with their owning Application.
     v1ApplyRunResponse:
         type: object
         properties:
@@ -4137,39 +3933,19 @@ definitions:
                     The run with status advanced to APPLYING. Revisions that were
                     PLANNED are now APPLYING.
         description: ApplyRunResponse contains the run after apply jobs are dispatched.
-    v1ArtifactKind:
-        type: string
-        enum:
-            - ARTIFACT_KIND_UNSPECIFIED
-            - ARTIFACT_KIND_SOURCE_BUNDLE
-            - ARTIFACT_KIND_PLAN
-            - ARTIFACT_KIND_MANIFEST_BUNDLE
-        default: ARTIFACT_KIND_UNSPECIFIED
-        description: |-
-            ArtifactKind types an artifact a phase produces or consumes.
-
-             - ARTIFACT_KIND_UNSPECIFIED: Default value. Must not be used.
-             - ARTIFACT_KIND_SOURCE_BUNDLE: The packaged source tree a terraform phase executes over.
-             - ARTIFACT_KIND_PLAN: The binary plan a terraform plan produces and apply consumes.
-             - ARTIFACT_KIND_MANIFEST_BUNDLE: The rendered Kubernetes manifests a workload applies.
-    v1ArtifactRef:
+    v1Attempt:
         type: object
         properties:
-            kind:
-                $ref: '#/definitions/v1ArtifactKind'
-                description: The kind of artifact.
-            key:
+            job_id:
                 type: string
-                description: Storage key (object-storage path) where the artifact bytes live.
-            checksum:
+            attempt:
+                type: integer
+                format: int32
+            lease_token:
                 type: string
-                description: |-
-                    SHA-256 checksum of the artifact for integrity verification. May be empty
-                    for artifacts not yet verified.
-        description: |-
-            ArtifactRef addresses one artifact an execution produced: its kind, the
-            storage key where the bytes live, and a checksum for fail-closed
-            verification.
+        description: Attempt names the attempt a call belongs to.
+        required:
+            - job_id
     v1AuthConfig:
         type: object
         properties:
@@ -4221,6 +3997,11 @@ definitions:
              - BINDING_TYPE_SERVICE_ACCOUNT: Bound to a service account, and created by an administrator. Scopes are
             assigned from a profile rather than chosen. An agent has a service account;
             which agent, if any, is resolved from the service account record.
+    v1CancelJobResponse:
+        type: object
+        properties:
+            job:
+                $ref: '#/definitions/v1Job'
     v1CancelRunResponse:
         type: object
         properties:
@@ -4302,29 +4083,85 @@ definitions:
             kubernetes server-side-apply created/configured/deleted.
     v1ClaimJobRequest:
         type: object
-        description: |-
-            ClaimJobRequest is sent by a TERRAFORM agent to poll for available work. The
-            agent is identified by the SAT's binding; no agent_id is required.
+        properties:
+            claim_request_id:
+                type: string
+                description: |-
+                    Chosen by the agent per claim, with at least 128 random bits (22
+                    base64url characters); a retry with the same id returns the same offer.
+                    The lease token derives from it, so it is as secret as the token.
+            protocol_version:
+                type: integer
+                format: int32
+            artifact_schema:
+                type: integer
+                format: int32
+                description: The newest run artifact schema the agent reads.
+            slots:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Slots'
+            wait_seconds:
+                type: integer
+                format: int32
+                description: How long to wait for work. At most 20; the server may answer sooner.
     v1ClaimJobResponse:
         type: object
         properties:
-            job:
-                $ref: '#/definitions/v1Job'
-                description: |-
-                    The job to execute. Absent if no work is available; the agent should wait and
-                    poll again after its configured interval.
-        description: ClaimJobResponse contains the next job to execute, if any.
-    v1ClearAgentIdentityBindingResponse:
+            offer:
+                $ref: '#/definitions/v1Offer'
+                description: Absent when there was nothing to offer.
+    v1Cluster:
         type: object
         properties:
-            accepted:
-                type: boolean
-                description: Whether the rebind grace window was opened.
-            expires_at:
+            id:
+                type: string
+                readOnly: true
+            name:
+                type: string
+            status:
+                $ref: '#/definitions/v1ClusterStatus'
+                readOnly: true
+            issuer_url:
+                type: string
+                description: Set when the cluster's issuer is public; keys are fetched from it.
+                readOnly: true
+            key_ids:
+                type: array
+                items:
+                    type: string
+                description: The key ids trusted now.
+                readOnly: true
+            keys_updated_at:
                 type: string
                 format: date-time
-                description: When the grace window expires.
-        description: ClearAgentIdentityBindingResponse acknowledges the rebind window.
+                readOnly: true
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+    v1ClusterStatus:
+        type: string
+        enum:
+            - CLUSTER_STATUS_UNSPECIFIED
+            - PENDING
+            - TRUSTED
+        default: CLUSTER_STATUS_UNSPECIFIED
+        description: ' - PENDING: No keys yet: an agent may enroll it.'
+    v1ClusterTrust:
+        type: object
+        properties:
+            issuer_url:
+                type: string
+                description: An https URL whose /.well-known/openid-configuration names the keys.
+            jwks_json:
+                type: string
+                description: A JSON Web Key Set, as the cluster serves it at /openid/v1/jwks.
+        description: ClusterTrust is how a cluster's tokens are verified.
     v1ComponentDiff:
         type: object
         properties:
@@ -4358,52 +4195,6 @@ definitions:
         description: |-
             ComponentLabels wraps a label map so its presence in an update can be told
             from an empty map: present and empty clears the labels.
-    v1Condition:
-        type: object
-        properties:
-            type:
-                type: string
-                description: Condition type (e.g., "Ready", "Healthy").
-            status:
-                type: string
-                description: 'Condition status: "True", "False", or "Unknown".'
-            observed_generation:
-                type: string
-                format: int64
-                description: The .metadata.generation the condition was set against.
-            reason:
-                type: string
-                description: Short machine-readable reason for the condition's last transition.
-            message:
-                type: string
-                description: Human-readable detail for the condition's last transition.
-            last_transition_time:
-                type: string
-                format: date-time
-                description: When the condition last transitioned.
-        description: |-
-            Condition mirrors the standard Kubernetes condition shape, carried explicitly
-            so the wire shape stays stable across SDK versions.
-    v1ContainerStatus:
-        type: object
-        properties:
-            name:
-                type: string
-                description: Container name within the pod spec.
-            image:
-                type: string
-                description: Container image reference (e.g., "registry.example.com/api:v2.1.4").
-            restart_count:
-                type: integer
-                format: int32
-                description: Cumulative number of container restarts.
-            state:
-                type: string
-                description: Current container state (e.g., "running", "waiting", "terminated").
-            ready:
-                type: boolean
-                description: Whether the container's readiness probe is passing.
-        description: ContainerStatus describes the current state of a single container.
     v1Contract:
         type: object
         properties:
@@ -4493,42 +4284,84 @@ definitions:
     v1CreateAgentRequest:
         type: object
         properties:
-            kind:
-                $ref: '#/definitions/v1AgentKind'
-                description: |-
-                    The execution plane this agent serves (TERRAFORM or KUBERNETES). Selects the
-                    key's auto-assigned scopes and is immutable.
+            cluster_id:
+                type: string
             name:
                 type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "prod-terraform"). Unique within
-                    the tenant. Lowercase alphanumeric and hyphens only, must start with a
-                    letter and end with an alphanumeric character (1-63 chars).
-            description:
+            namespace:
                 type: string
-                description: Optional longer-form description of the agent's purpose.
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: Arbitrary key-value labels for organizing and filtering agents.
-        description: CreateAgentRequest contains the parameters for creating a new agent.
+                description: The namespace and service account the agent runs as.
+            service_account:
+                type: string
+            ceiling:
+                $ref: '#/definitions/v1AgentCeiling'
+            grants:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1AgentGrant'
+                description: |-
+                    Who may use it. Absent grants the whole tenant when this is the tenant's
+                    first agent, and nobody otherwise.
+            enrollment_key:
+                type: boolean
+                description: Issue a single-use enrollment key with the agent.
         required:
-            - kind
+            - cluster_id
             - name
+            - namespace
+            - service_account
     v1CreateAgentResponse:
         type: object
         properties:
             agent:
                 $ref: '#/definitions/v1Agent'
-                description: The created agent. Health status will be PENDING until it begins reporting.
+            grants:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1AgentGrant'
+            enrollment_key:
+                $ref: '#/definitions/v1EnrollmentKey'
+                description: Set when asked for. Shown once.
+    v1CreateApiKeyRequest:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    URL-safe, human-readable identifier for the key (e.g., "postman-testing").
+                    Unique per user within the tenant. Lowercase alphanumeric and hyphens only,
+                    must start with a letter and end with an alphanumeric character (1-63 chars).
+            scopes:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    The scopes to grant this key. Must be scopes assignable to a user-bound key.
+                    The server enforces that issued scopes are a subset of the caller's own
+                    scopes. A key cannot grant more access than the user holds.
+            expires_at:
+                type: string
+                format: date-time
+                description: |-
+                    Optional expiration time. If unset, the key does not expire.
+                    Tenant policies may enforce a maximum lifetime.
+        description: CreateApiKeyRequest contains the parameters for creating a new API key.
+        required:
+            - name
+    v1CreateApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The created key metadata.
             plain_text_key:
                 type: string
                 description: |-
-                    The raw API key secret (e.g., "adms_pL2mN5oQ8rS1..."). Shown exactly once
-                    and cannot be retrieved again. Deploy this key to the agent binary for
-                    authentication. For additional keys, use CreateApiKey.
-        description: CreateAgentResponse contains the newly created agent and its initial API key.
+                    The raw secret (e.g., "admp_7kH3mNqR2xFb..."). This value is
+                    shown exactly once and cannot be retrieved again. Store it securely.
+        description: CreateApiKeyResponse contains the newly created API key.
     v1CreateApplicationRequest:
         type: object
         properties:
@@ -4570,6 +4403,9 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1Edit'
+            plan:
+                type: boolean
+                description: Ask for a plan of the revision the edits cut, as PlanChangeSet does.
         required:
             - environment_id
     v1CreateChangeSetResponse:
@@ -4587,6 +4423,24 @@ definitions:
                 description: |-
                     Accepted, but worth saying: a deprecated pin, a check the contract could
                     not make.
+            prepare:
+                $ref: '#/definitions/v1Prepare'
+                description: Set when `plan` was asked for.
+    v1CreateClusterRequest:
+        type: object
+        properties:
+            name:
+                type: string
+            trust:
+                $ref: '#/definitions/v1ClusterTrust'
+                description: Absent leaves the cluster PENDING for an agent to enroll.
+        required:
+            - name
+    v1CreateClusterResponse:
+        type: object
+        properties:
+            cluster:
+                $ref: '#/definitions/v1Cluster'
     v1CreateCredentialRequest:
         type: object
         properties:
@@ -4615,6 +4469,11 @@ definitions:
         properties:
             credential:
                 $ref: '#/definitions/v1Credential'
+    v1CreateEnrollmentKeyResponse:
+        type: object
+        properties:
+            enrollment_key:
+                $ref: '#/definitions/v1EnrollmentKey'
     v1CreateEnvironmentRequest:
         type: object
         properties:
@@ -4635,6 +4494,9 @@ definitions:
                 additionalProperties:
                     type: string
                 description: Arbitrary key-value labels for organizing and filtering environments.
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesTarget'
+                description: Where workload components go.
         description: CreateEnvironmentRequest contains the parameters for creating a new environment.
         required:
             - application_id
@@ -4777,10 +4639,11 @@ definitions:
             GitHub Enterprise Cloud and GitHub Enterprise Server.
     v1DeleteAgentResponse:
         type: object
-        description: DeleteAgentResponse is empty on success.
     v1DeleteApplicationResponse:
         type: object
         description: DeleteApplicationResponse is empty on success.
+    v1DeleteClusterResponse:
+        type: object
     v1DeleteComponentResponse:
         type: object
         description: DeleteComponentResponse is empty.
@@ -4826,6 +4689,8 @@ definitions:
                 $ref: '#/definitions/v1ReplaceValues'
             remove_component:
                 $ref: '#/definitions/v1RemoveComponent'
+            set_placement:
+                $ref: '#/definitions/v1SetPlacement'
         description: |-
             Edit is one change a request makes. A request's edits apply in order and
             become one revision.
@@ -4840,43 +4705,38 @@ definitions:
                 type: array
                 items:
                     type: string
-    v1Engine:
-        type: string
-        enum:
-            - ENGINE_UNSPECIFIED
-            - ENGINE_TERRAFORM
-            - ENGINE_TOFU
-        default: ENGINE_UNSPECIFIED
-        description: |-
-            Engine identifies which infrastructure-as-code binary executes the job.
-            Deliberately narrow: only the terraform-semantic engines Admiral manages as
-            first-class citizens. Wrapper tools (e.g., terragrunt) and non-terraform-
-            semantic engines (Pulumi, CDK) are intentionally out of scope; users shell
-            out to them via hooks if needed.
-
-             - ENGINE_UNSPECIFIED: Default value. Must not be used.
-             - ENGINE_TERRAFORM: HashiCorp Terraform.
-             - ENGINE_TOFU: OpenTofu.
-    v1EngineOutput:
+            prepare:
+                $ref: '#/definitions/v1Prepare'
+                description: Set when `plan` was asked for.
+    v1EnrollRequest:
         type: object
         properties:
-            value:
+            jwks_json:
+                type: string
+                description: The cluster's keys, as served at /openid/v1/jwks.
+            service_account_token:
                 type: string
                 description: |-
-                    The output value, serialized as a string. Complex values (lists, maps)
-                    are JSON-encoded.
-            type:
+                    A token the cluster issued this agent, audience Admiral. It must verify
+                    against `jwks_json` and name the agent's namespace and service account.
+            cluster_uid:
                 type: string
-                description: Engine type descriptor (e.g. "string", "number", "list(string)").
-            sensitive:
-                type: boolean
-                description: Whether the executor marked this output as sensitive.
-        description: |-
-            EngineOutput is a single output value captured from an executor after a
-            successful apply (e.g. `terraform output -json`). Engine-agnostic: the
-            (value, type, sensitive) shape generalizes across executors. Lives in run/v1
-            so it can be shared by the TERRAFORM and KUBERNETES agent report paths via
-            ExecutionReport.
+                description: 'The kube-system namespace UID: an accident detector, not a proof.'
+    v1EnrollResponse:
+        type: object
+        properties:
+            cluster:
+                $ref: '#/definitions/v1Cluster'
+            agent:
+                $ref: '#/definitions/v1Agent'
+    v1EnrollmentKey:
+        type: object
+        properties:
+            key:
+                type: string
+            expires_at:
+                type: string
+                format: date-time
     v1Entry:
         type: object
         properties:
@@ -4902,6 +4762,9 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1ValueOp'
+            placement:
+                $ref: '#/definitions/v1Placement'
+                description: Where the component goes after this change set. Empty on DESTROY.
         description: Entry is what one revision does to one component.
     v1EntryAction:
         type: string
@@ -4972,6 +4835,9 @@ definitions:
                 format: date-time
                 description: When the environment was last updated.
                 readOnly: true
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesTarget'
+                description: Where workload components go. Omitted fields keep their defaults.
         description: |-
             Environment represents a named deployment target for an application
             (e.g., dev, staging, prod). Each environment carries its own configuration
@@ -5009,77 +4875,26 @@ definitions:
             `ListEnvironmentComponents`. It joins the component's HEAD with the
             component's last-succeeded revision so the CLI can render an at-a-glance
             status row without follow-up calls.
-    v1ExecutionReport:
-        type: object
-        properties:
-            status:
-                $ref: '#/definitions/v1ExecutionStatus'
-                description: Terminal status of the phase.
-            error_message:
-                type: string
-                description: Error message if the phase failed. Empty on success.
-            summary:
-                $ref: '#/definitions/v1ChangeSummary'
-                description: Normalized change counts (create/update/delete/noop).
-            outputs:
-                type: object
-                additionalProperties:
-                    $ref: '#/definitions/v1EngineOutput'
-                description: Outputs captured after a successful apply. Keys are output names.
-            artifact:
-                $ref: '#/definitions/v1ArtifactRef'
-                description: |-
-                    Optional reference to an artifact this phase produced (e.g. a terraform
-                    PLAN). Recorded into the revision's artifact set when present.
-            transcript:
-                type: string
-                title: |-
-                    The phase's human-readable execution log (e.g. terraform plan/apply
-                    output). Persisted as the phase transcript. (Interim: live log streaming
-                    moves to a dedicated channel in a later phase.)
-            detail:
-                type: string
-                format: byte
-                description: |-
-                    Opaque, per-executor richness, never branched on by the orchestration
-                    layer. JSON-encoded.
-        description: |-
-            ExecutionReport is the executor-agnostic outcome of one revision phase --
-            the single report shape every executor maps its native result onto. The
-            TERRAFORM and KUBERNETES agents both report via this message.
-    v1ExecutionStatus:
+    v1FindingCode:
         type: string
         enum:
-            - EXECUTION_STATUS_UNSPECIFIED
-            - EXECUTION_STATUS_SUCCEEDED
-            - EXECUTION_STATUS_FAILED
-        default: EXECUTION_STATUS_UNSPECIFIED
+            - FINDING_CODE_UNSPECIFIED
+            - LOOKUP_USED
+            - NONDETERMINISTIC
+            - NO_CAPABILITIES
+            - SCOPE_GUESSED
+        default: FINDING_CODE_UNSPECIFIED
         description: |-
-            ExecutionStatus is the terminal outcome an executor reports for a phase.
-            Non-terminal progress (RUNNING) is observed server-side, not reported here.
+            FindingCode names something a prepare noticed but did not refuse.
 
-             - EXECUTION_STATUS_UNSPECIFIED: Default value. Must not be used.
-             - EXECUTION_STATUS_SUCCEEDED: The phase completed successfully.
-             - EXECUTION_STATUS_FAILED: The phase failed. See error_message.
-    v1Finding:
-        type: object
-        properties:
-            severity:
-                $ref: '#/definitions/v1FindingSeverity'
-            source:
-                type: string
-                description: 'What produced it: `provider-constraint`, `checkov`, `trivy`, `image-ref`.'
-            code:
-                type: string
-                description: |-
-                    The producer's own identifier for the rule, when it has one
-                    (e.g. `CKV_AWS_18`).
-            message:
-                type: string
-            path:
-                type: string
-                description: Where in the bundle, when it applies.
-        description: Finding is one thing the publish gate noticed.
+             - LOOKUP_USED: The chart calls `lookup`, which sees no cluster at prepare and returns
+            nothing.
+             - NONDETERMINISTIC: Two renders of identical inputs differ; the details name each object
+            and field.
+             - NO_CAPABILITIES: No cluster capabilities were reported; resources a chart includes
+            conditionally may be missing.
+             - SCOPE_GUESSED: A kind with no namespace was not known to be namespaced or cluster
+            scoped; it was given the namespace.
     v1FindingSeverity:
         type: string
         enum:
@@ -5096,28 +4911,13 @@ definitions:
         properties:
             agent:
                 $ref: '#/definitions/v1Agent'
-                description: The retrieved agent, including its server-derived health_status.
-        description: GetAgentResponse contains the agent record.
-    v1GetAgentStatusResponse:
+    v1GetApiKeyResponse:
         type: object
         properties:
-            health_status:
-                $ref: '#/definitions/v1AgentHealthStatus'
-                description: Server-derived health status based on reporting recency and kind signals.
-            terraform:
-                $ref: '#/definitions/v1TerraformAgentStatus'
-                description: Capacity snapshot for a TERRAFORM agent.
-            kubernetes:
-                $ref: '#/definitions/v1KubernetesAgentStatus'
-                description: Cluster telemetry snapshot for a KUBERNETES agent.
-            reported_at:
-                type: string
-                format: date-time
-                description: When the latest report was received.
-        description: |-
-            GetAgentStatusResponse contains the server-derived health status and the latest
-            kind-specific status snapshot. If the agent has not reported yet, health_status
-            will be PENDING and status will be absent.
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The key metadata. The key secret is never included.
+        description: GetApiKeyResponse contains the requested API key metadata.
     v1GetApplicationResponse:
         type: object
         properties:
@@ -5125,6 +4925,16 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The retrieved application.
         description: GetApplicationResponse contains the application record.
+    v1GetArtifactResponse:
+        type: object
+        properties:
+            artifact_digest:
+                type: string
+                description: '`sha256:<hex>` of the artifact as stored, before masking.'
+            artifact:
+                type: string
+                format: byte
+                description: The run artifact, a gzipped tar, with Secret values masked.
     v1GetChangeSetResponse:
         type: object
         properties:
@@ -5133,6 +4943,17 @@ definitions:
             head:
                 $ref: '#/definitions/apiChangesetV1Revision'
                 description: Absent before the first edit.
+            latest_prepare:
+                $ref: '#/definitions/v1Prepare'
+                description: The latest revision asked to be planned; absent when none was.
+            plan_stale:
+                type: boolean
+                description: True when the head is newer than latest_prepare's revision.
+    v1GetClusterResponse:
+        type: object
+        properties:
+            cluster:
+                $ref: '#/definitions/v1Cluster'
     v1GetComponentResponse:
         type: object
         properties:
@@ -5165,13 +4986,26 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The retrieved environment.
         description: GetEnvironmentResponse contains the environment record.
-    v1GetJobBundleResponse:
+    v1GetJobArtifactRequest:
         type: object
         properties:
-            bundle:
-                $ref: '#/definitions/v1JobBundle'
-                description: The artifact bundle with everything needed to execute the operation.
-        description: GetJobBundleResponse contains the rendered artifacts for execution.
+            attempt:
+                $ref: '#/definitions/v1Attempt'
+        required:
+            - attempt
+    v1GetJobArtifactResponse:
+        type: object
+        properties:
+            artifact_digest:
+                type: string
+            artifact:
+                type: string
+                format: byte
+    v1GetJobResponse:
+        type: object
+        properties:
+            job:
+                $ref: '#/definitions/v1Job'
     v1GetMeResponse:
         type: object
         properties:
@@ -5179,13 +5013,11 @@ definitions:
                 $ref: '#/definitions/v1User'
                 description: The user profile.
         description: GetMeResponse contains the authenticated user's profile.
-    v1GetRevisionBundleResponse:
+    v1GetPrepareResponse:
         type: object
         properties:
-            bundle:
-                $ref: '#/definitions/v1RevisionBundle'
-                description: The artifact bundle with everything needed to apply the workload.
-        description: GetRevisionBundleResponse contains the rendered manifests for the revision.
+            prepare:
+                $ref: '#/definitions/v1Prepare'
     v1GetRunResponse:
         type: object
         properties:
@@ -5205,13 +5037,6 @@ definitions:
                 $ref: '#/definitions/v1User'
                 description: The user profile.
         description: GetUserResponse contains the requested user's profile.
-    v1GetWorkloadResponse:
-        type: object
-        properties:
-            workload:
-                $ref: '#/definitions/v1Workload'
-                description: The workload with full detail.
-        description: GetWorkloadResponse contains the workload with full detail.
     v1GitHubAppAuth:
         type: object
         properties:
@@ -5234,130 +5059,8 @@ definitions:
         description: |-
             GitHubAppAuth identifies a GitHub App installation and holds the app's
             private key, from which the platform mints installation tokens.
-    v1HeartbeatRequest:
+    v1GrantAgentUseResponse:
         type: object
-        properties:
-            status:
-                $ref: '#/definitions/v1TerraformAgentStatus'
-                description: Current capacity and telemetry metrics.
-            instance_id:
-                type: string
-                description: |-
-                    Random UUID generated at process startup to distinguish multiple agent
-                    instances sharing the same SAT. The server tracks heartbeats per instance and
-                    aggregates capacity across instances. Not persisted across restarts.
-        description: |-
-            HeartbeatRequest contains a TERRAFORM agent's alive signal and current capacity.
-            The agent is identified by the SAT's binding; no agent_id is required.
-        required:
-            - status
-    v1HeartbeatResponse:
-        type: object
-        properties:
-            ack:
-                type: boolean
-                description: Whether the heartbeat was accepted.
-            next_heartbeat_seconds:
-                type: integer
-                format: int32
-                description: Server-controlled interval (seconds) before the next heartbeat.
-        description: HeartbeatResponse acknowledges the heartbeat.
-    v1Hook:
-        type: object
-        properties:
-            script:
-                type: string
-                description: |-
-                    The script body to execute, passed to the selected interpreter. The agent
-                    closes stdin (/dev/null) so interactive prompts cannot block execution.
-            timeout_seconds:
-                type: integer
-                format: int32
-                description: |-
-                    Per-script timeout in seconds. If 0, the agent applies its built-in default
-                    (currently 300s). A hook that exceeds its timeout is killed and fails.
-            name:
-                type: string
-                description: |-
-                    Optional human-friendly name used in log lines (e.g., "vault-login"). Not
-                    required to be unique.
-            interpreter:
-                $ref: '#/definitions/v1HookInterpreter'
-                description: |-
-                    Required. Which interpreter runs `script`. Server populates from the hook
-                    config; UNSPECIFIED is rejected.
-        description: |-
-            Hook is a single script hook delivered with a JobBundle. Scripts are inlined by
-            the server; the agent never fetches them from elsewhere.
-    v1HookInterpreter:
-        type: string
-        enum:
-            - HOOK_INTERPRETER_UNSPECIFIED
-            - HOOK_INTERPRETER_BASH
-        default: HOOK_INTERPRETER_UNSPECIFIED
-        description: |-
-            HookInterpreter selects which language the agent uses to execute a hook's
-            script body. Deliberately narrow today; the enum exists primarily as forward
-            plumbing so non-shell interpreters (Python, Node, etc.) can be added without a
-            breaking change. A hook created with the field unset defaults to
-            HOOK_INTERPRETER_BASH; UNSPECIFIED on the wire is rejected.
-
-             - HOOK_INTERPRETER_UNSPECIFIED: Default value. Must not be used.
-             - HOOK_INTERPRETER_BASH: Script is executed via `bash -c`. Requires bash in the agent image.
-    v1Hooks:
-        type: object
-        properties:
-            before_init:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Hook'
-                description: Scripts to run before the init phase. Fail-fast.
-            after_init:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Hook'
-                description: Scripts to run after init succeeded. Run-all; skipped if init failed.
-            before_plan:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Hook'
-                description: Scripts to run before the plan phase. Fail-fast.
-            after_plan:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Hook'
-                description: Scripts to run after plan succeeded. Run-all; skipped if plan failed.
-            before_apply:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Hook'
-                description: Scripts to run before the apply phase. Fail-fast.
-            after_apply:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Hook'
-                description: Scripts to run after apply succeeded. Run-all; skipped if apply failed.
-            after_run:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Hook'
-                description: |-
-                    Scripts to run after the job completes, regardless of outcome. Always
-                    executed (finally-semantics). Run-all.
-        description: |-
-            Hooks groups the seven lifecycle extension points. Scripts within a list run in
-            list order. Failure behavior differs by phase:
-              - `before_*` hooks are fail-fast: the first non-zero exit aborts the phase.
-              - `after_*` hooks run ONLY when the corresponding engine command succeeded;
-                they are run-all (individual failures are logged, not fatal).
-              - `after_run` always runs (the agent's `finally`). Also run-all.
     v1Invitation:
         type: object
         properties:
@@ -5432,254 +5135,143 @@ definitions:
         properties:
             id:
                 type: string
-                description: Unique identifier for the job (UUID).
-            agent_id:
-                type: string
-                description: The agent this job is assigned to (UUID).
-            revision_id:
-                type: string
-                description: The revision this job belongs to (UUID).
-            run_id:
-                type: string
-                description: The run this job belongs to (UUID). Denormalized for convenience.
-            job_type:
-                $ref: '#/definitions/v1JobType'
-                description: The type of infrastructure operation to execute.
+            kind:
+                $ref: '#/definitions/v1JobKind'
             status:
                 $ref: '#/definitions/v1JobStatus'
-                description: Current lifecycle status of the job.
-            started_at:
+            agent_id:
                 type: string
-                format: date-time
-                description: When the agent started executing the job.
-            completed_at:
+            environment_id:
                 type: string
-                format: date-time
-                description: When the job finished (succeeded, failed, or canceled).
+            change_set_id:
+                type: string
+                description: '`cs-` id; empty for a PROBE.'
+            revision:
+                type: integer
+                format: int32
+            artifact_digest:
+                type: string
+                description: '`sha256:<hex>` of the run artifact the job runs.'
+            attempt:
+                type: integer
+                format: int32
+            wait_reason:
+                $ref: '#/definitions/v1WaitReason'
+                description: Set while QUEUED.
+            result:
+                $ref: '#/definitions/v1JobResult'
             created_at:
                 type: string
                 format: date-time
-                description: When the job was created.
-        description: |-
-            Job represents an infrastructure execution job assigned to a TERRAFORM agent.
-            Jobs bridge the Run/Revision system and the agent execution plane.
-    v1JobBundle:
-        type: object
-        properties:
-            artifact_url:
+            started_at:
                 type: string
-                description: |-
-                    Signed URL to download the rendered artifact bundle (tar.gz of the rendered
-                    infrastructure source tree). Time-limited.
-            artifact_checksum:
+                format: date-time
+            finished_at:
                 type: string
-                description: SHA-256 checksum of the artifact bundle for integrity verification.
-            variables:
-                type: object
-                additionalProperties:
-                    type: string
-                description: |-
-                    Resolved variable values written to the workspace as an auto-loaded tfvars
-                    file. Sensitive values are included (the agent is a trusted execution
-                    context). Encoding contract: the agent writes the map verbatim as HCL
-                    `key = value` lines; the server produces the correct HCL literal per type.
-            provider_configs:
-                type: object
-                additionalProperties:
-                    type: string
-                description: |-
-                    Provider configuration blocks (JSON-encoded). Keys are provider names, values
-                    are JSON objects with provider config.
-            backend_config:
-                type: string
-                description: |-
-                    Backend configuration (JSON-encoded). Contains the backend type and its
-                    configuration for state storage. Engine-agnostic in shape.
-            engine:
-                $ref: '#/definitions/v1Engine'
-                description: |-
-                    Required. The infrastructure-as-code engine the agent should execute. Server
-                    populates from the catalog item's declared engine; UNSPECIFIED is rejected.
-            engine_version:
-                type: string
-                description: |-
-                    Version of the selected engine (e.g., "1.7.5"). Empty means the agent uses
-                    its pre-installed default. When set, the agent writes the appropriate version
-                    file so tfenv/tofuenv dispatches to the matching binary. If it cannot provide
-                    the requested version, the job fails fast; the server does not re-route.
-            working_directory:
-                type: string
-                description: |-
-                    Subdirectory within the extracted archive where the executor should run
-                    (e.g., "modules/cloudsql"). Empty means the archive root. The broader tree is
-                    preserved so relative module references resolve.
-            plan_file_url:
-                type: string
-                description: |-
-                    (Apply/destroy-apply jobs only) URL to download the binary plan file produced
-                    by the preceding plan job, passed to `apply <plan_file>` so the exact reviewed
-                    plan is applied. Empty for plan jobs.
-            hooks:
-                $ref: '#/definitions/v1Hooks'
-                description: |-
-                    Shell-script hooks that run before and after each engine phase. The agent
-                    invokes each hook via its selected interpreter in the execution directory.
-        description: |-
-            JobBundle contains everything a TERRAFORM agent needs to execute an
-            infrastructure operation. Fetched separately from ClaimJob to keep the claim
-            response light.
-    v1JobPhase:
+                format: date-time
+    v1JobKind:
         type: string
         enum:
-            - JOB_PHASE_UNSPECIFIED
-            - JOB_PHASE_INITIALIZING
-            - JOB_PHASE_PLANNING
-            - JOB_PHASE_APPLYING
-            - JOB_PHASE_FINALIZING
-        default: JOB_PHASE_UNSPECIFIED
-        description: |-
-            JobPhase represents the current execution phase of a job as reported by the
-            TERRAFORM agent's worker thread. Used in heartbeat payloads to give the server
-            visibility into job progress between ClaimJob and ReportJobResult.
-
-             - JOB_PHASE_UNSPECIFIED: Default value. Must not be used.
-             - JOB_PHASE_INITIALIZING: Downloading artifact bundle and setting up the workspace.
-             - JOB_PHASE_PLANNING: Running `terraform plan` (or `tofu plan`).
-             - JOB_PHASE_APPLYING: Running `terraform apply` (or `tofu apply`).
-             - JOB_PHASE_FINALIZING: Uploading results and cleaning up the workspace.
+            - JOB_KIND_UNSPECIFIED
+            - PROBE
+            - PLAN
+            - APPLY
+        default: JOB_KIND_UNSPECIFIED
+        description: |4-
+             - PROBE: Proves an agent can claim, start, renew, fetch and report. Queued when an
+            agent first reports, and on request.
+    v1JobResult:
+        type: object
+        properties:
+            status:
+                $ref: '#/definitions/v1JobStatus'
+                description: SUCCEEDED, FAILED or CANCELLED.
+            message:
+                type: string
+            steps:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Step'
+            output_json:
+                type: string
+                description: Kind-specific output as JSON text, e.g. a plan.
     v1JobStatus:
         type: string
         enum:
             - JOB_STATUS_UNSPECIFIED
-            - JOB_STATUS_PENDING
-            - JOB_STATUS_ASSIGNED
-            - JOB_STATUS_RUNNING
-            - JOB_STATUS_SUCCEEDED
-            - JOB_STATUS_FAILED
-            - JOB_STATUS_CANCELED
+            - QUEUED
+            - OFFERED
+            - RUNNING
+            - SUCCEEDED
+            - FAILED
+            - CANCELLED
         default: JOB_STATUS_UNSPECIFIED
-        description: |-
-            JobStatus represents the lifecycle state of a TERRAFORM agent job.
-
-             - JOB_STATUS_UNSPECIFIED: Default value. Must not be used.
-             - JOB_STATUS_PENDING: Job has been created but not yet assigned to an agent.
-             - JOB_STATUS_ASSIGNED: Job has been assigned to an agent and is waiting to be claimed.
-             - JOB_STATUS_RUNNING: Job has been claimed by the agent and is actively executing.
-             - JOB_STATUS_SUCCEEDED: Job completed successfully.
-             - JOB_STATUS_FAILED: Job failed. See ExecutionReport for details.
-             - JOB_STATUS_CANCELED: Job was canceled (e.g., parent run was canceled).
-    v1JobType:
-        type: string
-        enum:
-            - JOB_TYPE_UNSPECIFIED
-            - JOB_TYPE_PLAN
-            - JOB_TYPE_APPLY
-            - JOB_TYPE_DESTROY_PLAN
-            - JOB_TYPE_DESTROY_APPLY
-        default: JOB_TYPE_UNSPECIFIED
-        description: |-
-            JobType identifies the kind of infrastructure operation a job executes. The
-            concrete engine (Terraform or OpenTofu) is selected per job via
-            JobBundle.engine; the semantics of each type are identical across engines.
-
-             - JOB_TYPE_UNSPECIFIED: Default value. Must not be used.
-             - JOB_TYPE_PLAN: Generate an execution plan (e.g., `terraform plan` / `tofu plan`).
-             - JOB_TYPE_APPLY: Apply a previously generated plan.
-             - JOB_TYPE_DESTROY_PLAN: Generate a destroy plan.
-             - JOB_TYPE_DESTROY_APPLY: Apply a destroy plan (tear down resources).
-    v1KubernetesAgentStatus:
+        description: ' - OFFERED: Offered to an agent, not yet started.'
+    v1KubernetesCapabilities:
         type: object
         properties:
-            k8s_version:
+            kube_version:
                 type: string
-                description: Kubernetes version reported by the agent (e.g., "1.29.2").
-            node_count:
-                type: integer
-                format: int32
-                description: Total number of nodes in the cluster.
-            nodes_ready:
-                type: integer
-                format: int32
-                description: Number of nodes in Ready condition.
-            pod_capacity:
-                type: integer
-                format: int32
-                description: Maximum number of pods the cluster can schedule.
-            pod_count:
-                type: integer
-                format: int32
-                description: Total number of pods across all namespaces.
-            pods_running:
-                type: integer
-                format: int32
-                description: Number of pods in Running phase.
-            pods_pending:
-                type: integer
-                format: int32
-                description: Number of pods in Pending phase.
-            pods_failed:
-                type: integer
-                format: int32
-                description: Number of pods in Failed phase.
-            cpu_capacity_millicores:
+                description: e.g. `v1.31.2`.
+            api_versions:
+                type: array
+                items:
+                    type: string
+                description: Group/version strings, e.g. `monitoring.coreos.com/v1`.
+            reported_at:
                 type: string
-                format: int64
-                description: Total CPU capacity across all nodes, in millicores.
-            cpu_used_millicores:
+                format: date-time
+        description: KubernetesCapabilities is a cluster's version and installed API groups.
+    v1KubernetesPlacement:
+        type: object
+        properties:
+            namespace:
                 type: string
-                format: int64
-                description: Current CPU usage across all nodes, in millicores.
-            memory_capacity_bytes:
+                description: Empty means the environment's default namespace.
+            extra_namespaces:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Namespaces the component may also write to, such as `kube-system` for a
+                    chart's leader-election Role. The plan refuses an object in any other.
+        description: KubernetesPlacement is a workload component's namespace.
+    v1KubernetesTarget:
+        type: object
+        properties:
+            namespace:
                 type: string
-                format: int64
-                description: Total memory capacity across all nodes, in bytes.
-            memory_used_bytes:
-                type: string
-                format: int64
-                description: Current memory usage across all nodes, in bytes.
-            workloads_total:
-                type: integer
-                format: int32
-                description: Total number of tracked workloads.
-            workloads_healthy:
-                type: integer
-                format: int32
-                description: Number of workloads in healthy state.
-            workloads_degraded:
-                type: integer
-                format: int32
-                description: Number of workloads in degraded state.
-            workloads_error:
-                type: integer
-                format: int32
-                description: Number of workloads in error state.
-            metrics_available:
+                description: |-
+                    The namespace a component renders into unless it names its own. Set to
+                    `<application>-<environment>` when the environment is created if left
+                    empty; at most 63 characters.
+            create_namespaces:
                 type: boolean
                 description: |-
-                    Whether the metrics.k8s.io API is available in this cluster. When false,
-                    per-workload CPU/memory collection is disabled and the UI can surface an
-                    "install metrics-server" affordance.
-            namespace_count:
-                type: integer
-                format: int32
-                description: Total number of namespaces in the cluster.
-        description: |-
-            KubernetesAgentStatus contains cluster-level telemetry for a KUBERNETES agent,
-            as reported via ReportAgentStatus. Used in both the push payload and the read
-            response (GetAgentStatusResponse).
-    v1ListAgentJobsResponse:
+                    Whether a missing namespace is created at apply. The agent's own
+                    setting and its RBAC can still refuse. Defaults to true on create.
+            capabilities:
+                $ref: '#/definitions/v1KubernetesCapabilities'
+                description: |-
+                    What the cluster reported, rendered against at prepare. Absent until an
+                    agent reports.
+                readOnly: true
+            agent_id:
+                type: string
+                description: |-
+                    The agent this environment deploys through. It must be one the agent's
+                    owner granted to the tenant, a team, or this application. Empty selects
+                    none; capabilities then come from no cluster.
+        description: KubernetesTarget is where an environment's workload components go.
+    v1ListAgentGrantsResponse:
         type: object
         properties:
-            jobs:
+            grants:
                 type: array
                 items:
                     type: object
-                    $ref: '#/definitions/v1Job'
-                description: The list of jobs, ordered from newest to oldest.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListAgentJobsResponse contains a page of jobs.
+                    $ref: '#/definitions/v1AgentGrant'
     v1ListAgentsResponse:
         type: object
         properties:
@@ -5688,11 +5280,21 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1Agent'
-                description: The list of agents.
+            next_page_token:
+                type: string
+    v1ListApiKeysResponse:
+        type: object
+        properties:
+            api_keys:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ApiKey'
+                description: The list of keys. Secrets are never included.
             next_page_token:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
-        description: ListAgentsResponse contains a page of agents.
+        description: ListApiKeysResponse contains a page of API key metadata.
     v1ListApplicationsResponse:
         type: object
         properties:
@@ -5714,6 +5316,16 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1ChangeSet'
+            next_page_token:
+                type: string
+    v1ListClustersResponse:
+        type: object
+        properties:
+            clusters:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Cluster'
             next_page_token:
                 type: string
     v1ListComponentsResponse:
@@ -5791,6 +5403,16 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListInvitationsResponse contains a page of invitations.
+    v1ListJobsResponse:
+        type: object
+        properties:
+            jobs:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Job'
+            next_page_token:
+                type: string
     v1ListRunsResponse:
         type: object
         properties:
@@ -5816,53 +5438,21 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListUsersResponse contains a page of members.
-    v1ListWorkloadEventsResponse:
+    v1Offer:
         type: object
         properties:
-            events:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1WorkloadEvent'
-                description: The list of events.
-            next_page_token:
+            job:
+                $ref: '#/definitions/v1Job'
+            attempt:
+                type: integer
+                format: int32
+            lease_token:
                 type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListWorkloadEventsResponse contains a page of events.
-    v1ListWorkloadsResponse:
-        type: object
-        properties:
-            workloads:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Workload'
-                description: The list of workloads.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListWorkloadsResponse contains a page of workloads.
-    v1ObjectReference:
-        type: object
-        properties:
-            kind:
-                type: string
-                description: Kubernetes resource kind (e.g., "Pod", "ReplicaSet").
-            namespace:
-                type: string
-                description: Kubernetes namespace.
-            name:
-                type: string
-                description: Object name.
-            api_version:
-                type: string
-                description: Kubernetes apiVersion (e.g., "v1", "apps/v1"). Empty when unknown.
-            uid:
-                type: string
-                description: |-
-                    Object UID, used to disambiguate references across recreations. Empty when
-                    unknown.
-        description: ObjectReference is a lightweight reference to a Kubernetes object.
+                description: Presented on every later call for this attempt. Shown once.
+            offer_ttl_seconds:
+                type: integer
+                format: int32
+        description: Offer is work claimed for an agent, not yet started.
     v1PathDiff:
         type: object
         properties:
@@ -5888,6 +5478,89 @@ definitions:
             key:
                 type: string
         description: PathSegment is one step into a values tree. Only map keys exist.
+    v1Placement:
+        type: object
+        properties:
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesPlacement'
+        description: |-
+            Placement is where a component's objects go, per kind of target. A
+            component carries at most the block for its kind.
+    v1PlanChangeSetResponse:
+        type: object
+        properties:
+            prepare:
+                $ref: '#/definitions/v1Prepare'
+    v1Prepare:
+        type: object
+        properties:
+            revision:
+                type: integer
+                format: int32
+            status:
+                $ref: '#/definitions/v1PrepareStatus'
+            artifact_digest:
+                type: string
+                description: '`sha256:<hex>` of the run artifact; set once PREPARED.'
+            findings:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/apiChangesetV1Finding'
+            error:
+                $ref: '#/definitions/v1PrepareError'
+                description: Set when FAILED.
+            requested_by:
+                $ref: '#/definitions/v1ActorRef'
+            requested_by_kind:
+                $ref: '#/definitions/v1ActorKind'
+            requested_at:
+                type: string
+                format: date-time
+            finished_at:
+                type: string
+                format: date-time
+            attempts:
+                type: integer
+                format: int32
+        description: Prepare is a revision's render into its run artifact.
+    v1PrepareError:
+        type: object
+        properties:
+            class:
+                $ref: '#/definitions/v1PrepareErrorClass'
+            component:
+                type: string
+                description: Empty when the failure is not one component's.
+            message:
+                type: string
+        description: PrepareError is why a prepare failed.
+    v1PrepareErrorClass:
+        type: string
+        enum:
+            - PREPARE_ERROR_CLASS_UNSPECIFIED
+            - RENDER
+            - INFRA
+        default: PREPARE_ERROR_CLASS_UNSPECIFIED
+        description: |-
+            PrepareErrorClass says whether asking again can help.
+
+             - RENDER: The inputs cannot be rendered: asking again gives the same answer.
+             - INFRA: Storage or the database failed: asking again queues it again.
+    v1PrepareStatus:
+        type: string
+        enum:
+            - PREPARE_STATUS_UNSPECIFIED
+            - QUEUED
+            - RUNNING
+            - PREPARED
+            - FAILED
+            - SUPERSEDED
+        default: PREPARE_STATUS_UNSPECIFIED
+        description: |-
+            PrepareStatus is where a revision's prepare stands.
+
+             - SUPERSEDED: A newer revision was asked for before this one was taken up.
     v1PresentedCredential:
         type: object
         properties:
@@ -5903,6 +5576,17 @@ definitions:
         description: |-
             PresentedCredential is one credential a pull presented, as it was named at
             the time; the credential may since have been renamed or deleted.
+    v1Progress:
+        type: object
+        properties:
+            completed_steps:
+                type: integer
+                format: int32
+            total_steps:
+                type: integer
+                format: int32
+            current_component:
+                type: string
     v1Provenance:
         type: object
         properties:
@@ -6126,6 +5810,24 @@ definitions:
             one.
         required:
             - component
+    v1RenewLeaseRequest:
+        type: object
+        properties:
+            attempt:
+                $ref: '#/definitions/v1Attempt'
+            progress:
+                $ref: '#/definitions/v1Progress'
+        required:
+            - attempt
+    v1RenewLeaseResponse:
+        type: object
+        properties:
+            lease_ttl_seconds:
+                type: integer
+                format: int32
+            cancel_requested:
+                type: boolean
+                description: Stop, clean up, and report CANCELLED. The lease stays valid meanwhile.
     v1ReplaceValues:
         type: object
         properties:
@@ -6144,173 +5846,69 @@ definitions:
         required:
             - component
             - tree_json
-    v1ReportAgentStatusRequest:
+    v1ReportJobResultRequest:
         type: object
         properties:
-            status:
-                $ref: '#/definitions/v1KubernetesAgentStatus'
-                description: Cluster-level telemetry snapshot.
-            workloads:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1WorkloadStatus'
-                description: Per-workload status snapshots.
-            events:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1WorkloadEvent'
-                description: Kubernetes events observed since the last push.
-            reported_at:
+            attempt:
+                $ref: '#/definitions/v1Attempt'
+            report_id:
                 type: string
-                format: date-time
-                description: When the agent generated this report.
-            cluster_uid:
-                type: string
-                description: |-
-                    The Kubernetes kube-system namespace UID, used by the server to verify this
-                    token is still bound to the same physical cluster. Empty until resolved.
-        description: |-
-            ReportAgentStatusRequest contains a combined telemetry payload from a KUBERNETES
-            agent. Admiral splits this into storage tiers: current snapshot, time-series
-            metrics, and events. The agent is identified by the SAT's binding; the optional
-            cluster_uid lets the server verify the token is still bound to the same physical
-            cluster (trust-on-first-use).
+                description: Chosen by the agent; a retry with the same id returns the first answer.
+            result:
+                $ref: '#/definitions/v1JobResult'
         required:
-            - status
-    v1ReportAgentStatusResponse:
-        type: object
-        properties:
-            ack:
-                type: boolean
-                description: Whether the report was accepted.
-            next_push_seconds:
-                type: integer
-                format: int32
-                description: Server-controlled interval (seconds) before the next status push.
-            pending_revision_ids:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    IDs of workload revisions currently awaiting apply on this agent's cluster.
-                    The agent fetches each via GetRevisionBundle, applies it, and reports via
-                    ReportRevisionResult. Piggybacked on the telemetry heartbeat so the agent
-                    needs no separate poll loop.
-        description: ReportAgentStatusResponse acknowledges a telemetry push.
+            - attempt
+            - result
     v1ReportJobResultResponse:
         type: object
         properties:
-            ack:
-                type: boolean
-                description: Whether the result was accepted.
-        description: ReportJobResultResponse acknowledges the result.
-    v1ReportRevisionResultResponse:
+            outcome:
+                $ref: '#/definitions/v1ReportOutcome'
+    v1ReportOutcome:
+        type: string
+        enum:
+            - REPORT_OUTCOME_UNSPECIFIED
+            - ACCEPTED
+            - DUPLICATE
+            - LATE
+        default: REPORT_OUTCOME_UNSPECIFIED
+        description: |4-
+             - DUPLICATE: The same report_id was already accepted.
+             - LATE: The attempt had lost its lease: kept as evidence, no state change.
+    v1ReportStatusRequest:
         type: object
         properties:
-            ack:
-                type: boolean
-                description: Whether the result was accepted.
-        description: ReportRevisionResultResponse acknowledges the result.
-    v1ReportWorkloadMetricsRequest:
-        type: object
-        properties:
-            metrics:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1WorkloadMetric'
-                description: Per-pod metric samples collected since the last push.
-            reported_at:
+            agent_version:
                 type: string
-                format: date-time
-                description: When the agent generated this report.
-            cluster_uid:
-                type: string
-                description: |-
-                    The Kubernetes kube-system namespace UID, used by the server to verify this
-                    token is still bound to the same physical cluster. Empty until resolved.
-        description: |-
-            ReportWorkloadMetricsRequest contains a batch of per-pod resource samples from a
-            KUBERNETES agent. The agent is identified by the SAT's binding.
-    v1ReportWorkloadMetricsResponse:
-        type: object
-        properties:
-            ack:
-                type: boolean
-                description: Whether the report was accepted.
-            next_push_seconds:
+            protocol_version:
                 type: integer
                 format: int32
-                description: |-
-                    Server-controlled interval (seconds) before the next metrics push. Zero
-                    leaves the agent's configured cadence unchanged.
-        description: ReportWorkloadMetricsResponse acknowledges a workload metrics push.
-    v1ReportWorkloadStatusRequest:
-        type: object
-        properties:
-            workloads:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1WorkloadStatus'
-                description: Per-workload status snapshots.
-            reported_at:
+            kube_version:
                 type: string
-                format: date-time
-                description: When the agent generated this report.
-        description: |-
-            ReportWorkloadStatusRequest contains incremental workload telemetry from a
-            KUBERNETES agent. The agent is identified by the SAT's binding.
-    v1ReportWorkloadStatusResponse:
-        type: object
-        properties:
-            ack:
-                type: boolean
-                description: Whether the report was accepted.
-        description: ReportWorkloadStatusResponse acknowledges a workload telemetry push.
-    v1ResourceSnapshot:
-        type: object
-        properties:
-            group:
-                type: string
-                description: API group; empty for core resources (Pod, Service, ...).
-            version:
-                type: string
-                description: API version (e.g., "v1").
-            kind:
-                type: string
-                description: Kubernetes resource kind.
-            namespace:
-                type: string
-                description: Kubernetes namespace; empty for cluster-scoped resources.
-            name:
-                type: string
-                description: Object name.
-            sync:
-                $ref: '#/definitions/v1SyncState'
-                description: Whether this resource matches the bundle.
-            health:
-                $ref: '#/definitions/v1WorkloadHealthStatus'
-                description: Derived health of this resource.
-            message:
-                type: string
-                description: |-
-                    Short human-readable detail (e.g., "ready: 2/3", "ImagePullBackOff"). Empty
-                    for healthy resources.
-            field_owners:
+            api_versions:
                 type: array
                 items:
                     type: string
+            capabilities:
+                $ref: '#/definitions/v1AgentCapabilities'
+            jwks_json:
+                type: string
                 description: |-
-                    Field managers other than the agent that have touched this resource (from
-                    .metadata.managedFields). Empty when the agent is the sole writer; non-empty
-                    is the "known drift" signal (HPA, VPA, kubectl edits).
-        description: |-
-            ResourceSnapshot is the per-managed-resource entry inside a WorkloadStatus.
-            Identity is structured (group/version/kind/namespace/name) so the server does
-            not parse an encoded ID.
+                    The cluster's current keys, when the agent can read them. Accepted only
+                    when they still hold the key this call's token was verified with.
+            cluster_uid:
+                type: string
+    v1ReportStatusResponse:
+        type: object
+        properties:
+            next_report_seconds:
+                type: integer
+                format: int32
+            keys_accepted:
+                type: boolean
+                description: |-
+                    False when the reported key set was not taken as the cluster's keys. The
+                    rest of the report is still stored.
     v1RetryRevisionResponse:
         type: object
         properties:
@@ -6321,31 +5919,6 @@ definitions:
                     Downstream revisions that were BLOCKED will automatically unblock
                     if this revision succeeds.
         description: RetryRevisionResponse contains the updated revision.
-    v1RevisionBundle:
-        type: object
-        properties:
-            artifact_url:
-                type: string
-                description: |-
-                    Signed URL to download the rendered manifest bundle (tar.gz of ordered
-                    Kubernetes YAML manifests). Time-limited.
-            artifact_checksum:
-                type: string
-                description: SHA-256 checksum of the artifact bundle for integrity verification.
-            namespace:
-                type: string
-                description: |-
-                    The Kubernetes namespace to apply manifests into. Resolved from the
-                    component's target namespace (defaults to the environment name when empty).
-            component_name:
-                type: string
-                description: Component name for logging and status tracking.
-            ref:
-                type: string
-                description: The git ref / version selector being deployed (chart version, git ref).
-        description: |-
-            RevisionBundle contains pre-rendered Kubernetes manifests for a workload
-            revision, ready for server-side apply by a KUBERNETES agent.
     v1RevisionCause:
         type: string
         enum:
@@ -6444,6 +6017,15 @@ definitions:
         description: |-
             RevisionSummary provides aggregate counts of revision statuses within a
             run, enabling quick status display without loading all revisions.
+    v1RevokeAgentUseResponse:
+        type: object
+    v1RevokeApiKeyResponse:
+        type: object
+        properties:
+            api_key:
+                $ref: '#/definitions/v1ApiKey'
+                description: The key metadata with updated status.
+        description: RevokeApiKeyResponse contains the revoked API key metadata.
     v1RevokeInvitationResponse:
         type: object
         properties:
@@ -6591,6 +6173,11 @@ definitions:
                 type: string
                 description: Write-only.
         description: SSHKeyAuth is a PEM-encoded private key and its passphrase, if any.
+    v1SetClusterTrustResponse:
+        type: object
+        properties:
+            cluster:
+                $ref: '#/definitions/v1Cluster'
     v1SetNull:
         type: object
         properties:
@@ -6618,6 +6205,17 @@ definitions:
         required:
             - component
             - reference
+    v1SetPlacement:
+        type: object
+        properties:
+            component:
+                type: string
+            placement:
+                $ref: '#/definitions/v1Placement'
+        description: SetPlacement replaces where a component goes.
+        required:
+            - component
+            - placement
     v1SetRevisionStatusResponse:
         type: object
         properties:
@@ -6649,27 +6247,49 @@ definitions:
         required:
             - component
             - value_json
-    v1SyncState:
-        type: string
-        enum:
-            - SYNC_STATE_UNSPECIFIED
-            - SYNC_STATE_SYNCED
-            - SYNC_STATE_OUT_OF_SYNC
-            - SYNC_STATE_UNKNOWN
-            - SYNC_STATE_IGNORED
-        default: SYNC_STATE_UNSPECIFIED
-        description: |-
-            SyncState describes whether the live cluster state matches the desired bundle
-            for a workload's current revision.
-
-             - SYNC_STATE_UNSPECIFIED: Default value. Must not be used.
-             - SYNC_STATE_SYNCED: Every managed resource matches the bundle.
-             - SYNC_STATE_OUT_OF_SYNC: At least one managed resource has drifted from the bundle, and the drift is
-            not attributable to a known foreign field manager.
-             - SYNC_STATE_UNKNOWN: Sync state could not be determined (bundle unreachable, comparison failed).
-             - SYNC_STATE_IGNORED: The operator paused reconciliation of this resource (admiral.io/reconcile =
-            disabled), so the agent does not apply or prune it. Drift is not a failure
-            here; the resource is intentionally under manual control.
+    v1Slots:
+        type: object
+        properties:
+            kind:
+                $ref: '#/definitions/v1JobKind'
+            free:
+                type: integer
+                format: int32
+            capacity:
+                type: integer
+                format: int32
+                description: |-
+                    The most of this kind the agent runs at once. The server offers no more
+                    than this, whatever `free` says.
+        description: Slots is how many more jobs of a kind the agent will take now.
+    v1StartJobRequest:
+        type: object
+        properties:
+            attempt:
+                $ref: '#/definitions/v1Attempt'
+        required:
+            - attempt
+    v1StartJobResponse:
+        type: object
+        properties:
+            lease_ttl_seconds:
+                type: integer
+                format: int32
+                description: Renew before this passes, measured from when the request was sent.
+            max_run_seconds:
+                type: integer
+                format: int32
+                description: The job is failed once it has run this long, renewed or not.
+    v1Step:
+        type: object
+        properties:
+            component:
+                type: string
+            status:
+                $ref: '#/definitions/v1JobStatus'
+            message:
+                type: string
+        description: Step is one component's part of a job.
     v1Tag:
         type: object
         properties:
@@ -6747,34 +6367,6 @@ definitions:
              - TENANT_STATUS_PENDING: Provisioning has not finished; the tenant is not yet serving.
              - TENANT_STATUS_ACTIVE: Normal operation.
              - TENANT_STATUS_SUSPENDED: Access is withheld, typically for billing or abuse. Data is retained.
-    v1TerraformAgentStatus:
-        type: object
-        properties:
-            version:
-                type: string
-                description: The agent binary version (e.g., "1.2.0").
-            active_jobs:
-                type: integer
-                format: int32
-                description: Number of jobs currently being executed by this agent.
-            max_concurrent_jobs:
-                type: integer
-                format: int32
-                description: Maximum number of concurrent jobs this agent supports.
-            active_job_details:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ActiveJobInfo'
-                description: |-
-                    Details of jobs currently being executed by this agent instance. The worker
-                    thread updates job phase in shared memory; the heartbeat thread reads and
-                    includes it on each tick. `len(active_job_details)` equals `active_jobs` on
-                    every heartbeat (not capped or sampled).
-        description: |-
-            TerraformAgentStatus contains capacity and telemetry metrics for a TERRAFORM
-            agent, as reported via Heartbeat. Used in both the push payload
-            (HeartbeatRequest) and the read response (GetAgentStatusResponse).
     v1UnsetValue:
         type: object
         properties:
@@ -6793,8 +6385,6 @@ definitions:
         properties:
             agent:
                 $ref: '#/definitions/v1Agent'
-                description: The updated agent.
-        description: UpdateAgentResponse contains the updated agent.
     v1UpdateApiKeyResponse:
         type: object
         properties:
@@ -6892,9 +6482,6 @@ definitions:
                 description: Whether the user can currently sign in.
                 readOnly: true
         description: User represents a user's profile information.
-    v1UserAPIRevokeApiKeyBody:
-        type: object
-        description: RevokeApiKeyRequest identifies an API key to revoke.
     v1UserRole:
         type: string
         enum:
@@ -7090,314 +6677,24 @@ definitions:
         description: |-
             Violation is one way a component's values fail its pinned revision's
             contract.
-    v1Workload:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the workload within Admiral (UUID).
-            agent_id:
-                type: string
-                description: The agent (cluster) this workload belongs to (UUID).
-            namespace:
-                type: string
-                description: Kubernetes namespace.
-            name:
-                type: string
-                description: Workload name.
-            kind:
-                type: string
-                description: Kubernetes resource kind (e.g., "Deployment", "StatefulSet", "DaemonSet").
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: Kubernetes labels on the workload.
-            health_status:
-                $ref: '#/definitions/v1WorkloadHealthStatus'
-                description: Derived health status.
-            status_reason:
-                type: string
-                description: Human-readable reason for the current status (e.g., "MinimumReplicasUnavailable").
-            replicas_desired:
-                type: integer
-                format: int32
-                description: Number of desired replicas.
-            replicas_ready:
-                type: integer
-                format: int32
-                description: Number of ready replicas.
-            replicas_available:
-                type: integer
-                format: int32
-                description: Number of available replicas.
-            cpu_requests_millicores:
-                type: string
-                format: int64
-                description: CPU requests across all containers, in millicores.
-            cpu_limits_millicores:
-                type: string
-                format: int64
-                description: CPU limits across all containers, in millicores.
-            cpu_used_millicores:
-                type: string
-                format: int64
-                description: Current CPU usage across all containers, in millicores.
-            memory_requests_bytes:
-                type: string
-                format: int64
-                description: Memory requests across all containers, in bytes.
-            memory_limits_bytes:
-                type: string
-                format: int64
-                description: Memory limits across all containers, in bytes.
-            memory_used_bytes:
-                type: string
-                format: int64
-                description: Current memory usage across all containers, in bytes.
-            containers:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ContainerStatus'
-                description: Status of individual containers in this workload.
-            last_updated_at:
-                type: string
-                format: date-time
-                description: When this workload's status was last updated.
-            uid:
-                type: string
-                description: |-
-                    Rich detail (populated by GetWorkload; omitted from ListWorkloads). Mirrors
-                    the agent-reported WorkloadStatus.
-            generation:
-                type: string
-                format: int64
-            revision_id:
-                type: string
-            sync:
-                $ref: '#/definitions/v1SyncState'
-            suspended:
-                type: boolean
-            resources:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ResourceSnapshot'
-            conditions:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Condition'
-            observed_at:
-                type: string
-                format: date-time
-            last_reconciled_at:
-                type: string
-                format: date-time
-            last_applied_revision:
-                type: string
-        description: |-
-            Workload represents a Kubernetes workload (Deployment, StatefulSet, DaemonSet,
-            etc.) as observed by a KUBERNETES agent.
-    v1WorkloadEvent:
-        type: object
-        properties:
-            uid:
-                type: string
-                description: Kubernetes event UID, used for deduplication.
-            type:
-                type: string
-                description: 'Event type: "Normal" or "Warning".'
-            reason:
-                type: string
-                description: Short machine-readable reason (e.g., "BackOff", "FailedScheduling").
-            regarding:
-                $ref: '#/definitions/v1ObjectReference'
-                description: The Kubernetes object this event is about.
-            message:
-                type: string
-                description: Human-readable event message.
-            first_seen:
-                type: string
-                format: date-time
-                description: When this event was first observed.
-            last_seen:
-                type: string
-                format: date-time
-                description: When this event was most recently observed.
-            count:
-                type: integer
-                format: int32
-                description: Number of times this event has occurred.
-            component:
-                type: string
-                description: Reporting component (event source), e.g. "kubelet", "default-scheduler".
-            host:
-                type: string
-                description: Node the reporting component ran on. Empty for cluster-level sources.
-        description: |-
-            WorkloadEvent represents a Kubernetes event related to a workload or its child
-            objects. Events are deduplicated by their K8s UID.
-    v1WorkloadHealthStatus:
+    v1WaitReason:
         type: string
         enum:
-            - WORKLOAD_HEALTH_STATUS_UNSPECIFIED
-            - WORKLOAD_HEALTH_STATUS_HEALTHY
-            - WORKLOAD_HEALTH_STATUS_DEGRADED
-            - WORKLOAD_HEALTH_STATUS_ERROR
-            - WORKLOAD_HEALTH_STATUS_PROGRESSING
-            - WORKLOAD_HEALTH_STATUS_SUSPENDED
-            - WORKLOAD_HEALTH_STATUS_MISSING
-        default: WORKLOAD_HEALTH_STATUS_UNSPECIFIED
+            - WAIT_REASON_UNSPECIFIED
+            - NO_AGENT_SELECTED
+            - AGENT_NOT_GRANTED
+            - AGENT_OFFLINE
+            - AGENT_AT_CAPACITY
+            - AGENT_TOO_OLD
+            - ENVIRONMENT_BUSY
+            - BACKOFF
+            - CLUSTER_PENDING
+        default: WAIT_REASON_UNSPECIFIED
         description: |-
-            WorkloadHealthStatus represents the derived health state of a single workload.
+            WaitReason says why a queued job is not running.
 
-             - WORKLOAD_HEALTH_STATUS_UNSPECIFIED: Default value. Must not be used.
-             - WORKLOAD_HEALTH_STATUS_HEALTHY: All desired replicas ready, no CrashLoopBackOff, restarts stable.
-             - WORKLOAD_HEALTH_STATUS_DEGRADED: Some replicas not ready, restarts increasing, or pods pending over 5 minutes.
-             - WORKLOAD_HEALTH_STATUS_ERROR: Zero ready replicas, all containers CrashLoopBackOff, or deployment stuck.
-             - WORKLOAD_HEALTH_STATUS_PROGRESSING: Moving toward Healthy: rollout in progress, scheduling, or image pulls.
-             - WORKLOAD_HEALTH_STATUS_SUSPENDED: Deliberately paused (e.g. Application suspend, CronJob suspend=true).
-            Not an alert condition.
-             - WORKLOAD_HEALTH_STATUS_MISSING: Declared in the bundle but absent from the cluster.
-    v1WorkloadMetric:
-        type: object
-        properties:
-            application:
-                $ref: '#/definitions/v1ApplicationRef'
-                description: The Application that owns the pod's top-level controller.
-            pod:
-                $ref: '#/definitions/v1ObjectReference'
-                description: The pod this sample was taken from.
-            node:
-                type: string
-                description: Name of the node the pod is scheduled on.
-            cpu_millicores:
-                type: string
-                format: int64
-                description: CPU usage summed across all containers in the pod, in millicores.
-            memory_bytes:
-                type: string
-                format: int64
-                description: Memory usage summed across all containers in the pod, in bytes.
-            window:
-                type: string
-                description: The metrics-server scrape window this sample represents (typically ~30s).
-            timestamp:
-                type: string
-                format: date-time
-                description: When metrics-server recorded the sample.
-        description: |-
-            WorkloadMetric is a single per-pod CPU/memory sample from metrics-server,
-            tagged with the Application that owns the pod's top-level controller. Admiral
-            aggregates samples pod -> workload -> cluster server-side.
-    v1WorkloadStatus:
-        type: object
-        properties:
-            namespace:
-                type: string
-                description: Kubernetes namespace.
-            name:
-                type: string
-                description: Workload name.
-            kind:
-                type: string
-                description: Kubernetes resource kind (e.g., "Deployment", "StatefulSet").
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: Kubernetes labels on the workload.
-            replicas_desired:
-                type: integer
-                format: int32
-                description: Number of desired replicas.
-            replicas_ready:
-                type: integer
-                format: int32
-                description: Number of ready replicas.
-            replicas_available:
-                type: integer
-                format: int32
-                description: Number of available replicas.
-            cpu_requests_millicores:
-                type: string
-                format: int64
-                description: CPU requests across all containers, in millicores.
-            cpu_limits_millicores:
-                type: string
-                format: int64
-                description: CPU limits across all containers, in millicores.
-            cpu_used_millicores:
-                type: string
-                format: int64
-                description: Current CPU usage across all containers, in millicores.
-            memory_requests_bytes:
-                type: string
-                format: int64
-                description: Memory requests across all containers, in bytes.
-            memory_limits_bytes:
-                type: string
-                format: int64
-                description: Memory limits across all containers, in bytes.
-            memory_used_bytes:
-                type: string
-                format: int64
-                description: Current memory usage across all containers, in bytes.
-            health_status:
-                $ref: '#/definitions/v1WorkloadHealthStatus'
-                description: Derived health status.
-            containers:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ContainerStatus'
-                description: Status of individual containers.
-            uid:
-                type: string
-                description: |-
-                    Kubernetes object UID. Stable identity across rename (rename is delete +
-                    recreate, so a changed UID means a different workload).
-            generation:
-                type: string
-                format: int64
-                description: The .metadata.generation observed for this workload.
-            revision_id:
-                type: string
-                description: The Admiral revision this workload was reconciled against.
-            sync:
-                $ref: '#/definitions/v1SyncState'
-                description: Whether the live cluster state matches the bundle.
-            suspended:
-                type: boolean
-                description: Whether the workload is deliberately paused (Application suspend).
-            resources:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1ResourceSnapshot'
-                description: Per-managed-resource inventory with sync/health and foreign field owners.
-            conditions:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Condition'
-                description: Typed observations on the workload as a whole.
-            observed_at:
-                type: string
-                format: date-time
-                description: When the agent took this observation.
-            last_reconciled_at:
-                type: string
-                format: date-time
-                description: When the workload was last reconciled.
-            last_applied_revision:
-                type: string
-                description: The last revision the agent successfully applied.
-        description: |-
-            WorkloadStatus is the agent-reported status for a single workload within a
-            telemetry push payload.
+             - ENVIRONMENT_BUSY: Another APPLY holds the environment.
+             - BACKOFF: Retrying after a failed attempt.
 servers:
     - url: "{baseUrl}"
       description: Admiral API server
@@ -7436,8 +6733,9 @@ x-tagGroups:
         - Credentials
     - name: Agents
       tags:
+        - Clusters
         - Agents
-        - Agent Tokens
+        - Jobs
     - name: Identity & Access
       tags:
         - User

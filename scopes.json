@@ -2,7 +2,7 @@
   "groups": [
     {
       "name": "agent",
-      "description": "Execution agents, their tokens, and the jobs and workloads they run."
+      "description": "Clusters, the agents in them, who may use each, and the jobs they run."
     },
     {
       "name": "app",
@@ -47,24 +47,24 @@
   ],
   "scopes": [
     {
-      "name": "agent:deploy",
-      "description": "Fetch revision bundles and report revision results."
+      "name": "agent:enroll",
+      "description": "Enroll a cluster, once, from inside it. Held only by a single-use enrollment key."
     },
     {
       "name": "agent:exec",
-      "description": "Agent runtime job execution — heartbeat, claim jobs, fetch job bundles, and report job results."
+      "description": "Agent runtime work — claim, start, renew, fetch the artifact of, and report jobs."
     },
     {
       "name": "agent:read",
-      "description": "Read agents, agent tokens, jobs, workloads, and workload events."
+      "description": "Read clusters, agents, who may use them, and their jobs."
     },
     {
       "name": "agent:status",
-      "description": "Report agent status, workload status, and workload metrics."
+      "description": "Report an agent's status, its cluster's capabilities, and its cluster's keys."
     },
     {
       "name": "agent:write",
-      "description": "Create, update, and delete agents; manage agent tokens and identity bindings.",
+      "description": "Connect clusters; create, update and delete agents; issue enrollment keys; grant use; cancel jobs.",
       "implies": [
         "agent:read"
       ]
