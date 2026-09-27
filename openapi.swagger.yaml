@@ -17,8 +17,8 @@ tags:
         agent enrolls it with a single-use enrollment key.
 
         An environment deploys through the agent it selects, and may select only an
-        agent whose owner granted use to the whole tenant, one of its teams, or its
-        application.
+        agent granted to the organization, a team, its application, or the
+        environment itself.
     - name: AgentRuntimeAPI
       description: |-
         AgentRuntimeAPI is what an agent calls while it works. Its routes live
@@ -248,8 +248,8 @@ paths:
                 - AgentAPI
         delete:
             summary: |-
-                DeleteAgent removes an agent. Its leases end in the same transaction, and
-                environments that selected it select none.
+                DeleteAgent removes an agent. Its leases end at once, and environments that
+                selected it select none.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_DeleteAgent
             responses:
@@ -347,8 +347,9 @@ paths:
                 - AgentAPI
         post:
             summary: |-
-                GrantAgentUse lets the whole tenant, a team, or an application's
-                environments select an agent. Only the agent's owner or a tenant admin may.
+                GrantAgentUse lets the organization, a team, an application's
+                environments, or one environment select an agent. Only the agent's owner
+                or a tenant admin may.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_GrantAgentUse
             responses:
@@ -376,7 +377,8 @@ paths:
         post:
             summary: |-
                 RevokeAgentUse withdraws a grant. Environments that selected the agent
-                under it keep the selection until they change it, but claim nothing new.
+                under it keep the selection until they change it, and their new jobs wait
+                with AGENT_NOT_GRANTED.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_RevokeAgentUse
             responses:
@@ -1000,9 +1002,8 @@ paths:
     /v1/clusters/{cluster_id}/trust:
         post:
             summary: |-
-                SetClusterTrust replaces how a cluster is trusted: an issuer URL, or keys.
-                It is how a person rotates the keys of a cluster whose key was replaced
-                outright.
+                SetClusterTrust replaces how a cluster is trusted: an issuer URL, uploaded
+                keys, or the keys an agent last reported.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_SetClusterTrust
             responses:
@@ -3710,7 +3711,7 @@ definitions:
                 type: array
                 items:
                     type: string
-                description: Namespaces it may write; empty with `all_namespaces` means everywhere.
+                description: Namespaces it may write. Empty when `all_namespaces` is set.
             all_namespaces:
                 type: boolean
             can_write_cluster_scoped:
@@ -3730,20 +3731,30 @@ definitions:
                 type: array
                 items:
                     type: string
+                description: |-
+                    Glob patterns. A namespace that matches is refused even when
+                    `allowed_namespaces` matches it too.
         description: |-
             AgentCeiling is what the agent's owner allows it, whatever its RBAC allows.
             The plan refuses what falls outside it.
     v1AgentGrant:
         type: object
         properties:
-            tenant:
+            organization:
                 type: boolean
-                description: Every environment in the tenant. Only `true` means anything.
+                description: Every environment in the organization. Must be `true`.
             group_id:
                 type: string
+                description: |-
+                    Any member of the group can select the agent for an environment they
+                    can edit.
             application_id:
                 type: string
-        description: AgentGrant is who may select an agent.
+            environment_id:
+                type: string
+        description: |-
+            AgentGrant lets environments select an agent. Set exactly one target; an
+            agent can hold several grants.
     v1AgentHealth:
         type: string
         enum:
@@ -4131,7 +4142,6 @@ definitions:
                 type: array
                 items:
                     type: string
-                description: The key ids trusted now.
                 readOnly: true
             keys_updated_at:
                 type: string
@@ -4175,7 +4185,9 @@ definitions:
                 description: A JSON Web Key Set, as the cluster serves it at /openid/v1/jwks.
             accept_reported:
                 type: boolean
-                description: Trust the key set an agent last reported. Only on SetClusterTrust.
+                description: |-
+                    Trust the key set an agent last reported. Only on SetClusterTrust. Must
+                    be `true`.
         description: ClusterTrust is how a cluster's tokens are verified.
     v1ComponentDiff:
         type: object
@@ -4316,8 +4328,8 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1AgentGrant'
                 description: |-
-                    Who may use it. Absent grants the whole tenant when this is the tenant's
-                    first agent, and nobody otherwise.
+                    Who may use it. Absent grants the organization when this is its first
+                    agent, and nobody otherwise.
             enrollment_key:
                 type: boolean
                 description: Issue a single-use enrollment key with the agent.
@@ -5919,11 +5931,11 @@ definitions:
             next_report_seconds:
                 type: integer
                 format: int32
-            keys_accepted:
+            keys_match:
                 type: boolean
                 description: |-
-                    False when the reported key set was not taken as the cluster's keys. The
-                    rest of the report is still stored.
+                    False when the reported keys differ from the trusted ones; the difference
+                    is recorded for an admin. The rest of the report is still stored.
     v1RetryRevisionResponse:
         type: object
         properties:

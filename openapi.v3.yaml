@@ -455,7 +455,9 @@ paths:
                     format: uuid
                 - name: status
                   in: query
-                  description: UNSPECIFIED lists every status.
+                  description: |
+                    UNSPECIFIED lists every status.
+                    enum.defined_only = true
                   schema:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetStatus'
@@ -1233,6 +1235,8 @@ paths:
                                         enum:
                                             - REVISION_STATUS_UNSPECIFIED
                                     title: status
+                                    description: |
+                                        enum.defined_only = true
                                 reason:
                                     type: string
                                     title: reason
@@ -1431,7 +1435,9 @@ paths:
                     title: page_token
                 - name: type
                   in: query
-                  description: Only credentials of this type, when set.
+                  description: |
+                    Only credentials of this type, when set.
+                    enum.defined_only = true
                   schema:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
@@ -1921,7 +1927,9 @@ paths:
                     format: uuid
                 - name: status
                   in: query
-                  description: UNSPECIFIED lists every status.
+                  description: |
+                    UNSPECIFIED lists every status.
+                    enum.defined_only = true
                   schema:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
@@ -2716,7 +2724,7 @@ components:
                     items:
                         type: string
                     title: writable_namespaces
-                    description: Namespaces it may write; empty with `all_namespaces` means everywhere.
+                    description: Namespaces it may write. Empty when `all_namespaces` is set.
                 all_namespaces:
                     type: boolean
                     title: all_namespaces
@@ -2749,6 +2757,9 @@ components:
                         minLength: 1
                     title: denied_namespaces
                     maxItems: 64
+                    description: |-
+                        Glob patterns. A namespace that matches is refused even when
+                         `allowed_namespaces` matches it too.
             title: AgentCeiling
             additionalProperties: false
             description: |-
@@ -2759,11 +2770,13 @@ components:
             allOf:
                 - oneOf:
                     - required:
-                        - tenant
+                        - organization
                     - required:
                         - group_id
                     - required:
                         - application_id
+                    - required:
+                        - environment_id
             anyOf:
                 - type: object
                   properties:
@@ -2774,19 +2787,29 @@ components:
                   title: application_id
                 - type: object
                   properties:
+                    environment_id:
+                        type: string
+                        title: environment_id
+                        format: uuid
+                  title: environment_id
+                - type: object
+                  properties:
                     group_id:
                         type: string
                         title: group_id
                         format: uuid
+                        description: |-
+                            Any member of the group can select the agent for an environment they
+                             can edit.
                   title: group_id
                 - type: object
                   properties:
-                    tenant:
+                    organization:
                         type: boolean
-                        title: tenant
-                        description: Every environment in the tenant. Only `true` means anything.
+                        title: organization
+                        description: Every environment in the organization. Must be `true`.
                         const: true
-                  title: tenant
+                  title: organization
             unevaluatedProperties: false
             not:
                 allOf:
@@ -2794,19 +2817,25 @@ components:
                         - required:
                             - application_id
                         - required:
+                            - environment_id
+                        - required:
                             - group_id
                         - required:
-                            - tenant
+                            - organization
                     - not:
                         oneOf:
                             - required:
                                 - application_id
                             - required:
+                                - environment_id
+                            - required:
                                 - group_id
                             - required:
-                                - tenant
+                                - organization
             title: AgentGrant
-            description: AgentGrant is who may select an agent.
+            description: |-
+                AgentGrant lets environments select an agent. Set exactly one target; an
+                 agent can hold several grants.
         admiral.api.agent.v1.AgentHealth:
             type: string
             title: AgentHealth
@@ -2960,7 +2989,6 @@ components:
                         type: string
                         readOnly: true
                     title: key_ids
-                    description: The key ids trusted now.
                     readOnly: true
                 keys_updated_at:
                     allOf:
@@ -3009,7 +3037,9 @@ components:
                     accept_reported:
                         type: boolean
                         title: accept_reported
-                        description: Trust the key set an agent last reported. Only on SetClusterTrust.
+                        description: |-
+                            Trust the key set an agent last reported. Only on SetClusterTrust. Must
+                             be `true`.
                         const: true
                   title: accept_reported
                 - type: object
@@ -3089,8 +3119,8 @@ components:
                     title: grants
                     maxItems: 64
                     description: |-
-                        Who may use it. Absent grants the whole tenant when this is the tenant's
-                         first agent, and nobody otherwise.
+                        Who may use it. Absent grants the organization when this is its first
+                         agent, and nobody otherwise.
                 enrollment_key:
                     type: boolean
                     title: enrollment_key
@@ -3562,7 +3592,9 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
                     title: status
-                    description: UNSPECIFIED lists every status.
+                    description: |
+                        UNSPECIFIED lists every status.
+                        enum.defined_only = true
                 page_size:
                     type: integer
                     title: page_size
@@ -3741,12 +3773,12 @@ components:
                     type: integer
                     title: next_report_seconds
                     format: int32
-                keys_accepted:
+                keys_match:
                     type: boolean
-                    title: keys_accepted
+                    title: keys_match
                     description: |-
-                        False when the reported key set was not taken as the cluster's keys. The
-                         rest of the report is still stored.
+                        False when the reported keys differ from the trusted ones; the difference
+                         is recorded for an admin. The rest of the report is still stored.
             title: ReportStatusResponse
             additionalProperties: false
         admiral.api.agent.v1.RevokeAgentUseRequest:
@@ -3804,6 +3836,8 @@ components:
                         enum:
                             - JOB_KIND_UNSPECIFIED
                     title: kind
+                    description: |
+                        enum.defined_only = true
                 free:
                     type: integer
                     title: free
@@ -3858,6 +3892,8 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
                     title: status
+                    description: |
+                        enum.defined_only = true
                 message:
                     type: string
                     title: message
@@ -4836,7 +4872,9 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSetStatus'
                     title: status
-                    description: UNSPECIFIED lists every status.
+                    description: |
+                        UNSPECIFIED lists every status.
+                        enum.defined_only = true
                 page_size:
                     type: integer
                     title: page_size
@@ -5789,6 +5827,8 @@ components:
                         enum:
                             - CREDENTIAL_TYPE_UNSPECIFIED
                     title: type
+                    description: |
+                        enum.defined_only = true
                 auth_config:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.AuthConfig'
@@ -6002,7 +6042,9 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.credential.v1.CredentialType'
                     title: type
-                    description: Only credentials of this type, when set.
+                    description: |
+                        Only credentials of this type, when set.
+                        enum.defined_only = true
             title: ListCredentialsRequest
             additionalProperties: false
         admiral.api.credential.v1.ListCredentialsResponse:
@@ -6572,7 +6614,9 @@ components:
                     enum:
                         - USER_ROLE_ADMIN
                         - USER_ROLE_MEMBER
-                    description: The role to hold on joining. ADMIN or MEMBER.
+                    description: |
+                        The role to hold on joining. ADMIN or MEMBER.
+                        enum.defined_only = true
             title: CreateInvitationRequest
             required:
                 - email
@@ -7746,6 +7790,8 @@ components:
                         enum:
                             - REVISION_STATUS_UNSPECIFIED
                     title: status
+                    description: |
+                        enum.defined_only = true
                 reason:
                     type: string
                     title: reason
