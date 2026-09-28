@@ -4,6 +4,26 @@ info:
     description: The Admiral REST API for managing applications, infrastructure, and runs. See https://admiral.io/docs for complete documentation.
     version: v1
 paths:
+    /v1/agent/jobs/plan-diff:
+        post:
+            tags:
+                - Agent Runtime
+            summary: Upload a plan's diffs
+            description: 'Scope: `agent:exec`'
+            operationId: AgentRuntimeAPI_UploadPlanDiff
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.agent.v1.UploadPlanDiffRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.UploadPlanDiffResponse'
     /v1/agents:
         get:
             tags:
@@ -810,6 +830,70 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.GetArtifactResponse'
+    /v1/changesets/{change_set_id}/revisions/{revision}/plan:
+        get:
+            tags:
+                - ChangeSets
+            summary: Retrieve a revision's plan
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetPlan
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change_set_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                - name: revision
+                  in: path
+                  description: The revision path parameter.
+                  required: true
+                  schema:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.changeset.v1.GetPlanResponse'
+    /v1/changesets/{change_set_id}/revisions/{revision}/plan/diff:
+        get:
+            tags:
+                - ChangeSets
+            summary: Retrieve a plan's diffs
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetPlanDiff
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change_set_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                - name: revision
+                  in: path
+                  description: The revision path parameter.
+                  required: true
+                  schema:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.changeset.v1.GetPlanDiffResponse'
     /v1/changesets/{change_set_id}/revisions/{revision}/prepare:
         get:
             tags:
@@ -3082,6 +3166,37 @@ components:
                                 - jwks_json
             title: ClusterTrust
             description: ClusterTrust is how a cluster's tokens are verified.
+        admiral.api.agent.v1.ComponentInventory:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                resources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ResourceRef'
+                    title: resources
+            title: ComponentInventory
+            additionalProperties: false
+            description: |-
+                ComponentInventory is what the last apply of a component left in the
+                 cluster.
+        admiral.api.agent.v1.ComponentPlan:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                changes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ResourceChange'
+                    title: changes
+                    maxItems: 5000
+            title: ComponentPlan
+            additionalProperties: false
         admiral.api.agent.v1.CreateAgentRequest:
             type: object
             properties:
@@ -3338,6 +3453,14 @@ components:
                     type: string
                     title: artifact
                     format: byte
+                previous_inventory:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ComponentInventory'
+                    title: previous_inventory
+                    description: |-
+                        What the environment's last apply of each component left: a PLAN finds
+                         destroys in it, an APPLY prunes from it.
             title: GetJobArtifactResponse
             additionalProperties: false
         admiral.api.agent.v1.GetJobRequest:
@@ -3467,11 +3590,11 @@ components:
                     items:
                         $ref: '#/components/schemas/admiral.api.agent.v1.Step'
                     title: steps
-                output_json:
-                    type: string
-                    title: output_json
-                    maxLength: 16777216
-                    description: Kind-specific output as JSON text, e.g. a plan.
+                plan:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.PlanResult'
+                    title: plan
+                    description: Set by a PLAN.
             title: JobResult
             additionalProperties: false
         admiral.api.agent.v1.JobStatus:
@@ -3643,6 +3766,37 @@ components:
             title: Offer
             additionalProperties: false
             description: Offer is work claimed for an agent, not yet started.
+        admiral.api.agent.v1.PlanDiff:
+            type: object
+            properties:
+                resources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ResourceDiff'
+                    title: resources
+                    maxItems: 5000
+            title: PlanDiff
+            additionalProperties: false
+            description: PlanDiff is a plan's full diffs, stored apart from the job.
+        admiral.api.agent.v1.PlanResult:
+            type: object
+            properties:
+                components:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ComponentPlan'
+                    title: components
+                    maxItems: 256
+                diff_digest:
+                    type: string
+                    title: diff_digest
+                    maxLength: 71
+                    description: '`sha256:<hex>` of the PlanDiff uploaded for this attempt.'
+            title: PlanResult
+            additionalProperties: false
+            description: |-
+                PlanResult is a PLAN job's typed outcome. Its digest is the plan's
+                 identity: two plans with the same changes have the same digest.
         admiral.api.agent.v1.Progress:
             type: object
             properties:
@@ -3781,6 +3935,84 @@ components:
                          is recorded for an admin. The rest of the report is still stored.
             title: ReportStatusResponse
             additionalProperties: false
+        admiral.api.agent.v1.ResourceAction:
+            type: string
+            title: ResourceAction
+            enum:
+                - RESOURCE_ACTION_UNSPECIFIED
+                - NO_OP
+                - CREATE
+                - UPDATE
+                - REPLACE
+                - DESTROY
+            description: ResourceAction is what applying a plan does to one object.
+        admiral.api.agent.v1.ResourceChange:
+            type: object
+            properties:
+                resource:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ResourceRef'
+                    title: resource
+                action:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ResourceAction'
+                    not:
+                        enum:
+                            - RESOURCE_ACTION_UNSPECIFIED
+                    title: action
+                    description: |
+                        enum.defined_only = true
+                diff_digest:
+                    type: string
+                    title: diff_digest
+                    maxLength: 71
+                    description: '`sha256:<hex>` of this resource''s diff in the PlanDiff. Empty for NO_OP.'
+            title: ResourceChange
+            additionalProperties: false
+        admiral.api.agent.v1.ResourceDiff:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                resource:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ResourceRef'
+                    title: resource
+                diff:
+                    type: string
+                    title: diff
+                    maxLength: 1048576
+                    description: |-
+                        Unified diff from the live object to the desired one, both normalized.
+                         A Secret's data shows each key as added, changed or removed, never a
+                         value.
+            title: ResourceDiff
+            additionalProperties: false
+        admiral.api.agent.v1.ResourceRef:
+            type: object
+            properties:
+                api_version:
+                    type: string
+                    title: api_version
+                    maxLength: 253
+                kind:
+                    type: string
+                    title: kind
+                    maxLength: 63
+                namespace:
+                    type: string
+                    title: namespace
+                    maxLength: 63
+                    description: Empty for a cluster-scoped object.
+                name:
+                    type: string
+                    title: name
+                    maxLength: 253
+            title: ResourceRef
+            additionalProperties: false
+            description: ResourceRef names one Kubernetes object.
         admiral.api.agent.v1.RevokeAgentUseRequest:
             type: object
             properties:
@@ -3931,6 +4163,31 @@ components:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                     title: agent
             title: UpdateAgentResponse
+            additionalProperties: false
+        admiral.api.agent.v1.UploadPlanDiffRequest:
+            type: object
+            properties:
+                attempt:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Attempt'
+                    title: attempt
+                diff:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.PlanDiff'
+                    title: diff
+            title: UploadPlanDiffRequest
+            required:
+                - attempt
+                - diff
+            additionalProperties: false
+        admiral.api.agent.v1.UploadPlanDiffResponse:
+            type: object
+            properties:
+                diff_digest:
+                    type: string
+                    title: diff_digest
+                    description: '`sha256:<hex>` of the diff as stored.'
+            title: UploadPlanDiffResponse
             additionalProperties: false
         admiral.api.agent.v1.WaitReason:
             type: string
@@ -4785,6 +5042,58 @@ components:
                     format: int32
             title: GetComponentValuesResponse
             additionalProperties: false
+        admiral.api.changeset.v1.GetPlanDiffRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                revision:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+            title: GetPlanDiffRequest
+            required:
+                - change_set_id
+                - revision
+            additionalProperties: false
+        admiral.api.changeset.v1.GetPlanDiffResponse:
+            type: object
+            properties:
+                diff:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.PlanDiff'
+                    title: diff
+            title: GetPlanDiffResponse
+            additionalProperties: false
+        admiral.api.changeset.v1.GetPlanRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                revision:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+            title: GetPlanRequest
+            required:
+                - change_set_id
+                - revision
+            additionalProperties: false
+        admiral.api.changeset.v1.GetPlanResponse:
+            type: object
+            properties:
+                plan:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.Plan'
+                    title: plan
+            title: GetPlanResponse
+            additionalProperties: false
         admiral.api.changeset.v1.GetPrepareRequest:
             type: object
             properties:
@@ -5009,6 +5318,62 @@ components:
             description: |-
                 Placement is where a component's objects go, per kind of target. A
                  component carries at most the block for its kind.
+        admiral.api.changeset.v1.Plan:
+            type: object
+            properties:
+                revision:
+                    type: integer
+                    title: revision
+                    format: int32
+                job_id:
+                    type: string
+                    title: job_id
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
+                    title: status
+                wait_reason:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.WaitReason'
+                    title: wait_reason
+                    description: Set while QUEUED.
+                agent_id:
+                    type: string
+                    title: agent_id
+                    description: What the plan runs against.
+                agent_name:
+                    type: string
+                    title: agent_name
+                cluster_id:
+                    type: string
+                    title: cluster_id
+                cluster_name:
+                    type: string
+                    title: cluster_name
+                plan_digest:
+                    type: string
+                    title: plan_digest
+                    description: '`sha256:<hex>` of the changes: identical plans have identical digests.'
+                components:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ComponentPlan'
+                    title: components
+                message:
+                    type: string
+                    title: message
+                    description: Why the plan failed, when it did.
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                finished_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: finished_at
+            title: Plan
+            additionalProperties: false
+            description: Plan is a prepared revision planned against its environment's cluster.
         admiral.api.changeset.v1.PlanChangeSetRequest:
             type: object
             properties:

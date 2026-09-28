@@ -164,6 +164,30 @@ consumes:
 produces:
     - application/json
 paths:
+    /v1/agent/jobs/plan-diff:
+        post:
+            summary: |-
+                UploadPlanDiff stores a PLAN attempt's full diffs, to the attempt
+                holding the lease, and returns their digest for the report to name.
+            description: 'Scope: `agent:exec`'
+            operationId: AgentRuntimeAPI_UploadPlanDiff
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UploadPlanDiffResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1UploadPlanDiffRequest'
+            tags:
+                - AgentRuntimeAPI
     /v1/agents:
         get:
             summary: |-
@@ -863,6 +887,63 @@ paths:
                     description: A successful response.
                     schema:
                         $ref: '#/definitions/v1GetArtifactResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: revision
+                  in: path
+                  required: true
+                  type: integer
+                  format: int32
+            tags:
+                - ChangeSetAPI
+    /v1/changesets/{change_set_id}/revisions/{revision}/plan:
+        get:
+            summary: |-
+                GetPlan returns the plan of one prepared revision: the PLAN job's status
+                and why it waits, the agent and cluster it runs against, and once done
+                each component's changes. NOT_FOUND when the revision was not planned.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetPlan
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetPlanResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: revision
+                  in: path
+                  required: true
+                  type: integer
+                  format: int32
+            tags:
+                - ChangeSetAPI
+    /v1/changesets/{change_set_id}/revisions/{revision}/plan/diff:
+        get:
+            summary: |-
+                GetPlanDiff returns a finished plan's full diffs, Secret values masked.
+                FAILED_PRECONDITION until the plan has succeeded.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetPlanDiff
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetPlanDiffResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -4212,6 +4293,19 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1Violation'
+    v1ComponentInventory:
+        type: object
+        properties:
+            component:
+                type: string
+            resources:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ResourceRef'
+        description: |-
+            ComponentInventory is what the last apply of a component left in the
+            cluster.
     v1ComponentLabels:
         type: object
         properties:
@@ -4222,6 +4316,16 @@ definitions:
         description: |-
             ComponentLabels wraps a label map so its presence in an update can be told
             from an empty map: present and empty clears the labels.
+    v1ComponentPlan:
+        type: object
+        properties:
+            component:
+                type: string
+            changes:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ResourceChange'
     v1Contract:
         type: object
         properties:
@@ -5028,6 +5132,14 @@ definitions:
             artifact:
                 type: string
                 format: byte
+            previous_inventory:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentInventory'
+                description: |-
+                    What the environment's last apply of each component left: a PLAN finds
+                    destroys in it, an APPLY prunes from it.
     v1GetJobResponse:
         type: object
         properties:
@@ -5040,6 +5152,16 @@ definitions:
                 $ref: '#/definitions/v1User'
                 description: The user profile.
         description: GetMeResponse contains the authenticated user's profile.
+    v1GetPlanDiffResponse:
+        type: object
+        properties:
+            diff:
+                $ref: '#/definitions/v1PlanDiff'
+    v1GetPlanResponse:
+        type: object
+        properties:
+            plan:
+                $ref: '#/definitions/v1Plan'
     v1GetPrepareResponse:
         type: object
         properties:
@@ -5220,9 +5342,9 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1Step'
-            output_json:
-                type: string
-                description: Kind-specific output as JSON text, e.g. a plan.
+            plan:
+                $ref: '#/definitions/v1PlanResult'
+                description: Set by a PLAN.
     v1JobStatus:
         type: string
         enum:
@@ -5513,11 +5635,74 @@ definitions:
         description: |-
             Placement is where a component's objects go, per kind of target. A
             component carries at most the block for its kind.
+    v1Plan:
+        type: object
+        properties:
+            revision:
+                type: integer
+                format: int32
+            job_id:
+                type: string
+            status:
+                $ref: '#/definitions/v1JobStatus'
+            wait_reason:
+                $ref: '#/definitions/v1WaitReason'
+                description: Set while QUEUED.
+            agent_id:
+                type: string
+                description: What the plan runs against.
+            agent_name:
+                type: string
+            cluster_id:
+                type: string
+            cluster_name:
+                type: string
+            plan_digest:
+                type: string
+                description: '`sha256:<hex>` of the changes: identical plans have identical digests.'
+            components:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentPlan'
+            message:
+                type: string
+                description: Why the plan failed, when it did.
+            created_at:
+                type: string
+                format: date-time
+            finished_at:
+                type: string
+                format: date-time
+        description: Plan is a prepared revision planned against its environment's cluster.
     v1PlanChangeSetResponse:
         type: object
         properties:
             prepare:
                 $ref: '#/definitions/v1Prepare'
+    v1PlanDiff:
+        type: object
+        properties:
+            resources:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ResourceDiff'
+        description: PlanDiff is a plan's full diffs, stored apart from the job.
+    v1PlanResult:
+        type: object
+        properties:
+            components:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentPlan'
+            diff_digest:
+                type: string
+                description: '`sha256:<hex>` of the PlanDiff uploaded for this attempt.'
+        description: |-
+            PlanResult is a PLAN job's typed outcome. Its digest is the plan's
+            identity: two plans with the same changes have the same digest.
     v1Prepare:
         type: object
         properties:
@@ -5936,6 +6121,56 @@ definitions:
                 description: |-
                     False when the reported keys differ from the trusted ones; the difference
                     is recorded for an admin. The rest of the report is still stored.
+    v1ResourceAction:
+        type: string
+        enum:
+            - RESOURCE_ACTION_UNSPECIFIED
+            - NO_OP
+            - CREATE
+            - UPDATE
+            - REPLACE
+            - DESTROY
+        default: RESOURCE_ACTION_UNSPECIFIED
+        description: |-
+            ResourceAction is what applying a plan does to one object.
+
+             - REPLACE: Deleted and created again: an immutable field changed.
+    v1ResourceChange:
+        type: object
+        properties:
+            resource:
+                $ref: '#/definitions/v1ResourceRef'
+            action:
+                $ref: '#/definitions/v1ResourceAction'
+            diff_digest:
+                type: string
+                description: '`sha256:<hex>` of this resource''s diff in the PlanDiff. Empty for NO_OP.'
+    v1ResourceDiff:
+        type: object
+        properties:
+            component:
+                type: string
+            resource:
+                $ref: '#/definitions/v1ResourceRef'
+            diff:
+                type: string
+                description: |-
+                    Unified diff from the live object to the desired one, both normalized.
+                    A Secret's data shows each key as added, changed or removed, never a
+                    value.
+    v1ResourceRef:
+        type: object
+        properties:
+            api_version:
+                type: string
+            kind:
+                type: string
+            namespace:
+                type: string
+                description: Empty for a cluster-scoped object.
+            name:
+                type: string
+        description: ResourceRef names one Kubernetes object.
     v1RetryRevisionResponse:
         type: object
         properties:
@@ -6468,6 +6703,22 @@ definitions:
         properties:
             tenant:
                 $ref: '#/definitions/v1Tenant'
+    v1UploadPlanDiffRequest:
+        type: object
+        properties:
+            attempt:
+                $ref: '#/definitions/v1Attempt'
+            diff:
+                $ref: '#/definitions/v1PlanDiff'
+        required:
+            - attempt
+            - diff
+    v1UploadPlanDiffResponse:
+        type: object
+        properties:
+            diff_digest:
+                type: string
+                description: '`sha256:<hex>` of the diff as stored.'
     v1User:
         type: object
         properties:
