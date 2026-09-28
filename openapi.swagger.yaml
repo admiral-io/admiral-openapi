@@ -164,6 +164,31 @@ consumes:
 produces:
     - application/json
 paths:
+    /v1/agent/jobs/check-plan:
+        post:
+            summary: |-
+                CheckApplyPlan compares an APPLY attempt's fresh plan with the plan it
+                applies. `proceed` false means the cluster changed since that plan: stop
+                before changing anything and report FAILED.
+            description: 'Scope: `agent:exec`'
+            operationId: AgentRuntimeAPI_CheckApplyPlan
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CheckApplyPlanResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CheckApplyPlanRequest'
+            tags:
+                - AgentRuntimeAPI
     /v1/agent/jobs/plan-diff:
         post:
             summary: |-
@@ -599,7 +624,11 @@ paths:
                   required: true
                   type: string
                 - name: status
-                  description: UNSPECIFIED lists every status.
+                  description: |-
+                    UNSPECIFIED lists every status.
+
+                     - APPLYING: Its head revision is being applied.
+                     - PARTIALLY_APPLIED: Its apply stopped partway; the environment is held until it is resolved.
                   in: query
                   required: false
                   type: string
@@ -607,6 +636,9 @@ paths:
                     - CHANGE_SET_STATUS_UNSPECIFIED
                     - DRAFT
                     - DISCARDED
+                    - APPLYING
+                    - APPLIED
+                    - PARTIALLY_APPLIED
                   default: CHANGE_SET_STATUS_UNSPECIFIED
                 - name: page_size
                   in: query
@@ -662,6 +694,101 @@ paths:
                   in: path
                   required: true
                   type: string
+            tags:
+                - ChangeSetAPI
+    /v1/changesets/{change_set_id}/accept-partial:
+        post:
+            summary: |-
+                AcceptPartialApply takes a partial apply as the environment's new state
+                and releases the hold. It is recorded with its reason.
+            description: 'Scope: `changeset:write`'
+            operationId: ChangeSetAPI_AcceptPartialApply
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1AcceptPartialApplyResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPIAcceptPartialApplyBody'
+            tags:
+                - ChangeSetAPI
+    /v1/changesets/{change_set_id}/apply:
+        post:
+            summary: |-
+                ApplyChangeSet queues the apply of a revision's current plan. It takes the
+                environment's lock. The agent re-plans first and stops if the cluster
+                changed since the plan.
+            description: |-
+                FAILED_PRECONDITION when the plan is not current or did not succeed, an
+                approval is required and missing, the change set was cut from an older
+                generation of the environment (rebase needed), or another change set holds
+                the environment.
+
+                Scope: `changeset:write`
+            operationId: ChangeSetAPI_ApplyChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ApplyChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPIApplyChangeSetBody'
+            tags:
+                - ChangeSetAPI
+    /v1/changesets/{change_set_id}/approve:
+        post:
+            summary: |-
+                ApproveChangeSet approves one plan of a revision. Only a person approves,
+                and not one who revised the change set, unless they are the only person
+                able to approve; that self-approval needs a reason and is recorded.
+            description: |-
+                FAILED_PRECONDITION when `plan_digest` is not the revision's current plan.
+
+                Scope: `changeset:write`
+            operationId: ChangeSetAPI_ApproveChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ApproveChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPIApproveChangeSetBody'
             tags:
                 - ChangeSetAPI
     /v1/changesets/{change_set_id}/components/{component}/values:
@@ -814,6 +941,36 @@ paths:
                     $ref: '#/definitions/ChangeSetAPIPlanChangeSetBody'
             tags:
                 - ChangeSetAPI
+    /v1/changesets/{change_set_id}/revert:
+        post:
+            summary: |-
+                RevertChangeSet opens a new change set that returns every component the
+                given change set's apply changed to its state before that apply. History
+                moves forward: the revert is planned, approved and applied like any other
+                change set, and may apply while the reverted apply holds the environment.
+            description: 'Scope: `changeset:write`'
+            operationId: ChangeSetAPI_RevertChangeSet
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1RevertChangeSetResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ChangeSetAPIRevertChangeSetBody'
+            tags:
+                - ChangeSetAPI
     /v1/changesets/{change_set_id}/revisions:
         get:
             summary: |-
@@ -866,6 +1023,32 @@ paths:
                   required: true
                   type: string
                 - name: number
+                  in: path
+                  required: true
+                  type: integer
+                  format: int32
+            tags:
+                - ChangeSetAPI
+    /v1/changesets/{change_set_id}/revisions/{revision}/apply:
+        get:
+            summary: GetApply returns a revision's apply. NOT_FOUND when it was never applied.
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetApply
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetApplyResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/rpcStatus'
+            parameters:
+                - name: change_set_id
+                  in: path
+                  required: true
+                  type: string
+                - name: revision
                   in: path
                   required: true
                   type: integer
@@ -2787,6 +2970,39 @@ definitions:
         description: UpdateApplicationRequest contains the application fields to update.
         required:
             - application
+    ChangeSetAPIAcceptPartialApplyBody:
+        type: object
+        properties:
+            reason:
+                type: string
+        required:
+            - reason
+    ChangeSetAPIApplyChangeSetBody:
+        type: object
+        properties:
+            revision:
+                type: integer
+                format: int32
+            plan_digest:
+                type: string
+                description: The plan being applied; refused unless it is the revision's current plan.
+        required:
+            - revision
+            - plan_digest
+    ChangeSetAPIApproveChangeSetBody:
+        type: object
+        properties:
+            revision:
+                type: integer
+                format: int32
+            plan_digest:
+                type: string
+            reason:
+                type: string
+                description: Required for a self-approval.
+        required:
+            - revision
+            - plan_digest
     ChangeSetAPIDiscardChangeSetBody:
         type: object
     ChangeSetAPIEditChangeSetBody:
@@ -2811,6 +3027,11 @@ definitions:
                 type: integer
                 format: int32
                 description: When set, refused unless the head is this revision.
+    ChangeSetAPIRevertChangeSetBody:
+        type: object
+        properties:
+            title:
+                type: string
     CredentialAPIUpdateCredentialBody:
         type: object
         properties:
@@ -2926,6 +3147,30 @@ definitions:
                     kubernetes:
                         $ref: '#/definitions/v1KubernetesTarget'
                         description: Where workload components go. Omitted fields keep their defaults.
+                    approval_required:
+                        type: boolean
+                        description: Whether applying a change set here needs an approval. Off by default.
+                    generation:
+                        type: string
+                        format: int64
+                        description: |-
+                            Moves each time an apply changes the environment. A change set records
+                            the generation it was cut from.
+                        readOnly: true
+                    held_by_change_set_id:
+                        type: string
+                        description: |-
+                            The change set whose partial apply holds the environment. Nothing else
+                            applies until it is resolved.
+                        readOnly: true
+                    prune:
+                        type: boolean
+                        description: |-
+                            Whether an apply deletes objects a component no longer renders, and the
+                            objects of a component it removes. Off, they are orphaned: left in the
+                            cluster and no longer managed. An object annotated
+                            `admiral.io/prune: "false"` is orphaned either way. Defaults to true on
+                            create.
                 description: |-
                     The environment with updated fields.
                     Only fields specified in `update_mask` are updated.
@@ -2935,7 +3180,8 @@ definitions:
                     The set of fields to update. Optional; if omitted, all populated fields
                     are updated. Pass `*` for full replacement. Supported fields: `name`,
                     `description`, `labels`, `kubernetes.namespace`,
-                    `kubernetes.create_namespaces`, `kubernetes.agent_id`.
+                    `kubernetes.create_namespaces`, `kubernetes.agent_id`,
+                    `approval_required`, `prune`.
         description: UpdateEnvironmentRequest contains the environment fields to update.
         required:
             - environment
@@ -3706,6 +3952,11 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/protobufAny'
+    v1AcceptPartialApplyResponse:
+        type: object
+        properties:
+            apply:
+                $ref: '#/definitions/v1Apply'
     v1ActorKind:
         type: string
         enum:
@@ -4016,6 +4267,52 @@ definitions:
             Application represents a deployable unit within a tenant. An application
             groups manifests, dependencies, and environment configuration into a single
             entity that Admiral orchestrates across environments.
+    v1Apply:
+        type: object
+        properties:
+            revision:
+                type: integer
+                format: int32
+            job_id:
+                type: string
+            status:
+                $ref: '#/definitions/v1JobStatus'
+            wait_reason:
+                $ref: '#/definitions/v1WaitReason'
+                description: Set while QUEUED.
+            plan_digest:
+                type: string
+            components:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentApply'
+            message:
+                type: string
+            applied_by:
+                $ref: '#/definitions/v1ActorRef'
+            created_at:
+                type: string
+                format: date-time
+            finished_at:
+                type: string
+                format: date-time
+            accepted_by:
+                $ref: '#/definitions/v1ActorRef'
+                description: Set when a partial apply was accepted as the environment's new state.
+            accepted_reason:
+                type: string
+            accepted_at:
+                type: string
+                format: date-time
+        description: |-
+            Apply is a revision's apply: its APPLY job and what happened to each
+            component, in apply order.
+    v1ApplyChangeSetResponse:
+        type: object
+        properties:
+            apply:
+                $ref: '#/definitions/v1Apply'
     v1ApplyRunResponse:
         type: object
         properties:
@@ -4025,6 +4322,30 @@ definitions:
                     The run with status advanced to APPLYING. Revisions that were
                     PLANNED are now APPLYING.
         description: ApplyRunResponse contains the run after apply jobs are dispatched.
+    v1Approval:
+        type: object
+        properties:
+            revision:
+                type: integer
+                format: int32
+            plan_digest:
+                type: string
+            approved_by:
+                $ref: '#/definitions/v1ActorRef'
+            self_approval:
+                type: boolean
+                description: The approver revised the change set and was the only one able to approve.
+            reason:
+                type: string
+            approved_at:
+                type: string
+                format: date-time
+        description: Approval is a sign-off on one plan of a revision.
+    v1ApproveChangeSetResponse:
+        type: object
+        properties:
+            approval:
+                $ref: '#/definitions/v1Approval'
     v1Attempt:
         type: object
         properties:
@@ -4142,13 +4463,25 @@ definitions:
                 type: string
                 format: date-time
                 readOnly: true
+            reverts_change_set_id:
+                type: string
+                description: |-
+                    Set on a change set made by RevertChangeSet: the change set it reverts.
+                    It may apply while that change set's partial apply holds the environment.
+                readOnly: true
     v1ChangeSetStatus:
         type: string
         enum:
             - CHANGE_SET_STATUS_UNSPECIFIED
             - DRAFT
             - DISCARDED
+            - APPLYING
+            - APPLIED
+            - PARTIALLY_APPLIED
         default: CHANGE_SET_STATUS_UNSPECIFIED
+        description: |4-
+             - APPLYING: Its head revision is being applied.
+             - PARTIALLY_APPLIED: Its apply stopped partway; the environment is held until it is resolved.
     v1ChangeSummary:
         type: object
         properties:
@@ -4173,6 +4506,24 @@ definitions:
             execution does: creates, updates, deletes, and no-ops. Every executor maps
             its native result onto this shape -- terraform's +/~/- plan counts and
             kubernetes server-side-apply created/configured/deleted.
+    v1CheckApplyPlanRequest:
+        type: object
+        properties:
+            attempt:
+                $ref: '#/definitions/v1Attempt'
+            plan:
+                $ref: '#/definitions/v1PlanResult'
+        required:
+            - attempt
+            - plan
+    v1CheckApplyPlanResponse:
+        type: object
+        properties:
+            proceed:
+                type: boolean
+            message:
+                type: string
+                description: Why not, when `proceed` is false.
     v1ClaimJobRequest:
         type: object
         properties:
@@ -4270,6 +4621,16 @@ definitions:
                     Trust the key set an agent last reported. Only on SetClusterTrust. Must
                     be `true`.
         description: ClusterTrust is how a cluster's tokens are verified.
+    v1ComponentApply:
+        type: object
+        properties:
+            component:
+                type: string
+            status:
+                $ref: '#/definitions/v1JobStatus'
+                description: QUEUED until reached, then SUCCEEDED or FAILED.
+            message:
+                type: string
     v1ComponentDiff:
         type: object
         properties:
@@ -4822,6 +5183,8 @@ definitions:
                 $ref: '#/definitions/v1RemoveComponent'
             set_placement:
                 $ref: '#/definitions/v1SetPlacement'
+            set_depends_on:
+                $ref: '#/definitions/v1SetDependsOn'
         description: |-
             Edit is one change a request makes. A request's edits apply in order and
             become one revision.
@@ -4896,6 +5259,11 @@ definitions:
             placement:
                 $ref: '#/definitions/v1Placement'
                 description: Where the component goes after this change set. Empty on DESTROY.
+            depends_on:
+                type: array
+                items:
+                    type: string
+                description: Components this one applies after, after this change set.
         description: Entry is what one revision does to one component.
     v1EntryAction:
         type: string
@@ -4969,6 +5337,30 @@ definitions:
             kubernetes:
                 $ref: '#/definitions/v1KubernetesTarget'
                 description: Where workload components go. Omitted fields keep their defaults.
+            approval_required:
+                type: boolean
+                description: Whether applying a change set here needs an approval. Off by default.
+            generation:
+                type: string
+                format: int64
+                description: |-
+                    Moves each time an apply changes the environment. A change set records
+                    the generation it was cut from.
+                readOnly: true
+            held_by_change_set_id:
+                type: string
+                description: |-
+                    The change set whose partial apply holds the environment. Nothing else
+                    applies until it is resolved.
+                readOnly: true
+            prune:
+                type: boolean
+                description: |-
+                    Whether an apply deletes objects a component no longer renders, and the
+                    objects of a component it removes. Off, they are orphaned: left in the
+                    cluster and no longer managed. An object annotated
+                    `admiral.io/prune: "false"` is orphaned either way. Defaults to true on
+                    create.
         description: |-
             Environment represents a named deployment target for an application
             (e.g., dev, staging, prod). Each environment carries its own configuration
@@ -5056,6 +5448,11 @@ definitions:
                 $ref: '#/definitions/v1Application'
                 description: The retrieved application.
         description: GetApplicationResponse contains the application record.
+    v1GetApplyResponse:
+        type: object
+        properties:
+            apply:
+                $ref: '#/definitions/v1Apply'
     v1GetArtifactResponse:
         type: object
         properties:
@@ -5345,6 +5742,14 @@ definitions:
             plan:
                 $ref: '#/definitions/v1PlanResult'
                 description: Set by a PLAN.
+            inventory:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentInventory'
+                description: |-
+                    Set by an APPLY: what each component it reached left in the cluster,
+                    including one that failed partway.
     v1JobStatus:
         type: string
         enum:
@@ -5674,6 +6079,12 @@ definitions:
             finished_at:
                 type: string
                 format: date-time
+            approvals:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Approval'
+                description: Approvals of this plan. A different plan dismisses them.
         description: Plan is a prepared revision planned against its environment's cluster.
     v1PlanChangeSetResponse:
         type: object
@@ -6130,11 +6541,14 @@ definitions:
             - UPDATE
             - REPLACE
             - DESTROY
+            - ORPHAN
         default: RESOURCE_ACTION_UNSPECIFIED
         description: |-
             ResourceAction is what applying a plan does to one object.
 
              - REPLACE: Deleted and created again: an immutable field changed.
+             - ORPHAN: Left in the cluster and no longer managed: pruning is off for it, or it
+            is a Namespace, which is never deleted.
     v1ResourceChange:
         type: object
         properties:
@@ -6181,6 +6595,11 @@ definitions:
                     Downstream revisions that were BLOCKED will automatically unblock
                     if this revision succeeds.
         description: RetryRevisionResponse contains the updated revision.
+    v1RevertChangeSetResponse:
+        type: object
+        properties:
+            change_set:
+                $ref: '#/definitions/v1ChangeSet'
     v1RevisionCause:
         type: string
         enum:
@@ -6440,6 +6859,20 @@ definitions:
         properties:
             cluster:
                 $ref: '#/definitions/v1Cluster'
+    v1SetDependsOn:
+        type: object
+        properties:
+            component:
+                type: string
+            depends_on:
+                type: array
+                items:
+                    type: string
+        description: |-
+            SetDependsOn replaces the components a component applies after. Empty
+            clears it. A cycle is refused.
+        required:
+            - component
     v1SetNull:
         type: object
         properties:

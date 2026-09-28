@@ -4,6 +4,26 @@ info:
     description: The Admiral REST API for managing applications, infrastructure, and runs. See https://admiral.io/docs for complete documentation.
     version: v1
 paths:
+    /v1/agent/jobs/check-plan:
+        post:
+            tags:
+                - Agent Runtime
+            summary: Check an apply's plan
+            description: 'Scope: `agent:exec`'
+            operationId: AgentRuntimeAPI_CheckApplyPlan
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.agent.v1.CheckApplyPlanRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.agent.v1.CheckApplyPlanResponse'
     /v1/agent/jobs/plan-diff:
         post:
             tags:
@@ -546,6 +566,148 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.GetChangeSetResponse'
+    /v1/changesets/{change_set_id}/accept-partial:
+        post:
+            tags:
+                - ChangeSets
+            summary: Accept a partial apply
+            description: 'Scope: `changeset:write`'
+            operationId: ChangeSetAPI_AcceptPartialApply
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change_set_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                reason:
+                                    type: string
+                                    title: reason
+                                    maxLength: 1024
+                                    minLength: 1
+                            title: AcceptPartialApplyRequest
+                            required:
+                                - reason
+                            additionalProperties: false
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.changeset.v1.AcceptPartialApplyResponse'
+    /v1/changesets/{change_set_id}/apply:
+        post:
+            tags:
+                - ChangeSets
+            summary: Apply a change set
+            description: |-
+                FAILED_PRECONDITION when the plan is not current or did not succeed, an
+                 approval is required and missing, the change set was cut from an older
+                 generation of the environment (rebase needed), or another change set holds
+                 the environment.
+
+                 Scope: `changeset:write`
+            operationId: ChangeSetAPI_ApplyChangeSet
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change_set_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                revision:
+                                    type: integer
+                                    title: revision
+                                    minimum: 1
+                                    format: int32
+                                plan_digest:
+                                    type: string
+                                    title: plan_digest
+                                    pattern: ^sha256:[0-9a-f]{64}$
+                                    description: The plan being applied; refused unless it is the revision's current plan.
+                            title: ApplyChangeSetRequest
+                            required:
+                                - revision
+                                - plan_digest
+                            additionalProperties: false
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.changeset.v1.ApplyChangeSetResponse'
+    /v1/changesets/{change_set_id}/approve:
+        post:
+            tags:
+                - ChangeSets
+            summary: Approve a change set's plan
+            description: |-
+                FAILED_PRECONDITION when `plan_digest` is not the revision's current plan.
+
+                 Scope: `changeset:write`
+            operationId: ChangeSetAPI_ApproveChangeSet
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change_set_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                revision:
+                                    type: integer
+                                    title: revision
+                                    minimum: 1
+                                    format: int32
+                                plan_digest:
+                                    type: string
+                                    title: plan_digest
+                                    pattern: ^sha256:[0-9a-f]{64}$
+                                reason:
+                                    type: string
+                                    title: reason
+                                    maxLength: 1024
+                                    description: Required for a self-approval.
+                            title: ApproveChangeSetRequest
+                            required:
+                                - revision
+                                - plan_digest
+                            additionalProperties: false
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.changeset.v1.ApproveChangeSetResponse'
     /v1/changesets/{change_set_id}/components/{component}/values:
         get:
             tags:
@@ -728,6 +890,42 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.PlanChangeSetResponse'
+    /v1/changesets/{change_set_id}/revert:
+        post:
+            tags:
+                - ChangeSets
+            summary: Revert a change set
+            description: 'Scope: `changeset:write`'
+            operationId: ChangeSetAPI_RevertChangeSet
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change_set_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                title:
+                                    type: string
+                                    title: title
+                                    maxLength: 256
+                            title: RevertChangeSetRequest
+                            additionalProperties: false
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.changeset.v1.RevertChangeSetResponse'
     /v1/changesets/{change_set_id}/revisions:
         get:
             tags:
@@ -798,6 +996,38 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.changeset.v1.GetRevisionResponse'
+    /v1/changesets/{change_set_id}/revisions/{revision}/apply:
+        get:
+            tags:
+                - ChangeSets
+            summary: Retrieve a revision's apply
+            description: 'Scope: `changeset:read`'
+            operationId: ChangeSetAPI_GetApply
+            parameters:
+                - name: change_set_id
+                  in: path
+                  description: The change_set_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                - name: revision
+                  in: path
+                  description: The revision path parameter.
+                  required: true
+                  schema:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.changeset.v1.GetApplyResponse'
     /v1/changesets/{change_set_id}/revisions/{revision}/artifact:
         get:
             tags:
@@ -1738,7 +1968,8 @@ paths:
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                                          `description`, `labels`, `kubernetes.namespace`,
-                                         `kubernetes.create_namespaces`, `kubernetes.agent_id`.
+                                         `kubernetes.create_namespaces`, `kubernetes.agent_id`,
+                                         `approval_required`, `prune`.
                             title: UpdateEnvironmentRequest
                             additionalProperties: false
                             description: UpdateEnvironmentRequest contains the environment fields to update.
@@ -2998,6 +3229,34 @@ components:
                     title: job
             title: CancelJobResponse
             additionalProperties: false
+        admiral.api.agent.v1.CheckApplyPlanRequest:
+            type: object
+            properties:
+                attempt:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Attempt'
+                    title: attempt
+                plan:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.PlanResult'
+                    title: plan
+            title: CheckApplyPlanRequest
+            required:
+                - attempt
+                - plan
+            additionalProperties: false
+        admiral.api.agent.v1.CheckApplyPlanResponse:
+            type: object
+            properties:
+                proceed:
+                    type: boolean
+                    title: proceed
+                message:
+                    type: string
+                    title: message
+                    description: Why not, when `proceed` is false.
+            title: CheckApplyPlanResponse
+            additionalProperties: false
         admiral.api.agent.v1.ClaimJobRequest:
             type: object
             properties:
@@ -3595,6 +3854,14 @@ components:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.PlanResult'
                     title: plan
                     description: Set by a PLAN.
+                inventory:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ComponentInventory'
+                    title: inventory
+                    description: |-
+                        Set by an APPLY: what each component it reached left in the cluster,
+                         including one that failed partway.
             title: JobResult
             additionalProperties: false
         admiral.api.agent.v1.JobStatus:
@@ -3945,6 +4212,7 @@ components:
                 - UPDATE
                 - REPLACE
                 - DESTROY
+                - ORPHAN
             description: ResourceAction is what applying a plan does to one object.
         admiral.api.agent.v1.ResourceChange:
             type: object
@@ -4450,6 +4718,32 @@ components:
             title: UpdateApplicationResponse
             additionalProperties: false
             description: UpdateApplicationResponse contains the updated application.
+        admiral.api.changeset.v1.AcceptPartialApplyRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                reason:
+                    type: string
+                    title: reason
+                    maxLength: 1024
+                    minLength: 1
+            title: AcceptPartialApplyRequest
+            required:
+                - change_set_id
+                - reason
+            additionalProperties: false
+        admiral.api.changeset.v1.AcceptPartialApplyResponse:
+            type: object
+            properties:
+                apply:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.Apply'
+                    title: apply
+            title: AcceptPartialApplyResponse
+            additionalProperties: false
         admiral.api.changeset.v1.ActorKind:
             type: string
             title: ActorKind
@@ -4488,6 +4782,161 @@ components:
                 AddComponent creates a component instance from the registry. The name is
                  reserved in the environment until the draft is discarded or the component
                  is removed from it.
+        admiral.api.changeset.v1.Apply:
+            type: object
+            properties:
+                revision:
+                    type: integer
+                    title: revision
+                    format: int32
+                job_id:
+                    type: string
+                    title: job_id
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
+                    title: status
+                wait_reason:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.WaitReason'
+                    title: wait_reason
+                    description: Set while QUEUED.
+                plan_digest:
+                    type: string
+                    title: plan_digest
+                components:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.changeset.v1.ComponentApply'
+                    title: components
+                message:
+                    type: string
+                    title: message
+                applied_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: applied_by
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                finished_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: finished_at
+                accepted_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: accepted_by
+                    description: Set when a partial apply was accepted as the environment's new state.
+                accepted_reason:
+                    type: string
+                    title: accepted_reason
+                accepted_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: accepted_at
+            title: Apply
+            additionalProperties: false
+            description: |-
+                Apply is a revision's apply: its APPLY job and what happened to each
+                 component, in apply order.
+        admiral.api.changeset.v1.ApplyChangeSetRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                revision:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+                plan_digest:
+                    type: string
+                    title: plan_digest
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    description: The plan being applied; refused unless it is the revision's current plan.
+            title: ApplyChangeSetRequest
+            required:
+                - change_set_id
+                - revision
+                - plan_digest
+            additionalProperties: false
+        admiral.api.changeset.v1.ApplyChangeSetResponse:
+            type: object
+            properties:
+                apply:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.Apply'
+                    title: apply
+            title: ApplyChangeSetResponse
+            additionalProperties: false
+        admiral.api.changeset.v1.Approval:
+            type: object
+            properties:
+                revision:
+                    type: integer
+                    title: revision
+                    format: int32
+                plan_digest:
+                    type: string
+                    title: plan_digest
+                approved_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: approved_by
+                self_approval:
+                    type: boolean
+                    title: self_approval
+                    description: The approver revised the change set and was the only one able to approve.
+                reason:
+                    type: string
+                    title: reason
+                approved_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: approved_at
+            title: Approval
+            additionalProperties: false
+            description: Approval is a sign-off on one plan of a revision.
+        admiral.api.changeset.v1.ApproveChangeSetRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                revision:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+                plan_digest:
+                    type: string
+                    title: plan_digest
+                    pattern: ^sha256:[0-9a-f]{64}$
+                reason:
+                    type: string
+                    title: reason
+                    maxLength: 1024
+                    description: Required for a self-approval.
+            title: ApproveChangeSetRequest
+            required:
+                - change_set_id
+                - revision
+                - plan_digest
+            additionalProperties: false
+        admiral.api.changeset.v1.ApproveChangeSetResponse:
+            type: object
+            properties:
+                approval:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.Approval'
+                    title: approval
+            title: ApproveChangeSetResponse
+            additionalProperties: false
         admiral.api.changeset.v1.ChangeSet:
             type: object
             properties:
@@ -4543,6 +4992,13 @@ components:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: updated_at
                     readOnly: true
+                reverts_change_set_id:
+                    type: string
+                    title: reverts_change_set_id
+                    description: |-
+                        Set on a change set made by RevertChangeSet: the change set it reverts.
+                         It may apply while that change set's partial apply holds the environment.
+                    readOnly: true
             title: ChangeSet
             additionalProperties: false
         admiral.api.changeset.v1.ChangeSetStatus:
@@ -4552,6 +5008,25 @@ components:
                 - CHANGE_SET_STATUS_UNSPECIFIED
                 - DRAFT
                 - DISCARDED
+                - APPLYING
+                - APPLIED
+                - PARTIALLY_APPLIED
+        admiral.api.changeset.v1.ComponentApply:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.JobStatus'
+                    title: status
+                    description: QUEUED until reached, then SUCCEEDED or FAILED.
+                message:
+                    type: string
+                    title: message
+            title: ComponentApply
+            additionalProperties: false
         admiral.api.changeset.v1.ComponentDiff:
             type: object
             properties:
@@ -4706,6 +5181,8 @@ components:
                         - remove_component
                     - required:
                         - set_placement
+                    - required:
+                        - set_depends_on
             anyOf:
                 - type: object
                   properties:
@@ -4728,6 +5205,13 @@ components:
                             - $ref: '#/components/schemas/admiral.api.changeset.v1.ReplaceValues'
                         title: replace_values
                   title: replace_values
+                - type: object
+                  properties:
+                    set_depends_on:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.changeset.v1.SetDependsOn'
+                        title: set_depends_on
+                  title: set_depends_on
                 - type: object
                   properties:
                     set_null:
@@ -4774,6 +5258,8 @@ components:
                         - required:
                             - replace_values
                         - required:
+                            - set_depends_on
+                        - required:
                             - set_null
                         - required:
                             - set_pin
@@ -4791,6 +5277,8 @@ components:
                                 - remove_component
                             - required:
                                 - replace_values
+                            - required:
+                                - set_depends_on
                             - required:
                                 - set_null
                             - required:
@@ -4896,6 +5384,12 @@ components:
                         - $ref: '#/components/schemas/admiral.api.changeset.v1.Placement'
                     title: placement
                     description: Where the component goes after this change set. Empty on DESTROY.
+                depends_on:
+                    type: array
+                    items:
+                        type: string
+                    title: depends_on
+                    description: Components this one applies after, after this change set.
             title: Entry
             additionalProperties: false
             description: Entry is what one revision does to one component.
@@ -4939,6 +5433,32 @@ components:
                 - NO_CAPABILITIES
                 - SCOPE_GUESSED
             description: FindingCode names something a prepare noticed but did not refuse.
+        admiral.api.changeset.v1.GetApplyRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                revision:
+                    type: integer
+                    title: revision
+                    minimum: 1
+                    format: int32
+            title: GetApplyRequest
+            required:
+                - change_set_id
+                - revision
+            additionalProperties: false
+        admiral.api.changeset.v1.GetApplyResponse:
+            type: object
+            properties:
+                apply:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.Apply'
+                    title: apply
+            title: GetApplyResponse
+            additionalProperties: false
         admiral.api.changeset.v1.GetArtifactRequest:
             type: object
             properties:
@@ -5371,6 +5891,12 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: finished_at
+                approvals:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.changeset.v1.Approval'
+                    title: approvals
+                    description: Approvals of this plan. A different plan dismisses them.
             title: Plan
             additionalProperties: false
             description: Plan is a prepared revision planned against its environment's cluster.
@@ -5561,6 +6087,30 @@ components:
             description: |-
                 ReplaceValues makes a component's values exactly this tree: an upload.
                  Refused unless `from_revision` is the head the tree was downloaded at.
+        admiral.api.changeset.v1.RevertChangeSetRequest:
+            type: object
+            properties:
+                change_set_id:
+                    type: string
+                    title: change_set_id
+                    pattern: ^cs-[0-9a-z]{12}$
+                title:
+                    type: string
+                    title: title
+                    maxLength: 256
+            title: RevertChangeSetRequest
+            required:
+                - change_set_id
+            additionalProperties: false
+        admiral.api.changeset.v1.RevertChangeSetResponse:
+            type: object
+            properties:
+                change_set:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
+                    title: change_set
+            title: RevertChangeSetResponse
+            additionalProperties: false
         admiral.api.changeset.v1.Revision:
             type: object
             properties:
@@ -5615,6 +6165,28 @@ components:
             description: |-
                 RevisionCause says why a revision was cut. Only EDIT is written until
                  rebase exists.
+        admiral.api.changeset.v1.SetDependsOn:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                    pattern: ^[a-z]([a-z0-9-]{0,51}[a-z0-9])?$
+                depends_on:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[a-z]([a-z0-9-]{0,51}[a-z0-9])?$
+                    title: depends_on
+                    maxItems: 32
+                    uniqueItems: true
+            title: SetDependsOn
+            required:
+                - component
+            additionalProperties: false
+            description: |-
+                SetDependsOn replaces the components a component applies after. Empty
+                 clears it. A cycle is refused.
         admiral.api.changeset.v1.SetNull:
             type: object
             properties:
@@ -6634,6 +7206,36 @@ components:
                         - $ref: '#/components/schemas/admiral.api.environment.v1.KubernetesTarget'
                     title: kubernetes
                     description: Where workload components go. Omitted fields keep their defaults.
+                approval_required:
+                    type: boolean
+                    title: approval_required
+                    description: Whether applying a change set here needs an approval. Off by default.
+                generation:
+                    type: string
+                    title: generation
+                    format: int64
+                    description: |-
+                        Moves each time an apply changes the environment. A change set records
+                         the generation it was cut from.
+                    readOnly: true
+                held_by_change_set_id:
+                    type: string
+                    title: held_by_change_set_id
+                    description: |-
+                        The change set whose partial apply holds the environment. Nothing else
+                         applies until it is resolved.
+                    readOnly: true
+                prune:
+                    type:
+                        - boolean
+                        - "null"
+                    title: prune
+                    description: |-
+                        Whether an apply deletes objects a component no longer renders, and the
+                         objects of a component it removes. Off, they are orphaned: left in the
+                         cluster and no longer managed. An object annotated
+                         `admiral.io/prune: "false"` is orphaned either way. Defaults to true on
+                         create.
             title: Environment
             additionalProperties: false
             description: |-
@@ -6939,7 +7541,8 @@ components:
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
                          `description`, `labels`, `kubernetes.namespace`,
-                         `kubernetes.create_namespaces`, `kubernetes.agent_id`.
+                         `kubernetes.create_namespaces`, `kubernetes.agent_id`,
+                         `approval_required`, `prune`.
             title: UpdateEnvironmentRequest
             required:
                 - environment
