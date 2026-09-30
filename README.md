@@ -1,6 +1,6 @@
 # admiral-openapi
 
-OpenAPI specifications for the Admiral API. Use these specs to generate HTTP clients, explore endpoints, or integrate with API tooling.
+OpenAPI specifications for the [Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-openapi) API. Use these specs to generate HTTP clients, explore endpoints, or integrate with API tooling.
 
 ## Documentation
 
@@ -49,6 +49,12 @@ openapi-generator-cli generate -i openapi.v3.yaml -g typescript-fetch -o ./clien
 openapi-generator-cli generate -i openapi.v3.yaml -g python -o ./client/python
 ```
 
-## Feedback
+## Admiral
 
-Found an issue or have a suggestion? [Open an issue](https://github.com/admiral-io/admiral-community/issues).
+[Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-openapi) is a control plane for coordinating infrastructure and application delivery across environments. This repository is one of its
+[open-source tools](https://github.com/admiral-io).
+
+- [Documentation](https://admiral.io/docs?utm_source=github&utm_medium=referral&utm_campaign=admiral-openapi)
+- A bug in this repository: [open an issue](https://github.com/admiral-io/admiral-openapi/issues/new/choose)
+- Anything else about Admiral, or not sure where it goes: [admiral-community](https://github.com/admiral-io/admiral-community)
+- A security vulnerability: email [security@admiral.io](mailto:security@admiral.io), never a public issue
