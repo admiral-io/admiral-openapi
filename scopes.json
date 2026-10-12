@@ -2,7 +2,11 @@
   "groups": [
     {
       "name": "agent",
-      "description": "Clusters, the agents in them, who may use each, and the jobs they run."
+      "description": "Workload identity providers, the agents that authenticate through them, who may use each, and the jobs they run."
+    },
+    {
+      "name": "apikey",
+      "description": "Your own API keys."
     },
     {
       "name": "app",
@@ -26,23 +30,15 @@
     },
     {
       "name": "run",
-      "description": "Runs of change sets, plan through apply."
+      "description": "Runs of change sets and drift checks, plan through apply."
     },
     {
       "name": "tenant",
       "description": "Your tenant."
     },
     {
-      "name": "token",
-      "description": "Your own API keys."
-    },
-    {
       "name": "user",
       "description": "Members of your tenant."
-    },
-    {
-      "name": "var",
-      "description": "Configuration variables."
     }
   ],
   "scopes": [
@@ -52,21 +48,32 @@
     },
     {
       "name": "agent:exec",
-      "description": "Agent runtime work — claim, start, renew, fetch the artifact of, and report jobs."
+      "description": "Agent runtime work: claim, start, renew, append the log of, fetch the artifact of, upload the plan diff of, check the plan of, and finish jobs."
+    },
+    {
+      "name": "agent:heartbeat",
+      "description": "Send an agent's heartbeat: its version, what it runs against, its profiles, and its issuer's current keys."
     },
     {
       "name": "agent:read",
-      "description": "Read clusters, agents, who may use them, and their jobs."
-    },
-    {
-      "name": "agent:status",
-      "description": "Report an agent's status, its cluster's capabilities, and its cluster's keys."
+      "description": "Read workload identity providers, agents, who may use them, and their jobs."
     },
     {
       "name": "agent:write",
-      "description": "Connect clusters; create, update and delete agents; issue enrollment keys; grant use; cancel jobs.",
+      "description": "Register workload identity providers; create, update and delete agents; issue enrollment keys; grant use; cancel jobs.",
       "implies": [
         "agent:read"
+      ]
+    },
+    {
+      "name": "apikey:read",
+      "description": "Read your own API keys."
+    },
+    {
+      "name": "apikey:write",
+      "description": "Create, update, and revoke your own API keys.",
+      "implies": [
+        "apikey:read"
       ]
     },
     {
@@ -93,18 +100,18 @@
     },
     {
       "name": "component:publish",
-      "description": "Publish revisions and set tags. Adds to the registry and removes nothing from it, which is what a CI publish key holds.",
+      "description": "Publish versions and set tags. Adds to the registry and removes nothing from it, which is what a CI publish key holds.",
       "implies": [
         "component:read"
       ]
     },
     {
       "name": "component:read",
-      "description": "Read components, their revisions and tags, and the contract and findings each revision carries."
+      "description": "Read components, their versions and tags, and the contract and findings each version carries."
     },
     {
       "name": "component:write",
-      "description": "Edit a component's metadata, retire components, deprecate revisions, and delete floating tags, in addition to everything a publisher can do.",
+      "description": "Edit a component's metadata, deprecate or delete components, set a version's status, and delete floating tags, in addition to everything a publisher can do.",
       "implies": [
         "component:publish"
       ]
@@ -133,35 +140,24 @@
     },
     {
       "name": "run:read",
-      "description": "Read runs and revisions."
+      "description": "Read runs, their plans, applies and approvals."
     },
     {
       "name": "run:write",
-      "description": "Create, apply, and cancel runs; retry revisions.",
+      "description": "Start, approve, apply, accept and cancel runs.",
       "implies": [
         "run:read"
       ]
     },
     {
       "name": "tenant:read",
-      "description": "Read the caller's own tenant -- name, slug, and status."
+      "description": "Read the caller's own tenant -- name, slug, status and logo."
     },
     {
       "name": "tenant:write",
-      "description": "Update the caller's own tenant's settings, and close it -- suspending or deleting the tenant you own. Which of those you may actually do is decided per tenant, not by holding this.",
+      "description": "Update the caller's own tenant's settings. Whether you may is decided per tenant, not by holding this.",
       "implies": [
         "tenant:read"
-      ]
-    },
-    {
-      "name": "token:read",
-      "description": "Read your own API keys."
-    },
-    {
-      "name": "token:write",
-      "description": "Create, update, and revoke your own API keys.",
-      "implies": [
-        "token:read"
       ]
     },
     {
@@ -174,10 +170,6 @@
       "implies": [
         "user:read"
       ]
-    },
-    {
-      "name": "var:read",
-      "description": "Read resolved environment variables, including secret values."
     }
   ]
 }
