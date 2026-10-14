@@ -9757,7 +9757,7 @@ components:
                 id:
                     type: string
                     title: id
-                    pattern: ^ten-[0-9a-z]+$
+                    pattern: ^tnt-[0-9a-z]+$
                     description: Unique identifier.
                     readOnly: true
                 slug:
