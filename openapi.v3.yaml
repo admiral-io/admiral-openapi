@@ -20,7 +20,6 @@ paths:
                      Filterable fields:
                        - `name`: filter by agent name.
                        - `kind`: filter by agent kind.
-                       - `provider_id`: agents whose workload identity is from this provider.
                        - `assignable_to`: agents an application's environments may be assigned (an application id).
 
                      Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'app-4m8q2x7k1p9c'`
@@ -1154,6 +1153,26 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.registry.v1.ListComponentsResponse'
+    /v1/components/import:
+        post:
+            tags:
+                - Components
+            summary: Import an artifact from a registry, repository or URL
+            description: 'Scope: `component:publish`'
+            operationId: RegistryAPI_ImportComponent
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.registry.v1.ImportComponentRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.ImportComponentResponse'
     /v1/components/publish:
         post:
             tags:
@@ -1188,26 +1207,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.registry.v1.PublishComponentResponse'
-    /v1/components/pull:
-        post:
-            tags:
-                - Components
-            summary: Pull and publish an artifact from a registry, repository or URL
-            description: 'Scope: `component:publish`'
-            operationId: RegistryAPI_PullComponent
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.registry.v1.PullComponentRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.registry.v1.PullComponentResponse'
     /v1/components/{component.id}:
         patch:
             tags:
@@ -2096,6 +2095,182 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.invitation.v1.RevokeInvitationResponse'
+    /v1/issuers:
+        get:
+            tags:
+                - Issuers
+            summary: List issuers
+            description: 'Scope: `serviceaccount:read`'
+            operationId: IssuerAPI_ListIssuers
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                     Filterable fields:
+                       - `name`: filter by issuer name.
+
+                     Example: `field['name'] = 'dev'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: The page_size query parameter.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: The page_token query parameter.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ListIssuersResponse'
+        post:
+            tags:
+                - Issuers
+            summary: Register an issuer
+            description: 'Scope: `serviceaccount:write`'
+            operationId: IssuerAPI_CreateIssuer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.serviceaccount.v1.CreateIssuerRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.CreateIssuerResponse'
+    /v1/issuers/{issuer_id}:
+        get:
+            tags:
+                - Issuers
+            summary: Retrieve an issuer
+            description: 'Scope: `serviceaccount:read`'
+            operationId: IssuerAPI_GetIssuer
+            parameters:
+                - name: issuer_id
+                  in: path
+                  description: The issuer_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: issuer_id
+                    pattern: ^iss-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.GetIssuerResponse'
+        delete:
+            tags:
+                - Issuers
+            summary: Delete an issuer
+            description: 'Scope: `serviceaccount:write`'
+            operationId: IssuerAPI_DeleteIssuer
+            parameters:
+                - name: issuer_id
+                  in: path
+                  description: The issuer_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: issuer_id
+                    pattern: ^iss-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.DeleteIssuerResponse'
+    /v1/issuers/{issuer_id}/keys:
+        post:
+            tags:
+                - Issuers
+            summary: Set an issuer's keys
+            description: 'Scope: `serviceaccount:write`'
+            operationId: IssuerAPI_SetIssuerKeys
+            parameters:
+                - name: issuer_id
+                  in: path
+                  description: The issuer_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: issuer_id
+                    pattern: ^iss-[0-9a-z]+$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            allOf:
+                                - oneOf:
+                                    - required:
+                                        - keys
+                                    - required:
+                                        - accept_pending
+                            anyOf:
+                                - type: object
+                                  properties:
+                                    accept_pending:
+                                        allOf:
+                                            - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.SetIssuerKeysRequest.AcceptPending'
+                                        title: accept_pending
+                                        description: Trust the keys an agent last reported.
+                                  title: accept_pending
+                                - type: object
+                                  properties:
+                                    keys:
+                                        allOf:
+                                            - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.IssuerKeys'
+                                        title: keys
+                                        description: |-
+                                            Replace where the keys come from. Switching to `reported` keeps the
+                                             keys it has and stops fetching or expecting a paste.
+                                  title: keys
+                            unevaluatedProperties: false
+                            not:
+                                allOf:
+                                    - anyOf:
+                                        - required:
+                                            - accept_pending
+                                        - required:
+                                            - keys
+                                    - not:
+                                        oneOf:
+                                            - required:
+                                                - accept_pending
+                                            - required:
+                                                - keys
+                            title: SetIssuerKeysRequest
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.SetIssuerKeysResponse'
     /v1/jobs:
         get:
             tags:
@@ -2511,6 +2686,73 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.run.v1.GetRunPlanDiffResponse'
+    /v1/service-accounts:
+        get:
+            tags:
+                - Service Accounts
+            summary: List service accounts
+            description: 'Scope: `serviceaccount:read`'
+            operationId: ServiceAccountAPI_ListServiceAccounts
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                     Filterable fields:
+                       - `issuer_id`: service accounts that trust this issuer.
+                       - `agent_id`: the service account this agent runs as.
+
+                     Example: `field['issuer_id'] = 'iss-4m8q2x7k1p9c'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: The page_size query parameter.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: The page_token query parameter.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ListServiceAccountsResponse'
+    /v1/service-accounts/{service_account_id}:
+        get:
+            tags:
+                - Service Accounts
+            summary: Retrieve a service account
+            description: 'Scope: `serviceaccount:read`'
+            operationId: ServiceAccountAPI_GetServiceAccount
+            parameters:
+                - name: service_account_id
+                  in: path
+                  description: The service_account_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: service_account_id
+                    pattern: ^sa-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.GetServiceAccountResponse'
     /v1/tenant:
         get:
             tags:
@@ -2633,181 +2875,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.user.v1.GetUserResponse'
-    /v1/workload-identity-providers:
-        get:
-            tags:
-                - Workload Identity Providers
-            summary: List workload identity providers
-            description: 'Scope: `agent:read`'
-            operationId: WorkloadIdentityProviderAPI_ListWorkloadIdentityProviders
-            parameters:
-                - name: filter
-                  in: query
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL.
-
-                     Filterable fields:
-                       - `name`: filter by provider name.
-                       - `status`: filter by trust status.
-
-                     Example: `field['status'] = 'STATUS_PENDING'`
-                  schema:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                - name: page_size
-                  in: query
-                  description: The page_size query parameter.
-                  schema:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                - name: page_token
-                  in: query
-                  description: The page_token query parameter.
-                  schema:
-                    type: string
-                    title: page_token
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.ListWorkloadIdentityProvidersResponse'
-        post:
-            tags:
-                - Workload Identity Providers
-            summary: Register a workload identity provider
-            description: 'Scope: `agent:write`'
-            operationId: WorkloadIdentityProviderAPI_CreateWorkloadIdentityProvider
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.agent.v1.CreateWorkloadIdentityProviderRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.CreateWorkloadIdentityProviderResponse'
-    /v1/workload-identity-providers/{provider_id}:
-        get:
-            tags:
-                - Workload Identity Providers
-            summary: Retrieve a workload identity provider
-            description: 'Scope: `agent:read`'
-            operationId: WorkloadIdentityProviderAPI_GetWorkloadIdentityProvider
-            parameters:
-                - name: provider_id
-                  in: path
-                  description: The provider_id path parameter.
-                  required: true
-                  schema:
-                    type: string
-                    title: provider_id
-                    pattern: ^wip-[0-9a-z]+$
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.GetWorkloadIdentityProviderResponse'
-        delete:
-            tags:
-                - Workload Identity Providers
-            summary: Delete a workload identity provider
-            description: 'Scope: `agent:write`'
-            operationId: WorkloadIdentityProviderAPI_DeleteWorkloadIdentityProvider
-            parameters:
-                - name: provider_id
-                  in: path
-                  description: The provider_id path parameter.
-                  required: true
-                  schema:
-                    type: string
-                    title: provider_id
-                    pattern: ^wip-[0-9a-z]+$
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.DeleteWorkloadIdentityProviderResponse'
-    /v1/workload-identity-providers/{provider_id}/keys:
-        post:
-            tags:
-                - Workload Identity Providers
-            summary: Set a provider's keys
-            description: 'Scope: `agent:write`'
-            operationId: WorkloadIdentityProviderAPI_SetWorkloadIdentityProviderKeys
-            parameters:
-                - name: provider_id
-                  in: path
-                  description: The provider_id path parameter.
-                  required: true
-                  schema:
-                    type: string
-                    title: provider_id
-                    pattern: ^wip-[0-9a-z]+$
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            allOf:
-                                - oneOf:
-                                    - required:
-                                        - keys
-                                    - required:
-                                        - accept_pending
-                            anyOf:
-                                - type: object
-                                  properties:
-                                    accept_pending:
-                                        allOf:
-                                            - $ref: '#/components/schemas/admiral.api.agent.v1.SetWorkloadIdentityProviderKeysRequest.AcceptPending'
-                                        title: accept_pending
-                                        description: Trust the keys an agent last reported.
-                                  title: accept_pending
-                                - type: object
-                                  properties:
-                                    keys:
-                                        allOf:
-                                            - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProviderKeys'
-                                        title: keys
-                                        description: Replace where the keys come from.
-                                  title: keys
-                            unevaluatedProperties: false
-                            not:
-                                allOf:
-                                    - anyOf:
-                                        - required:
-                                            - accept_pending
-                                        - required:
-                                            - keys
-                                    - not:
-                                        oneOf:
-                                            - required:
-                                                - accept_pending
-                                            - required:
-                                                - keys
-                            title: SetWorkloadIdentityProviderKeysRequest
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.agent.v1.SetWorkloadIdentityProviderKeysResponse'
 components:
     schemas:
         admiral.api.agent.v1.Agent:
@@ -2853,11 +2920,6 @@ components:
                     title: kind
                     description: |
                         (IMMUTABLE) enum.defined_only = true
-                identity:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.AgentIdentity'
-                    title: identity
-                    description: '(IMMUTABLE) '
                 settings:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.AgentSettings'
@@ -2882,6 +2944,11 @@ components:
                         The components that may run on this agent, as `cmp-` ids. Empty allows
                          any. Only the agent's owner sets it; Admiral refuses to place a component
                          outside it and checks again before each job.
+                service_account_id:
+                    type: string
+                    title: service_account_id
+                    description: '`sa-`: the service account the agent runs as, made with it.'
+                    readOnly: true
             title: Agent
             additionalProperties: false
         admiral.api.agent.v1.Agent.Health:
@@ -2898,8 +2965,8 @@ components:
             enum:
                 - KIND_UNSPECIFIED
                 - KIND_KUBERNETES
-                - KIND_TERRAFORM
-            description: Kind is what an agent runs.
+                - KIND_INFRA
+            description: Kind is what an agent deploys, never where it runs.
         admiral.api.agent.v1.AgentGrant:
             type: object
             allOf:
@@ -2990,23 +3057,6 @@ components:
             title: Organization
             additionalProperties: false
             description: Organization marks a grant to every environment in the organization.
-        admiral.api.agent.v1.AgentIdentity:
-            type: object
-            allOf:
-                - oneOf:
-                    - required:
-                        - workload
-            anyOf:
-                - type: object
-                  properties:
-                    workload:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentity'
-                        title: workload
-                  title: workload
-            unevaluatedProperties: false
-            title: AgentIdentity
-            description: AgentIdentity is who an agent is and how it proves it.
         admiral.api.agent.v1.AgentReport:
             type: object
             anyOf:
@@ -3045,32 +3095,32 @@ components:
             anyOf:
                 - type: object
                   properties:
+                    infra:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.InfraAgentSettings'
+                        title: infra
+                  title: infra
+                - type: object
+                  properties:
                     kubernetes:
                         allOf:
                             - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesAgentSettings'
                         title: kubernetes
                   title: kubernetes
-                - type: object
-                  properties:
-                    terraform:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.agent.v1.TerraformAgentSettings'
-                        title: terraform
-                  title: terraform
             unevaluatedProperties: false
             not:
                 allOf:
                     - anyOf:
                         - required:
-                            - kubernetes
+                            - infra
                         - required:
-                            - terraform
+                            - kubernetes
                     - not:
                         oneOf:
                             - required:
-                                - kubernetes
+                                - infra
                             - required:
-                                - terraform
+                                - kubernetes
             title: AgentSettings
             description: |-
                 AgentSettings is what the agent's owner allows it, one block per kind.
@@ -3268,7 +3318,7 @@ components:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                     title: agent
                     description: |-
-                        The agent to create: `name`, `kind`, `identity`, and optionally
+                        The agent to create: `name`, `kind`, and optionally
                          `settings`, `approval` and `allowed_component_ids`.
                 grants:
                     type: array
@@ -3299,10 +3349,7 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.EnrollmentKey'
                     title: enrollment_key
-                    description: |-
-                        Set when, and only when, the agent's provider is PENDING for
-                         enrollment: the single-use key the agent enrolls the provider's keys
-                         with. Shown once.
+                    description: The single-use key the agent enrolls with. Shown once.
             title: CreateAgentResponse
             additionalProperties: false
         admiral.api.agent.v1.CreateEnrollmentKeyRequest:
@@ -3325,31 +3372,6 @@ components:
                     title: enrollment_key
             title: CreateEnrollmentKeyResponse
             additionalProperties: false
-        admiral.api.agent.v1.CreateWorkloadIdentityProviderRequest:
-            type: object
-            properties:
-                workload_identity_provider:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProvider'
-                    title: workload_identity_provider
-                    description: |-
-                        The provider to create: `name`, `issuer`, and `keys` (absent leaves it
-                         PENDING for an agent to enroll).
-            title: CreateWorkloadIdentityProviderRequest
-            required:
-                - workload_identity_provider
-            additionalProperties: false
-            description: |
-                create_workload_identity_provider.issuer // issuer is required unless the keys come from enrollment
-        admiral.api.agent.v1.CreateWorkloadIdentityProviderResponse:
-            type: object
-            properties:
-                workload_identity_provider:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProvider'
-                    title: workload_identity_provider
-            title: CreateWorkloadIdentityProviderResponse
-            additionalProperties: false
         admiral.api.agent.v1.DeleteAgentRequest:
             type: object
             properties:
@@ -3365,21 +3387,36 @@ components:
             type: object
             title: DeleteAgentResponse
             additionalProperties: false
-        admiral.api.agent.v1.DeleteWorkloadIdentityProviderRequest:
+        admiral.api.agent.v1.EngineSupport:
             type: object
             properties:
-                provider_id:
+                engine:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.EngineSupport.Engine'
+                    not:
+                        enum:
+                            - ENGINE_UNSPECIFIED
+                    title: engine
+                    description: |
+                        enum.defined_only = true
+                versions:
                     type: string
-                    title: provider_id
-                    pattern: ^wip-[0-9a-z]+$
-            title: DeleteWorkloadIdentityProviderRequest
-            required:
-                - provider_id
+                    title: versions
+                    maxLength: 128
+                    description: |-
+                        A version constraint in Terraform's syntax, e.g. `>= 1.8, < 2.0`. Empty
+                         allows every version.
+            title: EngineSupport
             additionalProperties: false
-        admiral.api.agent.v1.DeleteWorkloadIdentityProviderResponse:
-            type: object
-            title: DeleteWorkloadIdentityProviderResponse
-            additionalProperties: false
+            description: EngineSupport is one engine an infra agent runs, and which versions.
+        admiral.api.agent.v1.EngineSupport.Engine:
+            type: string
+            title: Engine
+            enum:
+                - ENGINE_UNSPECIFIED
+                - ENGINE_TERRAFORM
+                - ENGINE_OPENTOFU
+            description: Engine is a Terraform-compatible binary.
         admiral.api.agent.v1.EnrollRequest:
             type: object
             anyOf:
@@ -3399,28 +3436,35 @@ components:
                     minLength: 2
                     description: |-
                         The issuer's keys, as the agent sees them from inside (for Kubernetes,
-                         served at /openid/v1/jwks).
+                         served at /openid/v1/jwks; for an agent that is its own issuer, its
+                         public key).
                 token:
                     type: string
                     title: token
                     maxLength: 16384
                     minLength: 16
                     description: |-
-                        A token the issuer issued this agent, audience Admiral. It must verify
-                         against `jwks` and carry the agent's subject; its `iss` becomes the
-                         provider's issuer when none was set.
+                        A token the issuer issued this agent, audience Admiral, verified against
+                         `jwks`. Its `sub` becomes the service account's subject; its `iss` the
+                         new issuer's, when one is made.
             title: EnrollRequest
         admiral.api.agent.v1.EnrollResponse:
             type: object
             properties:
-                workload_identity_provider:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProvider'
-                    title: workload_identity_provider
                 agent:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.Agent'
                     title: agent
+                service_account:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ServiceAccount'
+                    title: service_account
+                    description: The service account the agent signs in as from now on.
+                issuer:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.Issuer'
+                    title: issuer
+                    description: The issuer it was attached to, or the one made from its keys.
             title: EnrollResponse
             additionalProperties: false
         admiral.api.agent.v1.EnrollmentKey:
@@ -3592,26 +3636,6 @@ components:
                     title: job
             title: GetJobResponse
             additionalProperties: false
-        admiral.api.agent.v1.GetWorkloadIdentityProviderRequest:
-            type: object
-            properties:
-                provider_id:
-                    type: string
-                    title: provider_id
-                    pattern: ^wip-[0-9a-z]+$
-            title: GetWorkloadIdentityProviderRequest
-            required:
-                - provider_id
-            additionalProperties: false
-        admiral.api.agent.v1.GetWorkloadIdentityProviderResponse:
-            type: object
-            properties:
-                workload_identity_provider:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProvider'
-                    title: workload_identity_provider
-            title: GetWorkloadIdentityProviderResponse
-            additionalProperties: false
         admiral.api.agent.v1.GrantAgentUseRequest:
             type: object
             properties:
@@ -3661,8 +3685,8 @@ components:
                         The issuer's current keys, when the agent can see them (for Kubernetes,
                          /openid/v1/jwks). Never applied: one stolen agent token could otherwise
                          plant a key. A set that differs from the trusted one is recorded in the
-                         provider's `pending_key_ids` for an admin; ignored for a `jwks_uri`
-                         provider, whose keys come from the issuer alone.
+                         issuer's `pending_key_ids` for an admin; ignored for a `jwks_uri`
+                         issuer, whose keys come from the issuer alone.
                 profiles:
                     type: array
                     items:
@@ -3696,6 +3720,22 @@ components:
                 - KEYS_PENDING
                 - KEYS_FROM_ISSUER
             description: Keys is how Admiral treated the keys the agent reported.
+        admiral.api.agent.v1.InfraAgentSettings:
+            type: object
+            properties:
+                engines:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.EngineSupport'
+                    title: engines
+                    maxItems: 8
+                    description: |-
+                        The engines this agent runs. Placing a component that needs an engine or
+                         version outside them is refused when the change set is edited, naming an
+                         agent that runs it, so no job waits on it.
+            title: InfraAgentSettings
+            additionalProperties: false
+            description: InfraAgentSettings is what an infra agent will run.
         admiral.api.agent.v1.Job:
             type: object
             properties:
@@ -3918,7 +3958,7 @@ components:
                     description: 'The kube-system namespace UID: an accident detector, not a proof.'
             title: KubernetesReport
             additionalProperties: false
-            description: KubernetesReport is what a Kubernetes agent reports about its cluster.
+            description: KubernetesReport is what a Kubernetes agent reports about where it runs.
         admiral.api.agent.v1.ListAgentGrantsRequest:
             type: object
             properties:
@@ -3966,7 +4006,6 @@ components:
                          Filterable fields:
                            - `name`: filter by agent name.
                            - `kind`: filter by agent kind.
-                           - `provider_id`: agents whose workload identity is from this provider.
                            - `assignable_to`: agents an application's environments may be assigned (an application id).
 
                          Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'app-4m8q2x7k1p9c'`
@@ -4048,45 +4087,6 @@ components:
                     type: string
                     title: next_page_token
             title: ListJobsResponse
-            additionalProperties: false
-        admiral.api.agent.v1.ListWorkloadIdentityProvidersRequest:
-            type: object
-            properties:
-                filter:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL.
-
-                         Filterable fields:
-                           - `name`: filter by provider name.
-                           - `status`: filter by trust status.
-
-                         Example: `field['status'] = 'STATUS_PENDING'`
-                page_size:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                page_token:
-                    type: string
-                    title: page_token
-            title: ListWorkloadIdentityProvidersRequest
-            additionalProperties: false
-        admiral.api.agent.v1.ListWorkloadIdentityProvidersResponse:
-            type: object
-            properties:
-                workload_identity_providers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProvider'
-                    title: workload_identity_providers
-                next_page_token:
-                    type: string
-                    title: next_page_token
-            title: ListWorkloadIdentityProvidersResponse
             additionalProperties: false
         admiral.api.agent.v1.Offer:
             type: object
@@ -4308,67 +4308,6 @@ components:
             type: object
             title: RevokeAgentUseResponse
             additionalProperties: false
-        admiral.api.agent.v1.SetWorkloadIdentityProviderKeysRequest:
-            type: object
-            allOf:
-                - oneOf:
-                    - required:
-                        - keys
-                    - required:
-                        - accept_pending
-            anyOf:
-                - type: object
-                  properties:
-                    accept_pending:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.agent.v1.SetWorkloadIdentityProviderKeysRequest.AcceptPending'
-                        title: accept_pending
-                        description: Trust the keys an agent last reported.
-                  title: accept_pending
-                - type: object
-                  properties:
-                    keys:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProviderKeys'
-                        title: keys
-                        description: Replace where the keys come from.
-                  title: keys
-            unevaluatedProperties: false
-            not:
-                allOf:
-                    - anyOf:
-                        - required:
-                            - accept_pending
-                        - required:
-                            - keys
-                    - not:
-                        oneOf:
-                            - required:
-                                - accept_pending
-                            - required:
-                                - keys
-            properties:
-                provider_id:
-                    type: string
-                    title: provider_id
-                    pattern: ^wip-[0-9a-z]+$
-            title: SetWorkloadIdentityProviderKeysRequest
-            required:
-                - provider_id
-        admiral.api.agent.v1.SetWorkloadIdentityProviderKeysRequest.AcceptPending:
-            type: object
-            title: AcceptPending
-            additionalProperties: false
-            description: AcceptPending marks accepting the keys in `pending_key_ids`.
-        admiral.api.agent.v1.SetWorkloadIdentityProviderKeysResponse:
-            type: object
-            properties:
-                workload_identity_provider:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProvider'
-                    title: workload_identity_provider
-            title: SetWorkloadIdentityProviderKeysResponse
-            additionalProperties: false
         admiral.api.agent.v1.Slots:
             type: object
             properties:
@@ -4443,52 +4382,6 @@ components:
             title: Step
             additionalProperties: false
             description: Step is one component's part of a job.
-        admiral.api.agent.v1.TerraformAgentSettings:
-            type: object
-            properties:
-                engines:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.api.agent.v1.TerraformEngineSupport'
-                    title: engines
-                    maxItems: 8
-                    description: |-
-                        The engines this agent runs. Placing a component that needs an engine or
-                         version outside them is refused when the change set is edited, naming an
-                         agent that runs it, so no job waits on it.
-            title: TerraformAgentSettings
-            additionalProperties: false
-            description: TerraformAgentSettings is what a Terraform agent will run.
-        admiral.api.agent.v1.TerraformEngineSupport:
-            type: object
-            properties:
-                engine:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.TerraformEngineSupport.Engine'
-                    not:
-                        enum:
-                            - ENGINE_UNSPECIFIED
-                    title: engine
-                    description: |
-                        enum.defined_only = true
-                versions:
-                    type: string
-                    title: versions
-                    maxLength: 128
-                    description: |-
-                        A version constraint in Terraform's syntax, e.g. `>= 1.8, < 2.0`. Empty
-                         allows every version.
-            title: TerraformEngineSupport
-            additionalProperties: false
-            description: TerraformEngineSupport is one engine an agent runs, and which versions.
-        admiral.api.agent.v1.TerraformEngineSupport.Engine:
-            type: string
-            title: Engine
-            enum:
-                - ENGINE_UNSPECIFIED
-                - ENGINE_TERRAFORM
-                - ENGINE_OPENTOFU
-            description: Engine is a Terraform-compatible binary.
         admiral.api.agent.v1.UpdateAgentRequest:
             type: object
             properties:
@@ -4554,200 +4447,10 @@ components:
                 - WAIT_REASON_AGENT_TOO_OLD
                 - WAIT_REASON_ENVIRONMENT_BUSY
                 - WAIT_REASON_BACKOFF
-                - WAIT_REASON_PROVIDER_PENDING
+                - WAIT_REASON_AGENT_NOT_ENROLLED
                 - WAIT_REASON_PROFILE_MISSING
                 - WAIT_REASON_COMPONENT_NOT_ALLOWED
             description: WaitReason says why a queued job is not running.
-        admiral.api.agent.v1.WorkloadIdentity:
-            type: object
-            properties:
-                provider_id:
-                    type: string
-                    title: provider_id
-                    pattern: ^wip-[0-9a-z]+$
-                subject:
-                    type: string
-                    title: subject
-                    maxLength: 512
-                    minLength: 1
-            title: WorkloadIdentity
-            required:
-                - provider_id
-                - subject
-            additionalProperties: false
-            description: |-
-                WorkloadIdentity is an agent that proves who it is with a token from a
-                 provider Admiral trusts: the provider, and the subject its token must carry,
-                 matched exactly. For a Kubernetes service account the subject is
-                 `system:serviceaccount:<namespace>:<name>`; for GitHub Actions,
-                 `repo:<owner>/<repo>:ref:<ref>`; for a GCP service account, its numeric id.
-                 The exact match is what secures a shared issuer, which anyone can get a
-                 token from.
-        admiral.api.agent.v1.WorkloadIdentityProvider:
-            type: object
-            properties:
-                id:
-                    type: string
-                    title: id
-                    pattern: ^wip-[0-9a-z]+$
-                    readOnly: true
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                status:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProvider.Status'
-                    title: status
-                    readOnly: true
-                issuer:
-                    type: string
-                    title: issuer
-                    maxLength: 2048
-                    minLength: 1
-                    description: |-
-                        (IMMUTABLE) The `iss` every token must carry, exactly, e.g.
-                         `https://token.actions.githubusercontent.com`. Required on create for
-                         `jwks_uri` and `jwks`. For enrollment it may be left out: enrolling
-                         records it from the enrolling agent's verified token. Fixed once set.
-                keys:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProviderKeys'
-                    title: keys
-                    description: Where the verifying keys come from. Absent on create means enrollment.
-                key_ids:
-                    type: array
-                    items:
-                        type: string
-                        readOnly: true
-                    title: key_ids
-                    description: The key ids currently trusted.
-                    readOnly: true
-                keys_updated_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: keys_updated_at
-                    readOnly: true
-                pending_key_ids:
-                    type: array
-                    items:
-                        type: string
-                        readOnly: true
-                    title: pending_key_ids
-                    description: |-
-                        Key ids an agent reported that are not trusted yet. They are never
-                         applied on their own: an admin accepts them with
-                         SetWorkloadIdentityProviderKeys.
-                    readOnly: true
-                pending_keys_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: pending_keys_at
-                    readOnly: true
-                created_by:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    title: created_by
-                    readOnly: true
-                created_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: created_at
-                    readOnly: true
-            title: WorkloadIdentityProvider
-            additionalProperties: false
-            description: |-
-                WorkloadIdentityProvider is a token issuer Admiral trusts for agents to
-                 prove who they are: a Kubernetes cluster's service-account issuer, GitHub
-                 Actions, Google, an AWS account. A token must carry this `issuer` as its
-                 `iss`, be issued for Admiral as its audience, and verify against the
-                 provider's keys. Which workload it is comes from its subject, which each
-                 agent names.
-        admiral.api.agent.v1.WorkloadIdentityProvider.Status:
-            type: string
-            title: Status
-            enum:
-                - STATUS_UNSPECIFIED
-                - STATUS_PENDING
-                - STATUS_TRUSTED
-        admiral.api.agent.v1.WorkloadIdentityProviderKeys:
-            type: object
-            allOf:
-                - oneOf:
-                    - required:
-                        - jwks_uri
-                    - required:
-                        - jwks
-                    - required:
-                        - enrollment
-            anyOf:
-                - type: object
-                  properties:
-                    enrollment:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.agent.v1.WorkloadIdentityProviderKeys.Enrollment'
-                        title: enrollment
-                        description: |-
-                            The agents inside keep the keys current. On a PENDING provider the
-                             first keys arrive when an agent enrolls with a single-use key. On a
-                             TRUSTED one, switching here keeps the keys it has and stops fetching or
-                             expecting a paste; from then on, keys agents report wait in
-                             `pending_key_ids` for an admin to accept.
-                  title: enrollment
-                - type: object
-                  properties:
-                    jwks:
-                        type: string
-                        title: jwks
-                        maxLength: 65536
-                        minLength: 2
-                        description: |-
-                            A JSON Web Key Set, pasted in for a private issuer. It replaces the
-                             trusted set, so paste the whole set the issuer serves: during a
-                             rotation that holds the old key and the new one.
-                  title: jwks
-                - type: object
-                  properties:
-                    jwks_uri:
-                        type: string
-                        title: jwks_uri
-                        maxLength: 2048
-                        format: uri
-                        description: |
-                            Fetched and refreshed when a token names a key not yet seen. Rotation
-                             needs no action.
-                            string.prefix = "https://"
-                  title: jwks_uri
-            unevaluatedProperties: false
-            not:
-                allOf:
-                    - anyOf:
-                        - required:
-                            - enrollment
-                        - required:
-                            - jwks
-                        - required:
-                            - jwks_uri
-                    - not:
-                        oneOf:
-                            - required:
-                                - enrollment
-                            - required:
-                                - jwks
-                            - required:
-                                - jwks_uri
-            title: WorkloadIdentityProviderKeys
-            description: |-
-                WorkloadIdentityProviderKeys is where Admiral gets the keys that verify a
-                 provider's tokens.
-        admiral.api.agent.v1.WorkloadIdentityProviderKeys.Enrollment:
-            type: object
-            title: Enrollment
-            additionalProperties: false
-            description: |-
-                Keys an agent supplies from inside the issuer's environment, for an issuer
-                 Admiral cannot reach (kind, minikube, k3s, on-prem, private clusters).
         admiral.api.apikey.v1.ApiKey:
             type: object
             properties:
@@ -8232,6 +7935,270 @@ components:
             title: GetVersionResponse
             additionalProperties: false
             description: GetVersionResponse contains the version.
+        admiral.api.registry.v1.ImportComponentRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?)?$
+                    description: |-
+                        Empty means the artifact's own name: the chart's, the module's, the
+                         repository's or directory's.
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource'
+                    title: source
+                credential_ids:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^cred-[0-9a-z]+$
+                    title: credential_ids
+                    maxItems: 16
+                    uniqueItems: true
+                    description: |-
+                        The credentials this import may present, chosen by the caller. Each is
+                         presented only where its type fits and its `allowed_hosts` permit. A
+                         fetch that reaches a host none of them covers fails naming the host.
+                tags:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+                    title: tags
+                    maxItems: 16
+                    description: |-
+                        Tags to set on the resulting version. A chart's version and a
+                         module's version are applied as tags whether or not named.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: Applied when the import creates the component; ignored otherwise.
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+                baseline_values_json:
+                    type: string
+                    title: baseline_values_json
+                    maxLength: 1048576
+                    description: |-
+                        The organization's defaults for this artifact, as a JSON object: values
+                         laid over the artifact's own defaults (a chart's values.yaml, a module's
+                         variable defaults) before any environment's values. Stored with the
+                         artifact as one version under one digest, so changing them is a new
+                         version, which environments move to like any other. Empty means the
+                         artifact's own defaults.
+            title: ImportComponentRequest
+            required:
+                - source
+            additionalProperties: false
+            description: |
+                import_component.name_not_an_id // a component name cannot start with cmp-, which marks an id
+                import_component.tags.tag_not_an_id // a tag cannot start with ver-, which marks a version id
+        admiral.api.registry.v1.ImportComponentResponse:
+            type: object
+            properties:
+                component:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Component'
+                    title: component
+                version:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Version'
+                    title: version
+                unchanged:
+                    type: boolean
+                    title: unchanged
+                    description: The resolution was already published under this name; nothing was written.
+            title: ImportComponentResponse
+            additionalProperties: false
+        admiral.api.registry.v1.ImportSource:
+            type: object
+            anyOf:
+                - type: object
+                  properties:
+                    archive:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.Archive'
+                        title: archive
+                  title: archive
+                - type: object
+                  properties:
+                    git_tree:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.GitTree'
+                        title: git_tree
+                  title: git_tree
+                - type: object
+                  properties:
+                    helm_chart:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.HelmChart'
+                        title: helm_chart
+                  title: helm_chart
+                - type: object
+                  properties:
+                    oci_chart:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.OCIChart'
+                        title: oci_chart
+                  title: oci_chart
+                - type: object
+                  properties:
+                    registry_module:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.RegistryModule'
+                        title: registry_module
+                  title: registry_module
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - archive
+                        - required:
+                            - git_tree
+                        - required:
+                            - helm_chart
+                        - required:
+                            - oci_chart
+                        - required:
+                            - registry_module
+                    - not:
+                        oneOf:
+                            - required:
+                                - archive
+                            - required:
+                                - git_tree
+                            - required:
+                                - helm_chart
+                            - required:
+                                - oci_chart
+                            - required:
+                                - registry_module
+            title: ImportSource
+            description: |-
+                ImportSource names an artifact to import. One variant. The kind of the
+                 resulting component follows from it: a chart from OCI or a Helm
+                 repository, a module from a module registry, whatever inspection finds in
+                 a git tree or an archive.
+        admiral.api.registry.v1.ImportSource.Archive:
+            type: object
+            properties:
+                url:
+                    type: string
+                    title: url
+                    maxLength: 512
+                    format: uri
+            title: Archive
+            required:
+                - url
+            additionalProperties: false
+            description: An archive at a URL, unpacked by its extension.
+        admiral.api.registry.v1.ImportSource.GitTree:
+            type: object
+            properties:
+                url:
+                    type: string
+                    title: url
+                    maxLength: 512
+                    format: uri
+                    description: '`https://github.com/acme/infra.git`, `ssh://git@github.com/acme/infra.git`.'
+                ref:
+                    type: string
+                    title: ref
+                    maxLength: 256
+                    description: A branch, tag or commit. Empty is the default branch.
+                path:
+                    type: string
+                    title: path
+                    maxLength: 512
+                    description: |
+                        A directory within the repository. Empty is the root.
+                        string.not_contains = ".."
+            title: GitTree
+            required:
+                - url
+            additionalProperties: false
+            description: A git repository at a ref, optionally a directory of it.
+        admiral.api.registry.v1.ImportSource.HelmChart:
+            type: object
+            properties:
+                repository:
+                    type: string
+                    title: repository
+                    maxLength: 512
+                    format: uri
+                chart:
+                    type: string
+                    title: chart
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
+                version:
+                    type: string
+                    title: version
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            title: HelmChart
+            required:
+                - repository
+                - chart
+                - version
+            additionalProperties: false
+            description: |-
+                A chart in an HTTP repository: the repository URL, the chart's name in
+                 its index, and an exact version.
+        admiral.api.registry.v1.ImportSource.OCIChart:
+            type: object
+            properties:
+                reference:
+                    type: string
+                    title: reference
+                    maxLength: 512
+                    minLength: 7
+                    description: |
+                        string.prefix = "oci://"
+                version:
+                    type: string
+                    title: version
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            title: OCIChart
+            required:
+                - reference
+                - version
+            additionalProperties: false
+            description: |-
+                A chart in an OCI registry: `oci://ghcr.io/argoproj/argo-helm/argo-cd`
+                 at a version, which is its tag.
+        admiral.api.registry.v1.ImportSource.RegistryModule:
+            type: object
+            properties:
+                address:
+                    type: string
+                    title: address
+                    maxLength: 512
+                    minLength: 5
+                version:
+                    type: string
+                    title: version
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
+            title: RegistryModule
+            required:
+                - address
+                - version
+            additionalProperties: false
+            description: |-
+                A module in a module registry: the address as a module call would
+                 write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
+                 host-qualified, optionally `//subdir`) and an exact version. A range is
+                 what a Source tracks, not what an import takes.
         admiral.api.registry.v1.ListComponentsRequest:
             type: object
             properties:
@@ -8343,11 +8310,11 @@ components:
                     items:
                         type: string
                     title: hosts
-                    description: The hosts it was presented to during this pull.
+                    description: The hosts it was presented to during this import.
             title: PresentedCredential
             additionalProperties: false
             description: |-
-                PresentedCredential is one credential a pull presented, as it was named at
+                PresentedCredential is one credential an import presented, as it was named at
                  the time; the credential may since have been renamed or deleted.
         admiral.api.registry.v1.Provenance:
             type: object
@@ -8391,8 +8358,8 @@ components:
                         $ref: '#/components/schemas/admiral.api.registry.v1.PresentedCredential'
                     title: credentials
                     description: |-
-                        The credentials the platform presented while fetching, for PULL: which
-                         secret reached which hosts. Lineage, not a grant; a later pull attaches
+                        The credentials the platform presented while fetching, for IMPORT: which
+                         secret reached which hosts. Lineage, not a grant; a later import attaches
                          its own. Set by the server; ignored on a publish request.
                     readOnly: true
                 commit_message:
@@ -8421,7 +8388,7 @@ components:
             enum:
                 - KIND_UNSPECIFIED
                 - KIND_PUSH
-                - KIND_PULL
+                - KIND_IMPORT
             description: |-
                 Kind is the on-ramp a version arrived by: whose code it is and who
                  triggered the publish, not which way the bytes travelled.
@@ -8510,270 +8477,6 @@ components:
             title: PublishComponentResponse
             additionalProperties: false
             description: PublishComponentResponse is the recorded version.
-        admiral.api.registry.v1.PullComponentRequest:
-            type: object
-            properties:
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?)?$
-                    description: |-
-                        Empty means the artifact's own name: the chart's, the module's, the
-                         repository's or directory's.
-                source:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource'
-                    title: source
-                credential_ids:
-                    type: array
-                    items:
-                        type: string
-                        pattern: ^cred-[0-9a-z]+$
-                    title: credential_ids
-                    maxItems: 16
-                    uniqueItems: true
-                    description: |-
-                        The credentials this pull may present, chosen by the caller. Each is
-                         presented only where its type fits and its `allowed_hosts` permit. A
-                         fetch that reaches a host none of them covers fails naming the host.
-                tags:
-                    type: array
-                    items:
-                        type: string
-                        pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
-                    title: tags
-                    maxItems: 16
-                    description: |-
-                        Tags to set on the resulting version. A chart's version and a
-                         module's version are applied as tags whether or not named.
-                description:
-                    type: string
-                    title: description
-                    maxLength: 1024
-                    description: Applied when the pull creates the component; ignored otherwise.
-                labels:
-                    type: object
-                    title: labels
-                    maxProperties: 64
-                    additionalProperties:
-                        type: string
-                        title: value
-                        maxLength: 256
-                baseline_values_json:
-                    type: string
-                    title: baseline_values_json
-                    maxLength: 1048576
-                    description: |-
-                        The organization's defaults for this artifact, as a JSON object: values
-                         laid over the artifact's own defaults (a chart's values.yaml, a module's
-                         variable defaults) before any environment's values. Stored with the
-                         artifact as one version under one digest, so changing them is a new
-                         version, which environments move to like any other. Empty means the
-                         artifact's own defaults.
-            title: PullComponentRequest
-            required:
-                - source
-            additionalProperties: false
-            description: |
-                pull_component.name_not_an_id // a component name cannot start with cmp-, which marks an id
-                pull_component.tags.tag_not_an_id // a tag cannot start with ver-, which marks a version id
-        admiral.api.registry.v1.PullComponentResponse:
-            type: object
-            properties:
-                component:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.registry.v1.Component'
-                    title: component
-                version:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.registry.v1.Version'
-                    title: version
-                unchanged:
-                    type: boolean
-                    title: unchanged
-                    description: The resolution was already published under this name; nothing was written.
-            title: PullComponentResponse
-            additionalProperties: false
-        admiral.api.registry.v1.PullSource:
-            type: object
-            anyOf:
-                - type: object
-                  properties:
-                    archive:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.Archive'
-                        title: archive
-                  title: archive
-                - type: object
-                  properties:
-                    git_tree:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.GitTree'
-                        title: git_tree
-                  title: git_tree
-                - type: object
-                  properties:
-                    helm_chart:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.HelmChart'
-                        title: helm_chart
-                  title: helm_chart
-                - type: object
-                  properties:
-                    oci_chart:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.OCIChart'
-                        title: oci_chart
-                  title: oci_chart
-                - type: object
-                  properties:
-                    registry_module:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.PullSource.RegistryModule'
-                        title: registry_module
-                  title: registry_module
-            unevaluatedProperties: false
-            not:
-                allOf:
-                    - anyOf:
-                        - required:
-                            - archive
-                        - required:
-                            - git_tree
-                        - required:
-                            - helm_chart
-                        - required:
-                            - oci_chart
-                        - required:
-                            - registry_module
-                    - not:
-                        oneOf:
-                            - required:
-                                - archive
-                            - required:
-                                - git_tree
-                            - required:
-                                - helm_chart
-                            - required:
-                                - oci_chart
-                            - required:
-                                - registry_module
-            title: PullSource
-            description: |-
-                PullSource names an artifact to pull. One variant. The kind of the
-                 resulting component follows from it: a chart from OCI or a Helm
-                 repository, a module from a module registry, whatever inspection finds in
-                 a git tree or an archive.
-        admiral.api.registry.v1.PullSource.Archive:
-            type: object
-            properties:
-                url:
-                    type: string
-                    title: url
-                    maxLength: 512
-                    format: uri
-            title: Archive
-            required:
-                - url
-            additionalProperties: false
-            description: An archive at a URL, unpacked by its extension.
-        admiral.api.registry.v1.PullSource.GitTree:
-            type: object
-            properties:
-                url:
-                    type: string
-                    title: url
-                    maxLength: 512
-                    format: uri
-                    description: '`https://github.com/acme/infra.git`, `ssh://git@github.com/acme/infra.git`.'
-                ref:
-                    type: string
-                    title: ref
-                    maxLength: 256
-                    description: A branch, tag or commit. Empty is the default branch.
-                path:
-                    type: string
-                    title: path
-                    maxLength: 512
-                    description: |
-                        A directory within the repository. Empty is the root.
-                        string.not_contains = ".."
-            title: GitTree
-            required:
-                - url
-            additionalProperties: false
-            description: A git repository at a ref, optionally a directory of it.
-        admiral.api.registry.v1.PullSource.HelmChart:
-            type: object
-            properties:
-                repository:
-                    type: string
-                    title: repository
-                    maxLength: 512
-                    format: uri
-                chart:
-                    type: string
-                    title: chart
-                    maxLength: 63
-                    pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
-                version:
-                    type: string
-                    title: version
-                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
-            title: HelmChart
-            required:
-                - repository
-                - chart
-                - version
-            additionalProperties: false
-            description: |-
-                A chart in an HTTP repository: the repository URL, the chart's name in
-                 its index, and an exact version.
-        admiral.api.registry.v1.PullSource.OCIChart:
-            type: object
-            properties:
-                reference:
-                    type: string
-                    title: reference
-                    maxLength: 512
-                    minLength: 7
-                    description: |
-                        string.prefix = "oci://"
-                version:
-                    type: string
-                    title: version
-                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
-            title: OCIChart
-            required:
-                - reference
-                - version
-            additionalProperties: false
-            description: |-
-                A chart in an OCI registry: `oci://ghcr.io/argoproj/argo-helm/argo-cd`
-                 at a version, which is its tag.
-        admiral.api.registry.v1.PullSource.RegistryModule:
-            type: object
-            properties:
-                address:
-                    type: string
-                    title: address
-                    maxLength: 512
-                    minLength: 5
-                version:
-                    type: string
-                    title: version
-                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
-            title: RegistryModule
-            required:
-                - address
-                - version
-            additionalProperties: false
-            description: |-
-                A module in a module registry: the address as a module call would
-                 write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
-                 host-qualified, optionally `//subdir`) and an exact version. A range is
-                 what a Source tracks, not what a pull takes.
         admiral.api.registry.v1.SetComponentStatusRequest:
             type: object
             properties:
@@ -9737,6 +9440,422 @@ components:
             description: |-
                 RunJob is one agent job within a phase: the components it covers and the
                  assignment it ran on.
+        admiral.api.serviceaccount.v1.CreateIssuerRequest:
+            type: object
+            properties:
+                issuer:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.Issuer'
+                    title: issuer
+                    description: 'The issuer to create: `name`, `iss` and `keys`.'
+            title: CreateIssuerRequest
+            required:
+                - issuer
+            additionalProperties: false
+            description: |
+                create_issuer.keys // keys must be a jwks_uri or a jwks; reported keys come only from enrollment
+        admiral.api.serviceaccount.v1.CreateIssuerResponse:
+            type: object
+            properties:
+                issuer:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.Issuer'
+                    title: issuer
+            title: CreateIssuerResponse
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.DeleteIssuerRequest:
+            type: object
+            properties:
+                issuer_id:
+                    type: string
+                    title: issuer_id
+                    pattern: ^iss-[0-9a-z]+$
+            title: DeleteIssuerRequest
+            required:
+                - issuer_id
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.DeleteIssuerResponse:
+            type: object
+            title: DeleteIssuerResponse
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.GetIssuerRequest:
+            type: object
+            properties:
+                issuer_id:
+                    type: string
+                    title: issuer_id
+                    pattern: ^iss-[0-9a-z]+$
+            title: GetIssuerRequest
+            required:
+                - issuer_id
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.GetIssuerResponse:
+            type: object
+            properties:
+                issuer:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.Issuer'
+                    title: issuer
+            title: GetIssuerResponse
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.GetServiceAccountRequest:
+            type: object
+            properties:
+                service_account_id:
+                    type: string
+                    title: service_account_id
+                    pattern: ^sa-[0-9a-z]+$
+            title: GetServiceAccountRequest
+            required:
+                - service_account_id
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.GetServiceAccountResponse:
+            type: object
+            properties:
+                service_account:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ServiceAccount'
+                    title: service_account
+            title: GetServiceAccountResponse
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.Issuer:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    pattern: ^iss-[0-9a-z]+$
+                    readOnly: true
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: One made at enrollment is named after the agent that enrolled it.
+                iss:
+                    type: string
+                    title: iss
+                    maxLength: 2048
+                    minLength: 1
+                    description: |-
+                        (IMMUTABLE) The `iss` every token must carry, exactly, e.g.
+                         `https://token.actions.githubusercontent.com`. One made at enrollment
+                         takes it from the enrolling token. Fixed once set.
+                keys:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.IssuerKeys'
+                    title: keys
+                key_ids:
+                    type: array
+                    items:
+                        type: string
+                        readOnly: true
+                    title: key_ids
+                    description: The key ids currently trusted.
+                    readOnly: true
+                keys_updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: keys_updated_at
+                    readOnly: true
+                pending_key_ids:
+                    type: array
+                    items:
+                        type: string
+                        readOnly: true
+                    title: pending_key_ids
+                    description: |-
+                        Key ids an agent reported that are not trusted yet. They are never
+                         applied on their own: an admin accepts them with SetIssuerKeys.
+                    readOnly: true
+                pending_keys_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: pending_keys_at
+                    readOnly: true
+                created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: created_by
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+            title: Issuer
+            required:
+                - keys
+            additionalProperties: false
+            description: |-
+                Issuer is a set of keys Admiral accepts tokens from. A token must carry
+                 this `iss`, be issued for Admiral as its audience, and verify against the
+                 issuer's keys.
+        admiral.api.serviceaccount.v1.IssuerKeys:
+            type: object
+            allOf:
+                - oneOf:
+                    - required:
+                        - jwks_uri
+                    - required:
+                        - jwks
+                    - required:
+                        - reported
+            anyOf:
+                - type: object
+                  properties:
+                    jwks:
+                        type: string
+                        title: jwks
+                        maxLength: 65536
+                        minLength: 2
+                        description: |-
+                            A JSON Web Key Set, pasted in. It replaces the trusted set, so paste
+                             the whole set the issuer serves: during a rotation that holds the old
+                             key and the new one.
+                  title: jwks
+                - type: object
+                  properties:
+                    jwks_uri:
+                        type: string
+                        title: jwks_uri
+                        maxLength: 2048
+                        format: uri
+                        description: |
+                            Fetched and refreshed when a token names a key not yet seen. Rotation
+                             needs no action.
+                            string.prefix = "https://"
+                  title: jwks_uri
+                - type: object
+                  properties:
+                    reported:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.IssuerKeys.Reported'
+                        title: reported
+                        description: |-
+                            The first keys arrive when an agent enrolls. Keys agents report after
+                             that wait in `pending_key_ids` for an admin to accept. Never set on
+                             create: an issuer with reported keys is made only by enrollment.
+                  title: reported
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - jwks
+                        - required:
+                            - jwks_uri
+                        - required:
+                            - reported
+                    - not:
+                        oneOf:
+                            - required:
+                                - jwks
+                            - required:
+                                - jwks_uri
+                            - required:
+                                - reported
+            title: IssuerKeys
+            description: IssuerKeys is where Admiral gets the keys that verify an issuer's tokens.
+        admiral.api.serviceaccount.v1.IssuerKeys.Reported:
+            type: object
+            title: Reported
+            additionalProperties: false
+            description: |-
+                Reported marks keys the agents that trust the issuer report from inside
+                 it, for an issuer Admiral cannot reach (kind, minikube, k3s, on-prem).
+        admiral.api.serviceaccount.v1.ListIssuersRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Filterable fields:
+                           - `name`: filter by issuer name.
+
+                         Example: `field['name'] = 'dev'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                page_token:
+                    type: string
+                    title: page_token
+            title: ListIssuersRequest
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.ListIssuersResponse:
+            type: object
+            properties:
+                issuers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.serviceaccount.v1.Issuer'
+                    title: issuers
+                next_page_token:
+                    type: string
+                    title: next_page_token
+            title: ListIssuersResponse
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.ListServiceAccountsRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Filterable fields:
+                           - `issuer_id`: service accounts that trust this issuer.
+                           - `agent_id`: the service account this agent runs as.
+
+                         Example: `field['issuer_id'] = 'iss-4m8q2x7k1p9c'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                page_token:
+                    type: string
+                    title: page_token
+            title: ListServiceAccountsRequest
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.ListServiceAccountsResponse:
+            type: object
+            properties:
+                service_accounts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ServiceAccount'
+                    title: service_accounts
+                next_page_token:
+                    type: string
+                    title: next_page_token
+            title: ListServiceAccountsResponse
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.ServiceAccount:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    pattern: ^sa-[0-9a-z]+$
+                    readOnly: true
+                agent_id:
+                    type: string
+                    title: agent_id
+                    description: |-
+                        `agt-`: the agent that runs as this service account. Empty for one that
+                         runs no agent.
+                    readOnly: true
+                issuer_id:
+                    type: string
+                    title: issuer_id
+                    description: |-
+                        `iss-`: the issuer whose tokens it accepts. For an agent's, set when the
+                         agent enrolls; empty before.
+                    readOnly: true
+                subject:
+                    type: string
+                    title: subject
+                    description: |-
+                        The `sub` a token must carry. For a Kubernetes service account,
+                         `system:serviceaccount:<namespace>:<name>`. For an agent's, recorded from
+                         its verified token when it enrolls and fixed from then on; empty before.
+                    readOnly: true
+                enrolled_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: enrolled_at
+                    readOnly: true
+                created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: created_by
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+            title: ServiceAccount
+            additionalProperties: false
+            description: |-
+                ServiceAccount is a non-human principal. With `issuer_id` and `subject` set
+                 it signs in with a token from that issuer carrying that subject, matched
+                 exactly; the exact match is what secures a shared issuer, which anyone can
+                 get a token from.
+        admiral.api.serviceaccount.v1.SetIssuerKeysRequest:
+            type: object
+            allOf:
+                - oneOf:
+                    - required:
+                        - keys
+                    - required:
+                        - accept_pending
+            anyOf:
+                - type: object
+                  properties:
+                    accept_pending:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.SetIssuerKeysRequest.AcceptPending'
+                        title: accept_pending
+                        description: Trust the keys an agent last reported.
+                  title: accept_pending
+                - type: object
+                  properties:
+                    keys:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.IssuerKeys'
+                        title: keys
+                        description: |-
+                            Replace where the keys come from. Switching to `reported` keeps the
+                             keys it has and stops fetching or expecting a paste.
+                  title: keys
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - accept_pending
+                        - required:
+                            - keys
+                    - not:
+                        oneOf:
+                            - required:
+                                - accept_pending
+                            - required:
+                                - keys
+            properties:
+                issuer_id:
+                    type: string
+                    title: issuer_id
+                    pattern: ^iss-[0-9a-z]+$
+            title: SetIssuerKeysRequest
+            required:
+                - issuer_id
+        admiral.api.serviceaccount.v1.SetIssuerKeysRequest.AcceptPending:
+            type: object
+            title: AcceptPending
+            additionalProperties: false
+            description: AcceptPending marks accepting the keys in `pending_key_ids`.
+        admiral.api.serviceaccount.v1.SetIssuerKeysResponse:
+            type: object
+            properties:
+                issuer:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.Issuer'
+                    title: issuer
+            title: SetIssuerKeysResponse
+            additionalProperties: false
         admiral.api.tenant.v1.GetTenantRequest:
             type: object
             title: GetTenantRequest
@@ -10116,13 +10235,15 @@ tags:
     - name: Runs
       description: Plan and apply change sets, check environments for drift, and reapply what they desire.
     - name: Components
-      description: 'Publish, pull and curate the component registry: components, their versions and tags.'
+      description: 'Publish, import and curate the component registry: components, their versions and tags.'
     - name: Tenant
       description: 'Your organization: its name, slug, status and logo.'
     - name: Credentials
       description: Manage credentials for accessing external systems.
-    - name: Workload Identity Providers
-      description: Register the token issuers Admiral trusts, such as a Kubernetes cluster's, by issuer URL or keys.
+    - name: Service Accounts
+      description: The non-human principals your agents run as, and the issuer and subject each signs in with.
+    - name: Issuers
+      description: The token issuers your service accounts trust, by key URL, pasted keys, or keys agents report.
     - name: Agents
       description: Manage your agents, and who may use each.
     - name: Jobs
@@ -10159,12 +10280,13 @@ x-tagGroups:
         - Credentials
     - name: Agents
       tags:
-        - Workload Identity Providers
         - Agents
         - Jobs
     - name: Identity & Access
       tags:
         - Tenant
         - User
+        - Service Accounts
+        - Issuers
         - Invitations
         - API Keys

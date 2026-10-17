@@ -45,25 +45,30 @@ tags:
 
         An environment is a named place an application deploys to (dev, staging,
         prod). What it runs changes only through change sets.
+    - name: ServiceAccountAPI
+      description: |-
+        ServiceAccountAPI reads the organization's service accounts. A service
+        account is a non-human principal: it holds roles, and signs in with an
+        `adms_` key or with a token from an issuer it trusts. Every agent runs as
+        one, made with the agent.
+    - name: IssuerAPI
+      description: |-
+        IssuerAPI manages the issuers the organization's service accounts accept
+        tokens from. An issuer is a set of keys, not a token: a public URL Admiral
+        fetches them from, keys pasted in, or keys agents report from inside. Many
+        service accounts can trust one issuer.
+
+        An agent's issuer is found or made when it enrolls, so this API is for an
+        issuer named before anything enrolls, and for accepting rotated keys.
     - name: AgentAPI
       description: |-
-        AgentAPI manages agents: what runs work in a customer's environment, how
-        each proves who it is, who may use it, and its enrollment keys.
+        AgentAPI manages agents: what runs work in a customer's environment, who
+        may use it, and its enrollment keys. Each agent runs as a service account
+        (admiral.*.serviceaccount.v1), made with it.
 
         An environment deploys through the agents assigned to it, and may be assigned
         only an agent granted to the organization, a team, its application, or the
         environment itself.
-    - name: WorkloadIdentityProviderAPI
-      description: |-
-        WorkloadIdentityProviderAPI manages the token issuers Admiral trusts for
-        agents to prove who they are, such as a Kubernetes cluster's
-        service-account issuer.
-
-        A provider is an issuer Admiral trusts, not a token: a public URL Admiral
-        fetches keys from, or its public keys (uploaded). An agent authenticates
-        with the short-lived token its provider issues; no long-lived secret
-        exists. A provider without keys yet is PENDING until a person sets them or
-        an agent enrolls it with a single-use enrollment key.
     - name: JobAPI
       description: JobAPI reads and cancels the jobs the platform hands agents.
     - name: AgentRuntimeAPI
@@ -166,7 +171,7 @@ paths:
     /v1/agents:
         get:
             summary: |-
-                ListAgents lists agents. Narrow it with `filter`, by provider or by what an
+                ListAgents lists agents. Narrow it with `filter`, by kind or by what an
                 agent may be assigned to.
             description: 'Scope: `agent:read`'
             operationId: AgentAPI_ListAgents
@@ -187,7 +192,6 @@ paths:
                     Filterable fields:
                       - `name`: filter by agent name.
                       - `kind`: filter by agent kind.
-                      - `provider_id`: agents whose workload identity is from this provider.
                       - `assignable_to`: agents an application's environments may be assigned (an application id).
 
                     Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'app-4m8q2x7k1p9c'`
@@ -207,9 +211,9 @@ paths:
                 - AgentAPI
         post:
             summary: |-
-                CreateAgent records an agent: what it runs, and the workload identity it
-                signs in with. When its provider is PENDING for enrollment, the response
-                carries a single-use key the agent enrolls the provider's keys with.
+                CreateAgent records an agent and the service account it runs as, and
+                returns the single-use key it enrolls with. Nothing about where it runs is
+                named here: its issuer and subject are learned when it enrolls.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_CreateAgent
             responses:
@@ -305,9 +309,10 @@ paths:
     /v1/agents/{agent_id}/enrollment-keys:
         post:
             summary: |-
-                CreateEnrollmentKey issues a single-use key an agent enrolls its
-                provider's keys with. It can do nothing else, expires within an hour, and is revoked the
-                moment it is used.
+                CreateEnrollmentKey issues a single-use key an agent enrolls with, for one
+                that has not enrolled or must enroll again (reinstalled under another
+                Kubernetes service account, say). It can do nothing else, expires within
+                an hour, and is revoked the moment it is used.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_CreateEnrollmentKey
             responses:
@@ -1194,6 +1199,36 @@ paths:
                   type: string
             tags:
                 - RegistryAPI
+    /v1/components/import:
+        post:
+            summary: |-
+                ImportComponent publishes an artifact the tenant does not own: a chart in
+                an HTTP repository or an OCI registry, a module in a module registry, a
+                git repository at a ref, an archive. Admiral fetches it with the
+                credentials named, closes it over what it reaches, scans it, and
+                records the version with provenance saying where it came from. The
+                bytes are a copy: upstream may move the tag and the version does not.
+                The same resolution under the same name is the same version, returned
+                with `unchanged` set.
+            description: 'Scope: `component:publish`'
+            operationId: RegistryAPI_ImportComponent
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ImportComponentResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1ImportComponentRequest'
+            tags:
+                - RegistryAPI
     /v1/components/publish:
         post:
             summary: |-
@@ -1231,36 +1266,6 @@ paths:
                   required: true
                   schema:
                     $ref: '#/definitions/v1PublishComponentRequest'
-            tags:
-                - RegistryAPI
-    /v1/components/pull:
-        post:
-            summary: |-
-                PullComponent publishes an artifact the tenant does not own: a chart in
-                an HTTP repository or an OCI registry, a module in a module registry, a
-                git repository at a ref, an archive. Admiral fetches it with the
-                credentials named, closes it over what it reaches, scans it, and
-                records the version with provenance saying where it came from. The
-                bytes are a copy: upstream may move the tag and the version does not.
-                The same resolution under the same name is the same version, returned
-                with `unchanged` set.
-            description: 'Scope: `component:publish`'
-            operationId: RegistryAPI_PullComponent
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1PullComponentResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1PullComponentRequest'
             tags:
                 - RegistryAPI
     /v1/components/{component.id}:
@@ -2032,6 +2037,138 @@ paths:
                     $ref: '#/definitions/InvitationAPIRevokeInvitationBody'
             tags:
                 - InvitationAPI
+    /v1/issuers:
+        get:
+            summary: ListIssuers lists the organization's issuers.
+            description: 'Scope: `serviceaccount:read`'
+            operationId: IssuerAPI_ListIssuers
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListIssuersResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                    Filterable fields:
+                      - `name`: filter by issuer name.
+
+                    Example: `field['name'] = 'dev'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - IssuerAPI
+        post:
+            summary: |-
+                CreateIssuer records an issuer to trust: give `jwks_uri` when its keys
+                are public (GKE, EKS, GitHub Actions, Google, AWS), or the keys themselves
+                when not.
+            description: 'Scope: `serviceaccount:write`'
+            operationId: IssuerAPI_CreateIssuer
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateIssuerResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateIssuerRequest'
+            tags:
+                - IssuerAPI
+    /v1/issuers/{issuer_id}:
+        get:
+            summary: GetIssuer returns an issuer and the key ids it trusts.
+            description: 'Scope: `serviceaccount:read`'
+            operationId: IssuerAPI_GetIssuer
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetIssuerResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: issuer_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - IssuerAPI
+        delete:
+            summary: |-
+                DeleteIssuer removes an issuer. FAILED_PRECONDITION while any service
+                account trusts it (the message names them).
+            description: 'Scope: `serviceaccount:write`'
+            operationId: IssuerAPI_DeleteIssuer
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteIssuerResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: issuer_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - IssuerAPI
+    /v1/issuers/{issuer_id}/keys:
+        post:
+            summary: |-
+                SetIssuerKeys replaces where an issuer's keys come from, or accepts the
+                keys an agent last reported.
+            description: 'Scope: `serviceaccount:write`'
+            operationId: IssuerAPI_SetIssuerKeys
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1SetIssuerKeysResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: issuer_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/IssuerAPISetIssuerKeysBody'
+            tags:
+                - IssuerAPI
     /v1/jobs:
         get:
             summary: ListJobs lists jobs for an agent or an environment, newest first.
@@ -2414,6 +2551,69 @@ paths:
                   type: string
             tags:
                 - RunAPI
+    /v1/service-accounts:
+        get:
+            summary: |-
+                ListServiceAccounts lists the organization's service accounts. Narrow it
+                with `filter`, by issuer or by agent.
+            description: 'Scope: `serviceaccount:read`'
+            operationId: ServiceAccountAPI_ListServiceAccounts
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListServiceAccountsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                    Filterable fields:
+                      - `issuer_id`: service accounts that trust this issuer.
+                      - `agent_id`: the service account this agent runs as.
+
+                    Example: `field['issuer_id'] = 'iss-4m8q2x7k1p9c'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - ServiceAccountAPI
+    /v1/service-accounts/{service_account_id}:
+        get:
+            summary: |-
+                GetServiceAccount returns a service account, and the issuer and subject
+                it signs in with once known.
+            description: 'Scope: `serviceaccount:read`'
+            operationId: ServiceAccountAPI_GetServiceAccount
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetServiceAccountResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: service_account_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ServiceAccountAPI
     /v1/tenant:
         get:
             summary: GetTenant returns the caller's own tenant.
@@ -2543,141 +2743,6 @@ paths:
                   type: string
             tags:
                 - UserAPI
-    /v1/workload-identity-providers:
-        get:
-            summary: ListWorkloadIdentityProviders lists the tenant's providers.
-            description: 'Scope: `agent:read`'
-            operationId: WorkloadIdentityProviderAPI_ListWorkloadIdentityProviders
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ListWorkloadIdentityProvidersResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL.
-
-                    Filterable fields:
-                      - `name`: filter by provider name.
-                      - `status`: filter by trust status.
-
-                    Example: `field['status'] = 'STATUS_PENDING'`
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - WorkloadIdentityProviderAPI
-        post:
-            summary: |-
-                CreateWorkloadIdentityProvider records an issuer to trust: GitHub
-                Actions, Google, an AWS account, or a Kubernetes cluster. Give a
-                `jwks_uri` when its keys are public (GKE, EKS, GitHub, Google, AWS), the
-                keys themselves when not, or neither to leave it PENDING for an agent to
-                enroll (kind, minikube, on-prem).
-            description: 'Scope: `agent:write`'
-            operationId: WorkloadIdentityProviderAPI_CreateWorkloadIdentityProvider
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1CreateWorkloadIdentityProviderResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1CreateWorkloadIdentityProviderRequest'
-            tags:
-                - WorkloadIdentityProviderAPI
-    /v1/workload-identity-providers/{provider_id}:
-        get:
-            summary: GetWorkloadIdentityProvider returns a provider and the key ids it trusts.
-            description: 'Scope: `agent:read`'
-            operationId: WorkloadIdentityProviderAPI_GetWorkloadIdentityProvider
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetWorkloadIdentityProviderResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: provider_id
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - WorkloadIdentityProviderAPI
-        delete:
-            summary: |-
-                DeleteWorkloadIdentityProvider removes a provider and the agents that authenticate
-                through it. Their leases end at once.
-            description: 'Scope: `agent:write`'
-            operationId: WorkloadIdentityProviderAPI_DeleteWorkloadIdentityProvider
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1DeleteWorkloadIdentityProviderResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: provider_id
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - WorkloadIdentityProviderAPI
-    /v1/workload-identity-providers/{provider_id}/keys:
-        post:
-            summary: |-
-                SetWorkloadIdentityProviderKeys replaces where a provider's keys come
-                from, or accepts the keys an agent last reported.
-            description: 'Scope: `agent:write`'
-            operationId: WorkloadIdentityProviderAPI_SetWorkloadIdentityProviderKeys
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1SetWorkloadIdentityProviderKeysResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: provider_id
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/WorkloadIdentityProviderAPISetWorkloadIdentityProviderKeysBody'
-            tags:
-                - WorkloadIdentityProviderAPI
 definitions:
     AgentAPICreateEnrollmentKeyBody:
         type: object
@@ -2719,8 +2784,6 @@ definitions:
                         readOnly: true
                     kind:
                         $ref: '#/definitions/v1AgentKind'
-                    identity:
-                        $ref: '#/definitions/v1AgentIdentity'
                     settings:
                         $ref: '#/definitions/v1AgentSettings'
                     approval:
@@ -2737,6 +2800,10 @@ definitions:
                             The components that may run on this agent, as `cmp-` ids. Empty allows
                             any. Only the agent's owner sets it; Admiral refuses to place a component
                             outside it and checks again before each job.
+                    service_account_id:
+                        type: string
+                        description: '`sa-`: the service account the agent runs as, made with it.'
+                        readOnly: true
                 description: |-
                     The agent with updated fields. Its `id` identifies the agent; only fields
                     named in `update_mask` are applied.
@@ -3174,6 +3241,14 @@ definitions:
              - MODE_REAPPLY: Reapply: a full plan of the chosen components, then apply. Its content
             was approved before, so the environment's rule does not apply; the rule
             of each agent it touches still does, since it uses their credentials.
+    EngineSupportEngine:
+        type: string
+        enum:
+            - ENGINE_UNSPECIFIED
+            - ENGINE_TERRAFORM
+            - ENGINE_OPENTOFU
+        default: ENGINE_UNSPECIFIED
+        description: Engine is a Terraform-compatible binary.
     EnvironmentAPIUpdateEnvironmentBody:
         type: object
         properties:
@@ -3307,29 +3382,11 @@ definitions:
 
              - KEYS_UNSPECIFIED: The agent reported no keys.
              - KEYS_TRUSTED: They are the keys Admiral trusts.
-             - KEYS_PENDING: They differ, and are recorded in the provider's `pending_key_ids` for
+             - KEYS_PENDING: They differ, and are recorded in the issuer's `pending_key_ids` for
             an admin to accept.
-             - KEYS_FROM_ISSUER: Not compared: this provider fetches its keys from its issuer, which
+             - KEYS_FROM_ISSUER: Not compared: this issuer's keys are fetched from its `jwks_uri`, which
             Admiral refetches when a token names a key it has not seen.
-    InvitationAPIRevokeInvitationBody:
-        type: object
-        description: RevokeInvitationRequest names one invitation in the caller's tenant.
-    JobAPICancelJobBody:
-        type: object
-    PrepareErrorClass:
-        type: string
-        enum:
-            - CLASS_UNSPECIFIED
-            - CLASS_INPUT
-            - CLASS_INTERNAL
-        default: CLASS_UNSPECIFIED
-        description: |-
-            Class says whose problem it is, and so whether asking again can help.
-
-             - CLASS_INPUT: The change set's inputs cannot be rendered: asking again gives the
-            same answer, so fix the change set.
-             - CLASS_INTERNAL: Admiral failed (storage, the database): asking again can succeed.
-    PullSourceArchive:
+    ImportSourceArchive:
         type: object
         properties:
             url:
@@ -3337,7 +3394,7 @@ definitions:
         description: An archive at a URL, unpacked by its extension.
         required:
             - url
-    PullSourceGitTree:
+    ImportSourceGitTree:
         type: object
         properties:
             url:
@@ -3352,7 +3409,7 @@ definitions:
         description: A git repository at a ref, optionally a directory of it.
         required:
             - url
-    PullSourceHelmChart:
+    ImportSourceHelmChart:
         type: object
         properties:
             repository:
@@ -3368,7 +3425,7 @@ definitions:
             - repository
             - chart
             - version
-    PullSourceOCIChart:
+    ImportSourceOCIChart:
         type: object
         properties:
             reference:
@@ -3381,7 +3438,7 @@ definitions:
         required:
             - reference
             - version
-    PullSourceRegistryModule:
+    ImportSourceRegistryModule:
         type: object
         properties:
             address:
@@ -3392,10 +3449,44 @@ definitions:
             A module in a module registry: the address as a module call would
             write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
             host-qualified, optionally `//subdir`) and an exact version. A range is
-            what a Source tracks, not what a pull takes.
+            what a Source tracks, not what an import takes.
         required:
             - address
             - version
+    InvitationAPIRevokeInvitationBody:
+        type: object
+        description: RevokeInvitationRequest names one invitation in the caller's tenant.
+    IssuerAPISetIssuerKeysBody:
+        type: object
+        properties:
+            keys:
+                $ref: '#/definitions/v1IssuerKeys'
+                description: |-
+                    Replace where the keys come from. Switching to `reported` keeps the
+                    keys it has and stops fetching or expecting a paste.
+            accept_pending:
+                $ref: '#/definitions/SetIssuerKeysRequestAcceptPending'
+                description: Trust the keys an agent last reported.
+    IssuerKeysReported:
+        type: object
+        description: |-
+            Reported marks keys the agents that trust the issuer report from inside
+            it, for an issuer Admiral cannot reach (kind, minikube, k3s, on-prem).
+    JobAPICancelJobBody:
+        type: object
+    PrepareErrorClass:
+        type: string
+        enum:
+            - CLASS_UNSPECIFIED
+            - CLASS_INPUT
+            - CLASS_INTERNAL
+        default: CLASS_UNSPECIFIED
+        description: |-
+            Class says whose problem it is, and so whether asking again can help.
+
+             - CLASS_INPUT: The change set's inputs cannot be rendered: asking again gives the
+            same answer, so fix the change set.
+             - CLASS_INTERNAL: Admiral failed (storage, the database): asking again can succeed.
     RegistryAPISetComponentStatusBody:
         type: object
         properties:
@@ -3585,17 +3676,9 @@ definitions:
              - TRIGGER_USER: A person or an API call.
              - TRIGGER_SCHEDULE: A drift check on the environment's schedule.
              - TRIGGER_GATE: A drift check the environment requires right before an apply.
-    SetWorkloadIdentityProviderKeysRequestAcceptPending:
+    SetIssuerKeysRequestAcceptPending:
         type: object
         description: AcceptPending marks accepting the keys in `pending_key_ids`.
-    TerraformEngineSupportEngine:
-        type: string
-        enum:
-            - ENGINE_UNSPECIFIED
-            - ENGINE_TERRAFORM
-            - ENGINE_OPENTOFU
-        default: ENGINE_UNSPECIFIED
-        description: Engine is a Terraform-compatible binary.
     ValueSourceOrigin:
         type: string
         enum:
@@ -3614,20 +3697,6 @@ definitions:
              - ORIGIN_BASELINE: The organization's defaults stored with the version.
              - ORIGIN_ENVIRONMENT: What the environment already runs with.
              - ORIGIN_CHANGE_SET: This change set's edits.
-    WorkloadIdentityProviderAPISetWorkloadIdentityProviderKeysBody:
-        type: object
-        properties:
-            keys:
-                $ref: '#/definitions/v1WorkloadIdentityProviderKeys'
-                description: Replace where the keys come from.
-            accept_pending:
-                $ref: '#/definitions/SetWorkloadIdentityProviderKeysRequestAcceptPending'
-                description: Trust the keys an agent last reported.
-    WorkloadIdentityProviderKeysEnrollment:
-        type: object
-        description: |-
-            Keys an agent supplies from inside the issuer's environment, for an issuer
-            Admiral cannot reach (kind, minikube, k3s, on-prem, private clusters).
     apiChangesetV1Finding:
         type: object
         properties:
@@ -3709,7 +3778,7 @@ definitions:
 
                     Schemes other than `http`, `https` (or the empty scheme) might be
                     used with implementation specific semantics.
-        additionalProperties: {}
+        additionalProperties: true
         description: |-
             `Any` contains an arbitrary serialized protocol buffer message along with a
             URL that describes the type of the serialized message.
@@ -3870,8 +3939,6 @@ definitions:
                 readOnly: true
             kind:
                 $ref: '#/definitions/v1AgentKind'
-            identity:
-                $ref: '#/definitions/v1AgentIdentity'
             settings:
                 $ref: '#/definitions/v1AgentSettings'
             approval:
@@ -3888,6 +3955,10 @@ definitions:
                     The components that may run on this agent, as `cmp-` ids. Empty allows
                     any. Only the agent's owner sets it; Admiral refuses to place a component
                     outside it and checks again before each job.
+            service_account_id:
+                type: string
+                description: '`sa-`: the service account the agent runs as, made with it.'
+                readOnly: true
     v1AgentAssignment:
         type: object
         properties:
@@ -3948,24 +4019,18 @@ definitions:
             AgentGrant lets environments be assigned an agent, and which of its
             profiles they may name. Set exactly one target; an agent can hold several
             grants, one per target.
-    v1AgentIdentity:
-        type: object
-        properties:
-            workload:
-                $ref: '#/definitions/v1WorkloadIdentity'
-        description: AgentIdentity is who an agent is and how it proves it.
     v1AgentKind:
         type: string
         enum:
             - KIND_UNSPECIFIED
             - KIND_KUBERNETES
-            - KIND_TERRAFORM
+            - KIND_INFRA
         default: KIND_UNSPECIFIED
         description: |-
-            Kind is what an agent runs.
+            Kind is what an agent deploys, never where it runs.
 
-             - KIND_KUBERNETES: Applies Kubernetes manifests and Helm charts in its cluster.
-             - KIND_TERRAFORM: Runs Terraform or OpenTofu.
+             - KIND_KUBERNETES: Applies Kubernetes manifests and Helm charts where it runs.
+             - KIND_INFRA: Runs a Terraform-compatible engine: Terraform or OpenTofu.
     v1AgentReport:
         type: object
         properties:
@@ -3992,8 +4057,8 @@ definitions:
         properties:
             kubernetes:
                 $ref: '#/definitions/v1KubernetesAgentSettings'
-            terraform:
-                $ref: '#/definitions/v1TerraformAgentSettings'
+            infra:
+                $ref: '#/definitions/v1InfraAgentSettings'
         description: |-
             AgentSettings is what the agent's owner allows it, one block per kind.
             Environments that use the agent choose within these; they cannot exceed
@@ -4670,7 +4735,7 @@ definitions:
             agent:
                 $ref: '#/definitions/v1Agent'
                 description: |-
-                    The agent to create: `name`, `kind`, `identity`, and optionally
+                    The agent to create: `name`, `kind`, and optionally
                     `settings`, `approval` and `allowed_component_ids`.
             grants:
                 type: array
@@ -4694,10 +4759,7 @@ definitions:
                     $ref: '#/definitions/v1AgentGrant'
             enrollment_key:
                 $ref: '#/definitions/v1EnrollmentKey'
-                description: |-
-                    Set when, and only when, the agent's provider is PENDING for
-                    enrollment: the single-use key the agent enrolls the provider's keys
-                    with. Shown once.
+                description: The single-use key the agent enrolls with. Shown once.
     v1CreateApiKeyRequest:
         type: object
         properties:
@@ -4827,6 +4889,19 @@ definitions:
             invitation:
                 $ref: '#/definitions/v1Invitation'
         description: CreateInvitationResponse carries the invitation, without its link.
+    v1CreateIssuerRequest:
+        type: object
+        properties:
+            issuer:
+                $ref: '#/definitions/v1Issuer'
+                description: 'The issuer to create: `name`, `iss` and `keys`.'
+        required:
+            - issuer
+    v1CreateIssuerResponse:
+        type: object
+        properties:
+            issuer:
+                $ref: '#/definitions/v1Issuer'
     v1CreateRunRequest:
         type: object
         properties:
@@ -4846,21 +4921,6 @@ definitions:
         properties:
             run:
                 $ref: '#/definitions/v1Run'
-    v1CreateWorkloadIdentityProviderRequest:
-        type: object
-        properties:
-            workload_identity_provider:
-                $ref: '#/definitions/v1WorkloadIdentityProvider'
-                description: |-
-                    The provider to create: `name`, `issuer`, and `keys` (absent leaves it
-                    PENDING for an agent to enroll).
-        required:
-            - workload_identity_provider
-    v1CreateWorkloadIdentityProviderResponse:
-        type: object
-        properties:
-            workload_identity_provider:
-                $ref: '#/definitions/v1WorkloadIdentityProvider'
     v1Credential:
         type: object
         properties:
@@ -4953,11 +5013,11 @@ definitions:
     v1DeleteEnvironmentResponse:
         type: object
         description: DeleteEnvironmentResponse is empty on success.
+    v1DeleteIssuerResponse:
+        type: object
     v1DeleteTagResponse:
         type: object
         description: DeleteTagResponse is empty.
-    v1DeleteWorkloadIdentityProviderResponse:
-        type: object
     v1Dependency:
         type: object
         properties:
@@ -5063,6 +5123,17 @@ definitions:
                 type: array
                 items:
                     type: string
+    v1EngineSupport:
+        type: object
+        properties:
+            engine:
+                $ref: '#/definitions/EngineSupportEngine'
+            versions:
+                type: string
+                description: |-
+                    A version constraint in Terraform's syntax, e.g. `>= 1.8, < 2.0`. Empty
+                    allows every version.
+        description: EngineSupport is one engine an infra agent runs, and which versions.
     v1EnrollRequest:
         type: object
         properties:
@@ -5070,22 +5141,27 @@ definitions:
                 type: string
                 description: |-
                     The issuer's keys, as the agent sees them from inside (for Kubernetes,
-                    served at /openid/v1/jwks).
+                    served at /openid/v1/jwks; for an agent that is its own issuer, its
+                    public key).
             token:
                 type: string
                 description: |-
-                    A token the issuer issued this agent, audience Admiral. It must verify
-                    against `jwks` and carry the agent's subject; its `iss` becomes the
-                    provider's issuer when none was set.
+                    A token the issuer issued this agent, audience Admiral, verified against
+                    `jwks`. Its `sub` becomes the service account's subject; its `iss` the
+                    new issuer's, when one is made.
             kubernetes:
                 $ref: '#/definitions/v1KubernetesEnrollment'
     v1EnrollResponse:
         type: object
         properties:
-            workload_identity_provider:
-                $ref: '#/definitions/v1WorkloadIdentityProvider'
             agent:
                 $ref: '#/definitions/v1Agent'
+            service_account:
+                $ref: '#/definitions/v1ServiceAccount'
+                description: The service account the agent signs in as from now on.
+            issuer:
+                $ref: '#/definitions/v1Issuer'
+                description: The issuer it was attached to, or the one made from its keys.
     v1EnrollmentKey:
         type: object
         properties:
@@ -5359,6 +5435,11 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The retrieved environment.
         description: GetEnvironmentResponse contains the environment record.
+    v1GetIssuerResponse:
+        type: object
+        properties:
+            issuer:
+                $ref: '#/definitions/v1Issuer'
     v1GetJobArtifactResponse:
         type: object
         properties:
@@ -5423,6 +5504,11 @@ definitions:
         properties:
             run:
                 $ref: '#/definitions/v1Run'
+    v1GetServiceAccountResponse:
+        type: object
+        properties:
+            service_account:
+                $ref: '#/definitions/v1ServiceAccount'
     v1GetTenantResponse:
         type: object
         properties:
@@ -5441,11 +5527,6 @@ definitions:
             version:
                 $ref: '#/definitions/v1Version'
         description: GetVersionResponse contains the version.
-    v1GetWorkloadIdentityProviderResponse:
-        type: object
-        properties:
-            workload_identity_provider:
-                $ref: '#/definitions/v1WorkloadIdentityProvider'
     v1GitHubAppAuth:
         type: object
         properties:
@@ -5484,8 +5565,8 @@ definitions:
                     The issuer's current keys, when the agent can see them (for Kubernetes,
                     /openid/v1/jwks). Never applied: one stolen agent token could otherwise
                     plant a key. A set that differs from the trusted one is recorded in the
-                    provider's `pending_key_ids` for an admin; ignored for a `jwks_uri`
-                    provider, whose keys come from the issuer alone.
+                    issuer's `pending_key_ids` for an admin; ignored for a `jwks_uri`
+                    issuer, whose keys come from the issuer alone.
             profiles:
                 type: array
                 items:
@@ -5516,6 +5597,90 @@ definitions:
                 format: date-time
                 description: When the partial apply finished.
         description: Hold is the state a partial apply leaves an environment in.
+    v1ImportComponentRequest:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    Empty means the artifact's own name: the chart's, the module's, the
+                    repository's or directory's.
+            source:
+                $ref: '#/definitions/v1ImportSource'
+            credential_ids:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    The credentials this import may present, chosen by the caller. Each is
+                    presented only where its type fits and its `allowed_hosts` permit. A
+                    fetch that reaches a host none of them covers fails naming the host.
+            tags:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Tags to set on the resulting version. A chart's version and a
+                    module's version are applied as tags whether or not named.
+            description:
+                type: string
+                description: Applied when the import creates the component; ignored otherwise.
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+            baseline_values_json:
+                type: string
+                description: |-
+                    The organization's defaults for this artifact, as a JSON object: values
+                    laid over the artifact's own defaults (a chart's values.yaml, a module's
+                    variable defaults) before any environment's values. Stored with the
+                    artifact as one version under one digest, so changing them is a new
+                    version, which environments move to like any other. Empty means the
+                    artifact's own defaults.
+        required:
+            - source
+    v1ImportComponentResponse:
+        type: object
+        properties:
+            component:
+                $ref: '#/definitions/v1Component'
+            version:
+                $ref: '#/definitions/v1Version'
+            unchanged:
+                type: boolean
+                description: The resolution was already published under this name; nothing was written.
+    v1ImportSource:
+        type: object
+        properties:
+            oci_chart:
+                $ref: '#/definitions/ImportSourceOCIChart'
+            helm_chart:
+                $ref: '#/definitions/ImportSourceHelmChart'
+            registry_module:
+                $ref: '#/definitions/ImportSourceRegistryModule'
+            git_tree:
+                $ref: '#/definitions/ImportSourceGitTree'
+            archive:
+                $ref: '#/definitions/ImportSourceArchive'
+        description: |-
+            ImportSource names an artifact to import. One variant. The kind of the
+            resulting component follows from it: a chart from OCI or a Helm
+            repository, a module from a module registry, whatever inspection finds in
+            a git tree or an archive.
+    v1InfraAgentSettings:
+        type: object
+        properties:
+            engines:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1EngineSupport'
+                description: |-
+                    The engines this agent runs. Placing a component that needs an engine or
+                    version outside them is refused when the change set is edited, naming an
+                    agent that runs it, so no job waits on it.
+        description: InfraAgentSettings is what an infra agent will run.
     v1Invitation:
         type: object
         properties:
@@ -5583,6 +5748,77 @@ definitions:
              - STATUS_EXPIRED: expires_at passed with nobody redeeming it.
              - STATUS_REVOKED: Withdrawn, or retired because a newer invitation was issued for the same
             address.
+    v1Issuer:
+        type: object
+        properties:
+            id:
+                type: string
+                readOnly: true
+            name:
+                type: string
+                description: One made at enrollment is named after the agent that enrolled it.
+            iss:
+                type: string
+                description: |-
+                    The `iss` every token must carry, exactly, e.g.
+                    `https://token.actions.githubusercontent.com`. One made at enrollment
+                    takes it from the enrolling token. Fixed once set.
+            keys:
+                $ref: '#/definitions/v1IssuerKeys'
+            key_ids:
+                type: array
+                items:
+                    type: string
+                description: The key ids currently trusted.
+                readOnly: true
+            keys_updated_at:
+                type: string
+                format: date-time
+                readOnly: true
+            pending_key_ids:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Key ids an agent reported that are not trusted yet. They are never
+                    applied on their own: an admin accepts them with SetIssuerKeys.
+                readOnly: true
+            pending_keys_at:
+                type: string
+                format: date-time
+                readOnly: true
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: |-
+            Issuer is a set of keys Admiral accepts tokens from. A token must carry
+            this `iss`, be issued for Admiral as its audience, and verify against the
+            issuer's keys.
+    v1IssuerKeys:
+        type: object
+        properties:
+            jwks_uri:
+                type: string
+                description: |-
+                    Fetched and refreshed when a token names a key not yet seen. Rotation
+                    needs no action.
+            jwks:
+                type: string
+                description: |-
+                    A JSON Web Key Set, pasted in. It replaces the trusted set, so paste
+                    the whole set the issuer serves: during a rotation that holds the old
+                    key and the new one.
+            reported:
+                $ref: '#/definitions/IssuerKeysReported'
+                description: |-
+                    The first keys arrive when an agent enrolls. Keys agents report after
+                    that wait in `pending_key_ids` for an admin to accept. Never set on
+                    create: an issuer with reported keys is made only by enrollment.
+        description: IssuerKeys is where Admiral gets the keys that verify an issuer's tokens.
     v1Job:
         type: object
         properties:
@@ -5754,7 +5990,7 @@ definitions:
             cluster_uid:
                 type: string
                 description: 'The kube-system namespace UID: an accident detector, not a proof.'
-        description: KubernetesReport is what a Kubernetes agent reports about its cluster.
+        description: KubernetesReport is what a Kubernetes agent reports about where it runs.
     v1KubernetesSettings:
         type: object
         properties:
@@ -5918,6 +6154,16 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListInvitationsResponse contains a page of invitations.
+    v1ListIssuersResponse:
+        type: object
+        properties:
+            issuers:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Issuer'
+            next_page_token:
+                type: string
     v1ListJobsResponse:
         type: object
         properties:
@@ -5948,6 +6194,16 @@ definitions:
                     $ref: '#/definitions/v1Run'
             next_page_token:
                 type: string
+    v1ListServiceAccountsResponse:
+        type: object
+        properties:
+            service_accounts:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ServiceAccount'
+            next_page_token:
+                type: string
     v1ListUsersResponse:
         type: object
         properties:
@@ -5971,16 +6227,6 @@ definitions:
             next_page_token:
                 type: string
         description: ListVersionsResponse contains a page of versions, newest first.
-    v1ListWorkloadIdentityProvidersResponse:
-        type: object
-        properties:
-            workload_identity_providers:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1WorkloadIdentityProvider'
-            next_page_token:
-                type: string
     v1Offer:
         type: object
         properties:
@@ -6151,9 +6397,9 @@ definitions:
                 type: array
                 items:
                     type: string
-                description: The hosts it was presented to during this pull.
+                description: The hosts it was presented to during this import.
         description: |-
-            PresentedCredential is one credential a pull presented, as it was named at
+            PresentedCredential is one credential an import presented, as it was named at
             the time; the credential may since have been renamed or deleted.
     v1ProfileReport:
         type: object
@@ -6217,8 +6463,8 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1PresentedCredential'
                 description: |-
-                    The credentials the platform presented while fetching, for PULL: which
-                    secret reached which hosts. Lineage, not a grant; a later pull attaches
+                    The credentials the platform presented while fetching, for IMPORT: which
+                    secret reached which hosts. Lineage, not a grant; a later import attaches
                     its own. Set by the server; ignored on a publish request.
                 readOnly: true
             commit_message:
@@ -6240,7 +6486,7 @@ definitions:
         enum:
             - KIND_UNSPECIFIED
             - KIND_PUSH
-            - KIND_PULL
+            - KIND_IMPORT
         default: KIND_UNSPECIFIED
         description: |-
             Kind is the on-ramp a version arrived by: whose code it is and who
@@ -6249,7 +6495,7 @@ definitions:
              - KIND_PUSH: The tenant's own code, published because they pushed it. Today that is
             the CLI uploading a directory, from CI or a laptop; the repository,
             ref and commit are what the publisher reported.
-             - KIND_PULL: A copy of an artifact the tenant does not own (a chart, a registry
+             - KIND_IMPORT: A copy of an artifact the tenant does not own (a chart, a registry
             module, a git tree, an archive), fetched by Admiral. The upstream
             identity is recorded; the bytes are frozen here.
     v1PublishComponentRequest:
@@ -6305,77 +6551,6 @@ definitions:
                     True when the digest was already published under this name and nothing
                     was written. Tags in the request were still applied.
         description: PublishComponentResponse is the recorded version.
-    v1PullComponentRequest:
-        type: object
-        properties:
-            name:
-                type: string
-                description: |-
-                    Empty means the artifact's own name: the chart's, the module's, the
-                    repository's or directory's.
-            source:
-                $ref: '#/definitions/v1PullSource'
-            credential_ids:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    The credentials this pull may present, chosen by the caller. Each is
-                    presented only where its type fits and its `allowed_hosts` permit. A
-                    fetch that reaches a host none of them covers fails naming the host.
-            tags:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    Tags to set on the resulting version. A chart's version and a
-                    module's version are applied as tags whether or not named.
-            description:
-                type: string
-                description: Applied when the pull creates the component; ignored otherwise.
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-            baseline_values_json:
-                type: string
-                description: |-
-                    The organization's defaults for this artifact, as a JSON object: values
-                    laid over the artifact's own defaults (a chart's values.yaml, a module's
-                    variable defaults) before any environment's values. Stored with the
-                    artifact as one version under one digest, so changing them is a new
-                    version, which environments move to like any other. Empty means the
-                    artifact's own defaults.
-        required:
-            - source
-    v1PullComponentResponse:
-        type: object
-        properties:
-            component:
-                $ref: '#/definitions/v1Component'
-            version:
-                $ref: '#/definitions/v1Version'
-            unchanged:
-                type: boolean
-                description: The resolution was already published under this name; nothing was written.
-    v1PullSource:
-        type: object
-        properties:
-            oci_chart:
-                $ref: '#/definitions/PullSourceOCIChart'
-            helm_chart:
-                $ref: '#/definitions/PullSourceHelmChart'
-            registry_module:
-                $ref: '#/definitions/PullSourceRegistryModule'
-            git_tree:
-                $ref: '#/definitions/PullSourceGitTree'
-            archive:
-                $ref: '#/definitions/PullSourceArchive'
-        description: |-
-            PullSource names an artifact to pull. One variant. The kind of the
-            resulting component follows from it: a chart from OCI or a Helm
-            repository, a module from a module registry, whatever inspection finds in
-            a git tree or an archive.
     v1RebaseChangeSetResponse:
         type: object
         properties:
@@ -6683,6 +6858,47 @@ definitions:
                 type: string
                 description: Write-only.
         description: SSHKeyAuth is a PEM-encoded private key and its passphrase, if any.
+    v1ServiceAccount:
+        type: object
+        properties:
+            id:
+                type: string
+                readOnly: true
+            agent_id:
+                type: string
+                description: |-
+                    `agt-`: the agent that runs as this service account. Empty for one that
+                    runs no agent.
+                readOnly: true
+            issuer_id:
+                type: string
+                description: |-
+                    `iss-`: the issuer whose tokens it accepts. For an agent's, set when the
+                    agent enrolls; empty before.
+                readOnly: true
+            subject:
+                type: string
+                description: |-
+                    The `sub` a token must carry. For a Kubernetes service account,
+                    `system:serviceaccount:<namespace>:<name>`. For an agent's, recorded from
+                    its verified token when it enrolls and fixed from then on; empty before.
+                readOnly: true
+            enrolled_at:
+                type: string
+                format: date-time
+                readOnly: true
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: |-
+            ServiceAccount is a non-human principal. With `issuer_id` and `subject` set
+            it signs in with a token from that issuer carrying that subject, matched
+            exactly; the exact match is what secures a shared issuer, which anyone can
+            get a token from.
     v1SetComponentStatusResponse:
         type: object
         properties:
@@ -6703,6 +6919,11 @@ definitions:
             clears it. A cycle is refused.
         required:
             - component
+    v1SetIssuerKeysResponse:
+        type: object
+        properties:
+            issuer:
+                $ref: '#/definitions/v1Issuer'
     v1SetSettings:
         type: object
         properties:
@@ -6763,11 +6984,6 @@ definitions:
             version:
                 $ref: '#/definitions/v1Version'
         description: SetVersionStatusResponse contains the version with its new status.
-    v1SetWorkloadIdentityProviderKeysResponse:
-        type: object
-        properties:
-            workload_identity_provider:
-                $ref: '#/definitions/v1WorkloadIdentityProvider'
     v1Slots:
         type: object
         properties:
@@ -6880,30 +7096,6 @@ definitions:
              - STATUS_UNSPECIFIED: Default value. Must not be used.
              - STATUS_ACTIVE: Normal operation.
              - STATUS_SUSPENDED: Access is withheld, typically for billing or abuse. Data is retained.
-    v1TerraformAgentSettings:
-        type: object
-        properties:
-            engines:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1TerraformEngineSupport'
-                description: |-
-                    The engines this agent runs. Placing a component that needs an engine or
-                    version outside them is refused when the change set is edited, naming an
-                    agent that runs it, so no job waits on it.
-        description: TerraformAgentSettings is what a Terraform agent will run.
-    v1TerraformEngineSupport:
-        type: object
-        properties:
-            engine:
-                $ref: '#/definitions/TerraformEngineSupportEngine'
-            versions:
-                type: string
-                description: |-
-                    A version constraint in Terraform's syntax, e.g. `>= 1.8, < 2.0`. Empty
-                    allows every version.
-        description: TerraformEngineSupport is one engine an agent runs, and which versions.
     v1UnsetValue:
         type: object
         properties:
@@ -7252,7 +7444,7 @@ definitions:
             - WAIT_REASON_AGENT_TOO_OLD
             - WAIT_REASON_ENVIRONMENT_BUSY
             - WAIT_REASON_BACKOFF
-            - WAIT_REASON_PROVIDER_PENDING
+            - WAIT_REASON_AGENT_NOT_ENROLLED
             - WAIT_REASON_PROFILE_MISSING
             - WAIT_REASON_COMPONENT_NOT_ALLOWED
         default: WAIT_REASON_UNSPECIFIED
@@ -7261,117 +7453,9 @@ definitions:
 
              - WAIT_REASON_ENVIRONMENT_BUSY: Another APPLY holds the environment.
              - WAIT_REASON_BACKOFF: Retrying after a failed attempt.
+             - WAIT_REASON_AGENT_NOT_ENROLLED: The agent has not enrolled.
              - WAIT_REASON_PROFILE_MISSING: The agent has not reported the profile the job needs.
              - WAIT_REASON_COMPONENT_NOT_ALLOWED: The agent's owner no longer allows a component this job covers.
-    v1WorkloadIdentity:
-        type: object
-        properties:
-            provider_id:
-                type: string
-            subject:
-                type: string
-        description: |-
-            WorkloadIdentity is an agent that proves who it is with a token from a
-            provider Admiral trusts: the provider, and the subject its token must carry,
-            matched exactly. For a Kubernetes service account the subject is
-            `system:serviceaccount:<namespace>:<name>`; for GitHub Actions,
-            `repo:<owner>/<repo>:ref:<ref>`; for a GCP service account, its numeric id.
-            The exact match is what secures a shared issuer, which anyone can get a
-            token from.
-        required:
-            - provider_id
-            - subject
-    v1WorkloadIdentityProvider:
-        type: object
-        properties:
-            id:
-                type: string
-                readOnly: true
-            name:
-                type: string
-            status:
-                $ref: '#/definitions/v1WorkloadIdentityProviderStatus'
-                readOnly: true
-            issuer:
-                type: string
-                description: |-
-                    The `iss` every token must carry, exactly, e.g.
-                    `https://token.actions.githubusercontent.com`. Required on create for
-                    `jwks_uri` and `jwks`. For enrollment it may be left out: enrolling
-                    records it from the enrolling agent's verified token. Fixed once set.
-            keys:
-                $ref: '#/definitions/v1WorkloadIdentityProviderKeys'
-                description: Where the verifying keys come from. Absent on create means enrollment.
-            key_ids:
-                type: array
-                items:
-                    type: string
-                description: The key ids currently trusted.
-                readOnly: true
-            keys_updated_at:
-                type: string
-                format: date-time
-                readOnly: true
-            pending_key_ids:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    Key ids an agent reported that are not trusted yet. They are never
-                    applied on their own: an admin accepts them with
-                    SetWorkloadIdentityProviderKeys.
-                readOnly: true
-            pending_keys_at:
-                type: string
-                format: date-time
-                readOnly: true
-            created_by:
-                $ref: '#/definitions/v1ActorRef'
-                readOnly: true
-            created_at:
-                type: string
-                format: date-time
-                readOnly: true
-        description: |-
-            WorkloadIdentityProvider is a token issuer Admiral trusts for agents to
-            prove who they are: a Kubernetes cluster's service-account issuer, GitHub
-            Actions, Google, an AWS account. A token must carry this `issuer` as its
-            `iss`, be issued for Admiral as its audience, and verify against the
-            provider's keys. Which workload it is comes from its subject, which each
-            agent names.
-    v1WorkloadIdentityProviderKeys:
-        type: object
-        properties:
-            jwks_uri:
-                type: string
-                description: |-
-                    Fetched and refreshed when a token names a key not yet seen. Rotation
-                    needs no action.
-            jwks:
-                type: string
-                description: |-
-                    A JSON Web Key Set, pasted in for a private issuer. It replaces the
-                    trusted set, so paste the whole set the issuer serves: during a
-                    rotation that holds the old key and the new one.
-            enrollment:
-                $ref: '#/definitions/WorkloadIdentityProviderKeysEnrollment'
-                description: |-
-                    The agents inside keep the keys current. On a PENDING provider the
-                    first keys arrive when an agent enrolls with a single-use key. On a
-                    TRUSTED one, switching here keeps the keys it has and stops fetching or
-                    expecting a paste; from then on, keys agents report wait in
-                    `pending_key_ids` for an admin to accept.
-        description: |-
-            WorkloadIdentityProviderKeys is where Admiral gets the keys that verify a
-            provider's tokens.
-    v1WorkloadIdentityProviderStatus:
-        type: string
-        enum:
-            - STATUS_UNSPECIFIED
-            - STATUS_PENDING
-            - STATUS_TRUSTED
-        default: STATUS_UNSPECIFIED
-        description: ' - STATUS_PENDING: No keys yet: an agent may enroll it.'
 servers:
     - url: "{baseUrl}"
       description: Admiral API server
@@ -7407,12 +7491,13 @@ x-tagGroups:
         - Credentials
     - name: Agents
       tags:
-        - Workload Identity Providers
         - Agents
         - Jobs
     - name: Identity & Access
       tags:
         - Tenant
         - User
+        - Service Accounts
+        - Issuers
         - Invitations
         - API Keys
