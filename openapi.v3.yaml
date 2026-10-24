@@ -1904,7 +1904,8 @@ paths:
                                     description: |-
                                         The set of fields to update. Optional; if omitted, all populated fields
                                          are updated. Pass `*` for full replacement. Supported fields: `name`,
-                                         `description`, `labels`, `agents`, `approval`.
+                                         `description`, `labels`, `agents`, `approval`, `infra_backend`,
+                                         `infra_engine`.
                             title: UpdateEnvironmentRequest
                             additionalProperties: false
                             description: UpdateEnvironmentRequest contains the environment fields to update.
@@ -2730,6 +2731,25 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ListServiceAccountsResponse'
+        post:
+            tags:
+                - Service Accounts
+            summary: Create a service account
+            description: 'Scope: `serviceaccount:write`'
+            operationId: ServiceAccountAPI_CreateServiceAccount
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.serviceaccount.v1.CreateServiceAccountRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.CreateServiceAccountResponse'
     /v1/service-accounts/{service_account_id}:
         get:
             tags:
@@ -2753,6 +2773,28 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.serviceaccount.v1.GetServiceAccountResponse'
+        delete:
+            tags:
+                - Service Accounts
+            summary: Delete a service account
+            description: 'Scope: `serviceaccount:write`'
+            operationId: ServiceAccountAPI_DeleteServiceAccount
+            parameters:
+                - name: service_account_id
+                  in: path
+                  description: The service_account_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: service_account_id
+                    pattern: ^sa-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.serviceaccount.v1.DeleteServiceAccountResponse'
     /v1/tenant:
         get:
             tags:
@@ -3034,23 +3076,9 @@ components:
                                 - group_id
                             - required:
                                 - organization
-            properties:
-                profiles:
-                    type: array
-                    items:
-                        type: string
-                        pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    title: profiles
-                    maxItems: 64
-                    uniqueItems: true
-                    description: |-
-                        The agent profiles this grant covers, by name. Empty covers every
-                         profile; otherwise `default` is covered only when listed. Grants reaching
-                         one environment add up.
             title: AgentGrant
             description: |-
-                AgentGrant lets environments be assigned an agent, and which of its
-                 profiles they may name. Set exactly one target; an agent can hold several
+                AgentGrant lets environments be assigned an agent. Set exactly one target; an agent can hold several
                  grants, one per target.
         admiral.api.agent.v1.AgentGrant.Organization:
             type: object
@@ -3062,12 +3090,32 @@ components:
             anyOf:
                 - type: object
                   properties:
+                    infra:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.InfraReport'
+                        title: infra
+                  title: infra
+                - type: object
+                  properties:
                     kubernetes:
                         allOf:
                             - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesReport'
                         title: kubernetes
                   title: kubernetes
             unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - infra
+                        - required:
+                            - kubernetes
+                    - not:
+                        oneOf:
+                            - required:
+                                - infra
+                            - required:
+                                - kubernetes
             properties:
                 agent_version:
                     type: string
@@ -3076,15 +3124,18 @@ components:
                     type: integer
                     title: protocol_version
                     format: int32
-                profiles:
+                runtime:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Runtime'
+                    title: runtime
+                    description: Where the agent runs.
+                ambient_credentials:
                     type: array
                     items:
-                        $ref: '#/components/schemas/admiral.api.agent.v1.ProfileReport'
-                    title: profiles
-                    maxItems: 256
-                    description: |-
-                        The profiles the agent defines and what each serves. Names and
-                         provider addresses only, never values.
+                        $ref: '#/components/schemas/admiral.api.agent.v1.AmbientCredential'
+                    title: ambient_credentials
+                    maxItems: 64
+                    description: Credentials every job it runs can reach, found when it started.
                 reported_at:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
@@ -3126,6 +3177,47 @@ components:
                 AgentSettings is what the agent's owner allows it, one block per kind.
                  Environments that use the agent choose within these; they cannot exceed
                  them.
+        admiral.api.agent.v1.AmbientCredential:
+            type: object
+            properties:
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.AmbientCredential.Source'
+                    not:
+                        enum:
+                            - SOURCE_UNSPECIFIED
+                    title: source
+                    description: |
+                        enum.defined_only = true
+                location:
+                    type: string
+                    title: location
+                    maxLength: 1024
+                    description: |-
+                        What was found: the variable's name, the file's path, the metadata
+                         server's address.
+                principal:
+                    type: string
+                    title: principal
+                    maxLength: 1024
+                    description: |-
+                        Who it acts as, when the agent could tell: a service account email, a
+                         role ARN, a client id.
+            title: AmbientCredential
+            additionalProperties: false
+            description: |-
+                AmbientCredential is a credential the agent found around it at start,
+                 which every job it runs can reach. Where it was found, never its value.
+        admiral.api.agent.v1.AmbientCredential.Source:
+            type: string
+            title: Source
+            enum:
+                - SOURCE_UNSPECIFIED
+                - SOURCE_METADATA_SERVER
+                - SOURCE_WORKLOAD_IDENTITY
+                - SOURCE_ENVIRONMENT_VARIABLE
+                - SOURCE_FILE
+            description: Source is where the agent found it.
         admiral.api.agent.v1.AppendJobLogRequest:
             type: object
             properties:
@@ -3293,8 +3385,43 @@ components:
             title: ComponentInventory
             additionalProperties: false
             description: |-
-                ComponentInventory is what the last apply of a component left in the
-                 cluster.
+                ComponentInventory is what the last apply of a component left behind:
+                 Kubernetes objects, or Terraform resource instances.
+        admiral.api.agent.v1.ComponentOutput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 256
+                value:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Value'
+                    title: value
+                sensitive:
+                    type: boolean
+                    title: sensitive
+            title: ComponentOutput
+            additionalProperties: false
+            description: |-
+                ComponentOutput is one output. Admiral seals a sensitive one when it
+                 stores it, and shows it masked.
+        admiral.api.agent.v1.ComponentOutputs:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                outputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ComponentOutput'
+                    title: outputs
+                    maxItems: 1000
+            title: ComponentOutputs
+            additionalProperties: false
+            description: ComponentOutputs is one component's outputs after a successful apply.
         admiral.api.agent.v1.ComponentPlan:
             type: object
             properties:
@@ -3308,6 +3435,13 @@ components:
                         $ref: '#/components/schemas/admiral.api.agent.v1.ResourceChange'
                     title: changes
                     maxItems: 5000
+                plan_file_digest:
+                    type: string
+                    title: plan_file_digest
+                    maxLength: 71
+                    description: |-
+                        `sha256:<hex>` of a Terraform component's saved plan file. The apply
+                         refuses a file that does not match.
             title: ComponentPlan
             additionalProperties: false
         admiral.api.agent.v1.CreateAgentRequest:
@@ -3387,15 +3521,67 @@ components:
             type: object
             title: DeleteAgentResponse
             additionalProperties: false
+        admiral.api.agent.v1.DiffPath:
+            type: object
+            properties:
+                segments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.DiffPathSegment'
+                    title: segments
+                    maxItems: 64
+                    minItems: 1
+            title: DiffPath
+            additionalProperties: false
+            description: DiffPath is a path into a resource's value.
+        admiral.api.agent.v1.DiffPathSegment:
+            type: object
+            allOf:
+                - oneOf:
+                    - required:
+                        - key
+                    - required:
+                        - index
+            anyOf:
+                - type: object
+                  properties:
+                    index:
+                        type: integer
+                        title: index
+                        minimum: 0
+                        format: int32
+                  title: index
+                - type: object
+                  properties:
+                    key:
+                        type: string
+                        title: key
+                        maxLength: 1024
+                  title: key
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - index
+                        - required:
+                            - key
+                    - not:
+                        oneOf:
+                            - required:
+                                - index
+                            - required:
+                                - key
+            title: DiffPathSegment
         admiral.api.agent.v1.EngineSupport:
             type: object
             properties:
                 engine:
                     allOf:
-                        - $ref: '#/components/schemas/admiral.api.agent.v1.EngineSupport.Engine'
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.InfraEngine'
                     not:
                         enum:
-                            - ENGINE_UNSPECIFIED
+                            - INFRA_ENGINE_UNSPECIFIED
                     title: engine
                     description: |
                         enum.defined_only = true
@@ -3409,14 +3595,6 @@ components:
             title: EngineSupport
             additionalProperties: false
             description: EngineSupport is one engine an infra agent runs, and which versions.
-        admiral.api.agent.v1.EngineSupport.Engine:
-            type: string
-            title: Engine
-            enum:
-                - ENGINE_UNSPECIFIED
-                - ENGINE_TERRAFORM
-                - ENGINE_OPENTOFU
-            description: Engine is a Terraform-compatible binary.
         admiral.api.agent.v1.EnrollRequest:
             type: object
             anyOf:
@@ -3566,8 +3744,10 @@ components:
                         $ref: '#/components/schemas/admiral.api.agent.v1.ComponentInventory'
                     title: previous_inventory
                     description: |-
-                        What the environment's last apply of each component left: a PLAN finds
-                         destroys in it, an APPLY prunes from it.
+                        What the environment's last apply of each component left. A Kubernetes
+                         PLAN finds destroys in it, and a Kubernetes APPLY prunes from it. A
+                         Terraform job ignores it: the component's state is its inventory, and a
+                         removed resource is a destroy in the engine's own plan.
             title: GetJobArtifactResponse
             additionalProperties: false
         admiral.api.agent.v1.GetJobLogRequest:
@@ -3616,6 +3796,49 @@ components:
                     description: The log reached its cap and the server dropped part of the middle.
             title: GetJobLogResponse
             additionalProperties: false
+        admiral.api.agent.v1.GetJobPlanFileRequest:
+            type: object
+            properties:
+                attempt:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Attempt'
+                    title: attempt
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                    minLength: 1
+                offset:
+                    type: string
+                    title: offset
+                    minimum: 0
+                    format: int64
+            title: GetJobPlanFileRequest
+            required:
+                - attempt
+            additionalProperties: false
+        admiral.api.agent.v1.GetJobPlanFileResponse:
+            type: object
+            properties:
+                chunk:
+                    type: string
+                    title: chunk
+                    format: byte
+                    description: At most 4 MiB.
+                next_offset:
+                    type: string
+                    title: next_offset
+                    format: int64
+                last:
+                    type: boolean
+                    title: last
+                    description: Set on the final chunk.
+                plan_file_digest:
+                    type: string
+                    title: plan_file_digest
+                    description: '`sha256:<hex>` of the whole file, on every chunk.'
+            title: GetJobPlanFileResponse
+            additionalProperties: false
         admiral.api.agent.v1.GetJobRequest:
             type: object
             properties:
@@ -3661,12 +3884,32 @@ components:
             anyOf:
                 - type: object
                   properties:
+                    infra:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.InfraReport'
+                        title: infra
+                  title: infra
+                - type: object
+                  properties:
                     kubernetes:
                         allOf:
                             - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesReport'
                         title: kubernetes
                   title: kubernetes
             unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - infra
+                        - required:
+                            - kubernetes
+                    - not:
+                        oneOf:
+                            - required:
+                                - infra
+                            - required:
+                                - kubernetes
             properties:
                 agent_version:
                     type: string
@@ -3687,16 +3930,18 @@ components:
                          plant a key. A set that differs from the trusted one is recorded in the
                          issuer's `pending_key_ids` for an admin; ignored for a `jwks_uri`
                          issuer, whose keys come from the issuer alone.
-                profiles:
+                runtime:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Runtime'
+                    title: runtime
+                    description: Where the agent runs.
+                ambient_credentials:
                     type: array
                     items:
-                        $ref: '#/components/schemas/admiral.api.agent.v1.ProfileReport'
-                    title: profiles
-                    maxItems: 256
-                    description: |-
-                        The profiles the agent defines and what each serves, read from its
-                         config. Names and provider addresses only, never values. An assignment
-                         naming a profile the agent has not reported is refused.
+                        $ref: '#/components/schemas/admiral.api.agent.v1.AmbientCredential'
+                    title: ambient_credentials
+                    maxItems: 64
+                    description: Credentials every job it runs can reach, found when it started.
             title: HeartbeatRequest
         admiral.api.agent.v1.HeartbeatResponse:
             type: object
@@ -3720,6 +3965,79 @@ components:
                 - KEYS_PENDING
                 - KEYS_FROM_ISSUER
             description: Keys is how Admiral treated the keys the agent reported.
+        admiral.api.agent.v1.HookFinding:
+            type: object
+            properties:
+                message:
+                    type: string
+                    title: message
+                    maxLength: 4096
+                location:
+                    type: string
+                    title: location
+                    maxLength: 1024
+                    description: 'Where it found it: a file and line, a resource address.'
+            title: HookFinding
+            additionalProperties: false
+            description: HookFinding is one thing a hook reported.
+        admiral.api.agent.v1.HookRun:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    description: The hook's name in the agent's config.
+                phase:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.HookRun.Phase'
+                    not:
+                        enum:
+                            - PHASE_UNSPECIFIED
+                    title: phase
+                    description: |
+                        enum.defined_only = true
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                    description: The component it ran for.
+                passed:
+                    type: boolean
+                    title: passed
+                exit_code:
+                    type: integer
+                    title: exit_code
+                    format: int32
+                summary:
+                    type: string
+                    title: summary
+                    maxLength: 4096
+                findings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.HookFinding'
+                    title: findings
+                    maxItems: 1000
+                    description: What the hook wrote to `$ADMIRAL_HOOK_REPORT`.
+                log_offset:
+                    type: string
+                    title: log_offset
+                    minimum: 0
+                    format: int64
+                    description: Where its output starts in the job's log.
+            title: HookRun
+            additionalProperties: false
+            description: HookRun is one operator hook's result.
+        admiral.api.agent.v1.HookRun.Phase:
+            type: string
+            title: Phase
+            enum:
+                - PHASE_UNSPECIFIED
+                - PHASE_PRE_INIT
+                - PHASE_POST_PLAN
+                - PHASE_POST_APPLY
+            description: Phase is when in a Terraform job the hook ran.
         admiral.api.agent.v1.InfraAgentSettings:
             type: object
             properties:
@@ -3730,12 +4048,26 @@ components:
                     title: engines
                     maxItems: 8
                     description: |-
-                        The engines this agent runs. Placing a component that needs an engine or
-                         version outside them is refused when the change set is edited, naming an
-                         agent that runs it, so no job waits on it.
+                        The engines this agent may run. Setting an environment's engine version
+                         outside them, or placing a component pinned outside them, is refused,
+                         naming an agent that runs it, so no job waits on it.
             title: InfraAgentSettings
             additionalProperties: false
             description: InfraAgentSettings is what an infra agent will run.
+        admiral.api.agent.v1.InfraReport:
+            type: object
+            properties:
+                engines:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.registry.v1.InfraEngineVersion'
+                    title: engines
+                    maxItems: 256
+            title: InfraReport
+            additionalProperties: false
+            description: |-
+                InfraReport is what an infra agent can deploy: every engine version it
+                 found installed or has fetched.
         admiral.api.agent.v1.Job:
             type: object
             properties:
@@ -3779,13 +4111,6 @@ components:
                     items:
                         type: string
                     title: components
-                profile:
-                    type: string
-                    title: profile
-                    description: |-
-                        The profile the agent loads for this job, resolved for its phase from
-                         the assignment; `default` when the assignment names none. The job starts
-                         with a clean environment holding only this profile.
                 artifact_digest:
                     type: string
                     title: artifact_digest
@@ -3856,8 +4181,27 @@ components:
                         $ref: '#/components/schemas/admiral.api.agent.v1.ComponentInventory'
                     title: inventory
                     description: |-
-                        Set by an APPLY: what each component it reached left in the cluster,
-                         including one that failed partway.
+                        Set by an APPLY: what each component it reached left behind, including
+                         one that failed partway.
+                outputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ComponentOutputs'
+                    title: outputs
+                    maxItems: 256
+                    description: |-
+                        Set by a successful APPLY: each component's outputs. They replace the
+                         component's stored outputs; a failed apply keeps the old ones. Never
+                         returned on a job read: read them on the environment's component.
+                hooks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.HookRun'
+                    title: hooks
+                    maxItems: 256
+                    description: |-
+                        Each hook the agent's operator configured that ran, in order. A failing
+                         hook fails the job.
             title: JobResult
             additionalProperties: false
         admiral.api.agent.v1.JobStatus:
@@ -3923,6 +4267,24 @@ components:
             title: KubernetesCapabilities
             additionalProperties: false
             description: KubernetesCapabilities is what the agent's own RBAC lets it do, as it measured.
+        admiral.api.agent.v1.KubernetesChange:
+            type: object
+            properties:
+                taken:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.TakenField'
+                    title: taken
+                    maxItems: 1000
+                    description: |-
+                        The fields another manager owns that the apply takes from it: on
+                         ACTION_TAKE_OVER, and on an update forcing a field away from Helm or
+                         kubectl.
+            title: KubernetesChange
+            additionalProperties: false
+            description: |-
+                KubernetesChange is what a Kubernetes plan says about an object beyond its
+                 values.
         admiral.api.agent.v1.KubernetesEnrollment:
             type: object
             properties:
@@ -3951,14 +4313,43 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesCapabilities'
                     title: capabilities
+            title: KubernetesReport
+            additionalProperties: false
+            description: KubernetesReport is what a Kubernetes agent can deploy against.
+        admiral.api.agent.v1.KubernetesResourceRef:
+            type: object
+            properties:
+                api_version:
+                    type: string
+                    title: api_version
+                    maxLength: 253
+                kind:
+                    type: string
+                    title: kind
+                    maxLength: 63
+                namespace:
+                    type: string
+                    title: namespace
+                    maxLength: 63
+                    description: Empty for a cluster-scoped object.
+                name:
+                    type: string
+                    title: name
+                    maxLength: 253
+            title: KubernetesResourceRef
+            additionalProperties: false
+            description: KubernetesResourceRef names one Kubernetes object.
+        admiral.api.agent.v1.KubernetesRuntime:
+            type: object
+            properties:
                 cluster_uid:
                     type: string
                     title: cluster_uid
                     maxLength: 64
                     description: 'The kube-system namespace UID: an accident detector, not a proof.'
-            title: KubernetesReport
+            title: KubernetesRuntime
             additionalProperties: false
-            description: KubernetesReport is what a Kubernetes agent reports about where it runs.
+            description: KubernetesRuntime is the cluster the agent's pod runs in.
         admiral.api.agent.v1.ListAgentGrantsRequest:
             type: object
             properties:
@@ -4088,6 +4479,17 @@ components:
                     title: next_page_token
             title: ListJobsResponse
             additionalProperties: false
+        admiral.api.agent.v1.MachineRuntime:
+            type: object
+            properties:
+                machine_id:
+                    type: string
+                    title: machine_id
+                    maxLength: 128
+                    description: The machine's own stable id (`/etc/machine-id`, the cloud instance id).
+            title: MachineRuntime
+            additionalProperties: false
+            description: MachineRuntime is the VM or host the agent runs on.
         admiral.api.agent.v1.Offer:
             type: object
             properties:
@@ -4110,6 +4512,45 @@ components:
             title: Offer
             additionalProperties: false
             description: Offer is work claimed for an agent, not yet started.
+        admiral.api.agent.v1.OutputChange:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                name:
+                    type: string
+                    title: name
+                    maxLength: 256
+                action:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ResourceChange.Action'
+                    not:
+                        enum:
+                            - ACTION_UNSPECIFIED
+                    title: action
+                    description: |
+                        enum.defined_only = true
+                before:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Value'
+                    title: before
+                    description: Null when sensitive.
+                after:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Value'
+                    title: after
+                    description: Null when sensitive or unknown until applied.
+                sensitive:
+                    type: boolean
+                    title: sensitive
+                unknown:
+                    type: boolean
+                    title: unknown
+            title: OutputChange
+            additionalProperties: false
+            description: OutputChange is one component output the apply would change.
         admiral.api.agent.v1.PlanDiff:
             type: object
             properties:
@@ -4119,9 +4560,68 @@ components:
                         $ref: '#/components/schemas/admiral.api.agent.v1.ResourceDiff'
                     title: resources
                     maxItems: 5000
+                outputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.OutputChange'
+                    title: outputs
+                    maxItems: 5000
+                    description: The outputs the apply would change.
+                drift:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ResourceDiff'
+                    title: drift
+                    maxItems: 5000
+                    description: Changes made outside Admiral since the last apply, found while planning.
+                errors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.PlanError'
+                    title: errors
+                    maxItems: 5000
+                    description: |-
+                        Why the plan failed, every reason it found. For Kubernetes, every verb
+                         the agent may not use on an object the plan touches, found before it
+                         diffs. For Terraform, every error diagnostic the engine produced, as it
+                         produced it.
             title: PlanDiff
             additionalProperties: false
-            description: PlanDiff is a plan's full diffs, stored apart from the job.
+            description: |-
+                PlanDiff is a plan's full diffs, stored apart from the job. A failed plan
+                 uploads one too, carrying its errors and whatever diffs it reached.
+        admiral.api.agent.v1.PlanError:
+            type: object
+            properties:
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                resource:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ResourceRef'
+                    title: resource
+                    description: |-
+                        The resource it concerns. Absent for one about the component as a whole,
+                         such as a provider that could not authenticate.
+                summary:
+                    type: string
+                    title: summary
+                    maxLength: 1024
+                detail:
+                    type: string
+                    title: detail
+                    maxLength: 16384
+                location:
+                    type: string
+                    title: location
+                    maxLength: 1024
+                    description: |-
+                        Where in the code it points, `file:line`, for an error the engine ties to
+                         the code rather than to a resource.
+            title: PlanError
+            additionalProperties: false
+            description: PlanError is one reason a plan failed.
         admiral.api.agent.v1.PlanResult:
             type: object
             properties:
@@ -4141,29 +4641,6 @@ components:
             description: |-
                 PlanResult is a PLAN job's typed outcome. Its digest is the plan's
                  identity: two plans with the same changes have the same digest.
-        admiral.api.agent.v1.ProfileReport:
-            type: object
-            properties:
-                name:
-                    type: string
-                    title: name
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                serves:
-                    type: array
-                    items:
-                        type: string
-                        pattern: ^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*$
-                    title: serves
-                    maxItems: 128
-                    uniqueItems: true
-                    description: |-
-                        The providers this profile can authenticate, as `namespace/type`
-                         addresses without a registry host, such as `cloudflare/cloudflare`. A
-                         provider becomes a need once some agent in the tenant serves it; a
-                         component that needs one is placed only where the profiles serve it.
-            title: ProfileReport
-            additionalProperties: false
-            description: ProfileReport is one profile an agent defines, as its config declares it.
         admiral.api.agent.v1.Progress:
             type: object
             properties:
@@ -4229,7 +4706,9 @@ components:
                     type: string
                     title: diff_digest
                     maxLength: 71
-                    description: '`sha256:<hex>` of this resource''s diff in the PlanDiff. Empty for ACTION_NO_OP.'
+                    description: |-
+                        `sha256:<hex>` of this resource's ResourceDiff in the PlanDiff,
+                         deterministically marshaled. Empty for ACTION_NO_OP.
             title: ResourceChange
             additionalProperties: false
         admiral.api.agent.v1.ResourceChange.Action:
@@ -4243,9 +4722,39 @@ components:
                 - ACTION_REPLACE
                 - ACTION_DESTROY
                 - ACTION_ORPHAN
+                - ACTION_TAKE_OVER
             description: Action is what applying a plan does to one object.
         admiral.api.agent.v1.ResourceDiff:
             type: object
+            anyOf:
+                - type: object
+                  properties:
+                    kubernetes:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesChange'
+                        title: kubernetes
+                  title: kubernetes
+                - type: object
+                  properties:
+                    terraform:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.TerraformChange'
+                        title: terraform
+                  title: terraform
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - kubernetes
+                        - required:
+                            - terraform
+                    - not:
+                        oneOf:
+                            - required:
+                                - kubernetes
+                            - required:
+                                - terraform
             properties:
                 component:
                     type: string
@@ -4255,39 +4764,91 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.ResourceRef'
                     title: resource
-                diff:
-                    type: string
-                    title: diff
-                    maxLength: 1048576
+                action:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.ResourceChange.Action'
+                    not:
+                        enum:
+                            - ACTION_UNSPECIFIED
+                    title: action
+                    description: |
+                        enum.defined_only = true
+                before:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Value'
+                    title: before
+                    description: The resource as it is, normalized; absent on a create.
+                after:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Value'
+                    title: after
                     description: |-
-                        Unified diff from the live object to the desired one, both normalized.
-                         A Secret's data shows each key as added, changed or removed, never a
-                         value.
+                        The resource as the apply leaves it; absent on a destroy. A Kubernetes
+                         create carries the whole object.
+                sensitive_paths:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.SensitivePath'
+                    title: sensitive_paths
+                    maxItems: 1000
+                unknown_paths:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.DiffPath'
+                    title: unknown_paths
+                    maxItems: 1000
+                    description: Values in `after` known only once applied.
+                replace_paths:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.DiffPath'
+                    title: replace_paths
+                    maxItems: 1000
+                    description: The fields forcing ACTION_REPLACE.
             title: ResourceDiff
-            additionalProperties: false
+            description: |-
+                ResourceDiff is one resource's change, redacted by the agent before it
+                 leaves: a sensitive value is replaced by null, and `sensitive_paths` says
+                 where it was.
         admiral.api.agent.v1.ResourceRef:
             type: object
-            properties:
-                api_version:
-                    type: string
-                    title: api_version
-                    maxLength: 253
-                kind:
-                    type: string
-                    title: kind
-                    maxLength: 63
-                namespace:
-                    type: string
-                    title: namespace
-                    maxLength: 63
-                    description: Empty for a cluster-scoped object.
-                name:
-                    type: string
-                    title: name
-                    maxLength: 253
+            allOf:
+                - oneOf:
+                    - required:
+                        - kubernetes
+                    - required:
+                        - terraform
+            anyOf:
+                - type: object
+                  properties:
+                    kubernetes:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesResourceRef'
+                        title: kubernetes
+                  title: kubernetes
+                - type: object
+                  properties:
+                    terraform:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.TerraformResourceRef'
+                        title: terraform
+                  title: terraform
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - kubernetes
+                        - required:
+                            - terraform
+                    - not:
+                        oneOf:
+                            - required:
+                                - kubernetes
+                            - required:
+                                - terraform
             title: ResourceRef
-            additionalProperties: false
-            description: ResourceRef names one Kubernetes object.
+            description: ResourceRef names one thing a component manages.
         admiral.api.agent.v1.RevokeAgentUseRequest:
             type: object
             properties:
@@ -4308,6 +4869,60 @@ components:
             type: object
             title: RevokeAgentUseResponse
             additionalProperties: false
+        admiral.api.agent.v1.Runtime:
+            type: object
+            allOf:
+                - oneOf:
+                    - required:
+                        - kubernetes
+                    - required:
+                        - machine
+            anyOf:
+                - type: object
+                  properties:
+                    kubernetes:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.KubernetesRuntime'
+                        title: kubernetes
+                  title: kubernetes
+                - type: object
+                  properties:
+                    machine:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.agent.v1.MachineRuntime'
+                        title: machine
+                  title: machine
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - kubernetes
+                        - required:
+                            - machine
+                    - not:
+                        oneOf:
+                            - required:
+                                - kubernetes
+                            - required:
+                                - machine
+            title: Runtime
+            description: Runtime is where an agent runs, apart from what it deploys.
+        admiral.api.agent.v1.SensitivePath:
+            type: object
+            properties:
+                path:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.DiffPath'
+                    title: path
+                changed:
+                    type: boolean
+                    title: changed
+            title: SensitivePath
+            additionalProperties: false
+            description: |-
+                SensitivePath is where a redacted value was, and whether the plan changes
+                 it. Never the value.
         admiral.api.agent.v1.Slots:
             type: object
             properties:
@@ -4362,8 +4977,38 @@ components:
                     title: max_run_seconds
                     format: int32
                     description: The job is failed once it has run this long, renewed or not.
+                state_access:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.StateAccess'
+                    title: state_access
+                    description: |-
+                        Set for a Terraform job whose state is hosted; empty when it is in the
+                         customer's backend.
             title: StartJobResponse
             additionalProperties: false
+        admiral.api.agent.v1.StateAccess:
+            type: object
+            properties:
+                host:
+                    type: string
+                    title: host
+                    maxLength: 253
+                token:
+                    type: string
+                    title: token
+                    description: |-
+                        Bound to this attempt: refused once another attempt holds the job. A
+                         PLAN's token reads and locks; only an APPLY's writes.
+                expires_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: expires_at
+            title: StateAccess
+            additionalProperties: false
+            description: |-
+                StateAccess is how a Terraform job reaches hosted state. The agent writes
+                 the token into the job's CLI config for `host`; the job's code never sees
+                 it.
         admiral.api.agent.v1.Step:
             type: object
             properties:
@@ -4382,6 +5027,67 @@ components:
             title: Step
             additionalProperties: false
             description: Step is one component's part of a job.
+        admiral.api.agent.v1.TakenField:
+            type: object
+            properties:
+                manager:
+                    type: string
+                    title: manager
+                    maxLength: 128
+                    description: 'The field manager that owns it now: `helm`, `kubectl-client-side-apply`.'
+                path:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.DiffPath'
+                    title: path
+            title: TakenField
+            additionalProperties: false
+            description: TakenField is one field the apply takes from another field manager.
+        admiral.api.agent.v1.TerraformChange:
+            type: object
+            properties:
+                previous_address:
+                    type: string
+                    title: previous_address
+                    maxLength: 1024
+                    description: Set when a `moved` block or a refactor moved it from this address.
+                importing:
+                    type: boolean
+                    title: importing
+                    description: Set when an `import` block brings it under management.
+                deposed:
+                    type: string
+                    title: deposed
+                    maxLength: 64
+                    description: |-
+                        Set on an old copy a create_before_destroy replace left behind, which
+                         the apply destroys. It shares its address with the current object.
+            title: TerraformChange
+            additionalProperties: false
+            description: |-
+                TerraformChange is what a Terraform plan says about a resource beyond its
+                 values.
+        admiral.api.agent.v1.TerraformResourceRef:
+            type: object
+            properties:
+                address:
+                    type: string
+                    title: address
+                    maxLength: 1024
+                    description: |-
+                        The full address, module path and index included:
+                         `module.net.aws_subnet.private["a"]`.
+                type:
+                    type: string
+                    title: type
+                    maxLength: 128
+                provider:
+                    type: string
+                    title: provider
+                    maxLength: 256
+                    description: 'The provider''s source address: `registry.opentofu.org/hashicorp/aws`.'
+            title: TerraformResourceRef
+            additionalProperties: false
+            description: TerraformResourceRef names one Terraform resource instance.
         admiral.api.agent.v1.UpdateAgentRequest:
             type: object
             properties:
@@ -4435,6 +5141,50 @@ components:
                     description: '`sha256:<hex>` of the diff as stored.'
             title: UploadJobPlanDiffResponse
             additionalProperties: false
+        admiral.api.agent.v1.UploadJobPlanFileRequest:
+            type: object
+            properties:
+                attempt:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Attempt'
+                    title: attempt
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                    minLength: 1
+                offset:
+                    type: string
+                    title: offset
+                    minimum: 0
+                    format: int64
+                chunk:
+                    type: string
+                    title: chunk
+                    maxLength: 4194304
+                    minLength: 1
+                    format: byte
+                last:
+                    type: boolean
+                    title: last
+                    description: Set on the final chunk.
+            title: UploadJobPlanFileRequest
+            required:
+                - attempt
+            additionalProperties: false
+        admiral.api.agent.v1.UploadJobPlanFileResponse:
+            type: object
+            properties:
+                next_offset:
+                    type: string
+                    title: next_offset
+                    format: int64
+                plan_file_digest:
+                    type: string
+                    title: plan_file_digest
+                    description: '`sha256:<hex>` of the whole file, on the final chunk.'
+            title: UploadJobPlanFileResponse
+            additionalProperties: false
         admiral.api.agent.v1.WaitReason:
             type: string
             title: WaitReason
@@ -4448,8 +5198,8 @@ components:
                 - WAIT_REASON_ENVIRONMENT_BUSY
                 - WAIT_REASON_BACKOFF
                 - WAIT_REASON_AGENT_NOT_ENROLLED
-                - WAIT_REASON_PROFILE_MISSING
                 - WAIT_REASON_COMPONENT_NOT_ALLOWED
+                - WAIT_REASON_ENGINE_MISSING
             description: WaitReason says why a queued job is not running.
         admiral.api.apikey.v1.ApiKey:
             type: object
@@ -5069,7 +5819,27 @@ components:
                             - $ref: '#/components/schemas/admiral.api.changeset.v1.KubernetesComponentSettings'
                         title: kubernetes
                   title: kubernetes
+                - type: object
+                  properties:
+                    terraform:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.changeset.v1.TerraformComponentSettings'
+                        title: terraform
+                  title: terraform
             unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - kubernetes
+                        - required:
+                            - terraform
+                    - not:
+                        oneOf:
+                            - required:
+                                - kubernetes
+                            - required:
+                                - terraform
             properties:
                 assignment_id:
                     type: string
@@ -5077,8 +5847,8 @@ components:
                     pattern: ^asg-[0-9a-z]+$
                     description: |-
                         The environment's agent assignment it runs on. Empty means the one
-                         assignment left after the agent's grants, allowed components and the
-                         providers its profiles serve rule the others out; required on a tie.
+                         assignment left after the agent's grants and allowed components rule
+                         the others out; required on a tie.
                          A placement nothing covers is refused, naming an agent that would.
             title: ComponentSettings
             description: |-
@@ -5661,6 +6431,36 @@ components:
                     title: revision
             title: GetRevisionResponse
             additionalProperties: false
+        admiral.api.changeset.v1.InfraBackend:
+            type: object
+            properties:
+                type:
+                    type: string
+                    not:
+                        type: string
+                        enum:
+                            - local
+                    title: type
+                    maxLength: 32
+                    pattern: ^[a-z][a-z0-9_]*$
+                    description: |-
+                        The backend type as Terraform names it: `gcs`, `s3`, `azurerm`, `http`.
+                         Never `local`, which would leave state on the agent's disk.
+                config:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Struct'
+                    title: config
+                    description: |-
+                        The backend's arguments, as the backend block takes them. On an
+                         environment, the bucket and its settings, without the key or prefix;
+                         Admiral derives the location per component. Admiral refuses credential
+                         arguments.
+            title: InfraBackend
+            additionalProperties: false
+            description: |-
+                InfraBackend is a Terraform state backend Admiral writes into every run, in
+                 place of any backend block the code declares. It never holds credentials:
+                 the agent's identity reaches the bucket.
         admiral.api.changeset.v1.KubernetesComponentSettings:
             type: object
             properties:
@@ -5990,7 +6790,8 @@ components:
             additionalProperties: false
             description: |-
                 RemoveComponent drops a component this change set adds, or destroys a live
-                 one.
+                 one. A live Terraform component is refused for now: destroying it needs
+                 the code it was last applied from.
         admiral.api.changeset.v1.ReplaceValues:
             type: object
             properties:
@@ -6242,6 +7043,24 @@ components:
             description: |-
                 SetVersion moves a component to another version of the same registry
                  component. The reference resolves to a digest when the edit is made.
+        admiral.api.changeset.v1.TerraformComponentSettings:
+            type: object
+            properties:
+                backend:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.InfraBackend'
+                    title: backend
+                    description: |-
+                        Replaces the environment's backend for this component, location included:
+                         for adopting state that already exists somewhere else. Empty uses the
+                         environment's, at a location Admiral derives. Fixed at the component's
+                         first apply.
+            title: TerraformComponentSettings
+            additionalProperties: false
+            description: |-
+                TerraformComponentSettings is where a Terraform component's state lives.
+                 The engine and version are the environment's, gated by the component's own
+                 `required_version`.
         admiral.api.changeset.v1.UnsetValue:
             type: object
             properties:
@@ -6792,23 +7611,6 @@ components:
                          run on this assignment. Empty on an assignment being added, which gets
                          one; send it back unchanged when updating the list, or the assignment is
                          treated as new and components placed on the old one are refused.
-                plan_profile:
-                    type: string
-                    title: plan_profile
-                    maxLength: 63
-                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?)?$
-                    description: |-
-                        The agent profiles a plan and an apply get: named sets of environment
-                         variables, with an optional identity to assume, that the agent's owner
-                         defines in the agent's own config, such as a read-only and an edit
-                         Cloudflare token. Admiral holds the names, never the values. Empty means
-                         the agent's `default` profile. A profile must be one the agent reports
-                         and its grants cover for this environment.
-                apply_profile:
-                    type: string
-                    title: apply_profile
-                    maxLength: 63
-                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?)?$
             title: AgentAssignment
             required:
                 - agent_id
@@ -7013,6 +7815,26 @@ components:
                         The apply that produced the current generation. Absent until the first
                          apply changes the environment.
                     readOnly: true
+                infra_backend:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.changeset.v1.InfraBackend'
+                    title: infra_backend
+                    description: |-
+                        Where its Terraform components' state lives. Admiral writes it into every
+                         run at a location it derives per component, and a component may replace
+                         it. Absent means hosted state. Fixed once a Terraform component in the
+                         environment has applied.
+                infra_engine:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.InfraEngineVersion'
+                    title: infra_engine
+                    description: |-
+                        The engine and exact version its Terraform components run. A component
+                         whose `required_version` is exact runs this engine at that version
+                         instead, and does not block a change here. Setting it is refused when a
+                         component's range refuses it, when it is below a version a component last
+                         applied with, or when a placed agent cannot run it; the refusal names
+                         every such component. Each component moves to it at its next plan.
             title: Environment
             additionalProperties: false
             description: |-
@@ -7074,11 +7896,43 @@ components:
                         - $ref: '#/components/schemas/admiral.api.environment.v1.LastApply'
                     title: last_apply
                     description: The apply that last changed this component.
+                outputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.environment.v1.EnvironmentComponentOutput'
+                    title: outputs
+                    description: |-
+                        Its outputs from the last successful apply. A sensitive output's value
+                         is null.
+                applied_engine:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.InfraEngineVersion'
+                    title: applied_engine
+                    description: |-
+                        The Terraform engine version it last applied with. The environment's
+                         engine version may not go below it.
             title: EnvironmentComponent
             additionalProperties: false
             description: |-
                 EnvironmentComponent is one component live in an environment: the version
                  it runs and the apply that last changed it.
+        admiral.api.environment.v1.EnvironmentComponentOutput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                value:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Value'
+                    title: value
+                    description: 'Null when sensitive: the value is sealed and never returned.'
+                sensitive:
+                    type: boolean
+                    title: sensitive
+            title: EnvironmentComponentOutput
+            additionalProperties: false
+            description: EnvironmentComponentOutput is one output of a live component.
         admiral.api.environment.v1.GetEnvironmentComponentValuesRequest:
             type: object
             properties:
@@ -7359,7 +8213,8 @@ components:
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
                          are updated. Pass `*` for full replacement. Supported fields: `name`,
-                         `description`, `labels`, `agents`, `approval`.
+                         `description`, `labels`, `agents`, `approval`, `infra_backend`,
+                         `infra_engine`.
             title: UpdateEnvironmentRequest
             required:
                 - environment
@@ -8199,6 +9054,35 @@ components:
                  write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
                  host-qualified, optionally `//subdir`) and an exact version. A range is
                  what a Source tracks, not what an import takes.
+        admiral.api.registry.v1.InfraEngine:
+            type: string
+            title: InfraEngine
+            enum:
+                - INFRA_ENGINE_UNSPECIFIED
+                - INFRA_ENGINE_TERRAFORM
+                - INFRA_ENGINE_OPENTOFU
+            description: InfraEngine is a Terraform-compatible tool an infra agent runs.
+        admiral.api.registry.v1.InfraEngineVersion:
+            type: object
+            properties:
+                engine:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.InfraEngine'
+                    not:
+                        enum:
+                            - INFRA_ENGINE_UNSPECIFIED
+                    title: engine
+                    description: |
+                        enum.defined_only = true
+                version:
+                    type: string
+                    title: version
+                    maxLength: 64
+                    pattern: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
+                    description: Exact, e.g. `1.10.6`.
+            title: InfraEngineVersion
+            additionalProperties: false
+            description: InfraEngineVersion is one engine at one exact version.
         admiral.api.registry.v1.ListComponentsRequest:
             type: object
             properties:
@@ -8778,10 +9662,7 @@ components:
                     description: |-
                         The Terraform providers the bundle's root and vendored modules require,
                          as `namespace/type` addresses without a registry host, read offline at
-                         publish. Empty for a Kubernetes component. A provider some agent in the
-                         tenant serves is a need: adding the component, setting its version or
-                         settings, or changing an assignment is refused unless the plan and apply
-                         profiles serve every need.
+                         publish. Empty for a Kubernetes component.
                     readOnly: true
                 baseline_values_json:
                     type: string
@@ -8789,6 +9670,16 @@ components:
                     description: |-
                         The organization's defaults stored with this version, as a JSON object;
                          empty when there are none. The contract's defaults already include them.
+                    readOnly: true
+                required_version:
+                    type: string
+                    title: required_version
+                    description: |-
+                        The `required_version` constraint of a Terraform bundle's root, read at
+                         publish; empty when it states none. A range must accept the environment's
+                         version. An exact constraint (`= 1.10.6`) pins the component: it runs the
+                         environment's engine at that version, whatever version the environment
+                         sets, and never blocks the environment's version from moving.
                     readOnly: true
             title: Version
             additionalProperties: false
@@ -9463,6 +10354,29 @@ components:
                     title: issuer
             title: CreateIssuerResponse
             additionalProperties: false
+        admiral.api.serviceaccount.v1.CreateServiceAccountRequest:
+            type: object
+            properties:
+                service_account:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ServiceAccount'
+                    title: service_account
+                    description: |
+                        The service account to create: `name`, `issuer_id` and `subject`.
+                        create_service_account.identity // name, issuer_id and subject are required
+            title: CreateServiceAccountRequest
+            required:
+                - service_account
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.CreateServiceAccountResponse:
+            type: object
+            properties:
+                service_account:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.serviceaccount.v1.ServiceAccount'
+                    title: service_account
+            title: CreateServiceAccountResponse
+            additionalProperties: false
         admiral.api.serviceaccount.v1.DeleteIssuerRequest:
             type: object
             properties:
@@ -9477,6 +10391,21 @@ components:
         admiral.api.serviceaccount.v1.DeleteIssuerResponse:
             type: object
             title: DeleteIssuerResponse
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.DeleteServiceAccountRequest:
+            type: object
+            properties:
+                service_account_id:
+                    type: string
+                    title: service_account_id
+                    pattern: ^sa-[0-9a-z]+$
+            title: DeleteServiceAccountRequest
+            required:
+                - service_account_id
+            additionalProperties: false
+        admiral.api.serviceaccount.v1.DeleteServiceAccountResponse:
+            type: object
+            title: DeleteServiceAccountResponse
             additionalProperties: false
         admiral.api.serviceaccount.v1.GetIssuerRequest:
             type: object
@@ -9759,18 +10688,20 @@ components:
                 issuer_id:
                     type: string
                     title: issuer_id
+                    pattern: ^iss-[0-9a-z]+$
                     description: |-
-                        `iss-`: the issuer whose tokens it accepts. For an agent's, set when the
-                         agent enrolls; empty before.
-                    readOnly: true
+                        (IMMUTABLE) `iss-`: the issuer whose tokens it accepts. For an agent's, set when the
+                         agent enrolls; empty before. For one that runs no agent, set on create.
                 subject:
                     type: string
                     title: subject
+                    maxLength: 512
                     description: |-
-                        The `sub` a token must carry. For a Kubernetes service account,
-                         `system:serviceaccount:<namespace>:<name>`. For an agent's, recorded from
-                         its verified token when it enrolls and fixed from then on; empty before.
-                    readOnly: true
+                        (IMMUTABLE) The `sub` a token must carry. For a Kubernetes service account,
+                         `system:serviceaccount:<namespace>:<name>`; for GitHub Actions,
+                         `repo:<owner>/<repo>:ref:refs/heads/<branch>` or
+                         `repo:<owner>/<repo>:environment:<name>`. For an agent's, recorded from
+                         its verified token when it enrolls; empty before. Fixed once set.
                 enrolled_at:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
@@ -9786,6 +10717,12 @@ components:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: created_at
                     readOnly: true
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: (IMMUTABLE) An agent's takes the agent's name. Unique in the organization.
             title: ServiceAccount
             additionalProperties: false
             description: |-

@@ -50,7 +50,8 @@ tags:
         ServiceAccountAPI reads the organization's service accounts. A service
         account is a non-human principal: it holds roles, and signs in with an
         `adms_` key or with a token from an issuer it trusts. Every agent runs as
-        one, made with the agent.
+        one, made with the agent; one that runs no agent, such as CI's, is made
+        with CreateServiceAccount.
     - name: IssuerAPI
       description: |-
         IssuerAPI manages the issuers the organization's service accounts accept
@@ -370,7 +371,7 @@ paths:
             summary: |-
                 GrantAgentUse lets the organization, a team, an application's
                 environments, or one environment be assigned an agent. Only the agent's owner
-                or a tenant admin may. Granting a target again replaces its profiles.
+                or a tenant admin may.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_GrantAgentUse
             responses:
@@ -397,7 +398,7 @@ paths:
     /v1/agents/{agent_id}/grants/revoke:
         post:
             summary: |-
-                RevokeAgentUse withdraws the grant to a target, whatever its profiles.
+                RevokeAgentUse withdraws the grant to a target.
                 Environments assigned the agent
                 under it keep the assignment until they change it, and their new jobs wait
                 with WAIT_REASON_AGENT_NOT_GRANTED.
@@ -2432,7 +2433,10 @@ paths:
         post:
             summary: |-
                 ApplyRun applies a run's plan. It takes the environment's lock. The agent
-                checks the plan is still current before it changes anything.
+                checks the plan is still current before it changes anything. For
+                Kubernetes it plans again. For Terraform it applies the saved plan file,
+                checked by digest, and the engine refuses a saved plan once the state has
+                moved.
             description: |-
                 FAILED_PRECONDITION when the run is not PLANNED, an approval in
                 `required_approval` is missing, the change set is behind, the environment is held, or the run is a
@@ -2530,9 +2534,12 @@ paths:
     /v1/runs/{run_id}/plan/diff:
         get:
             summary: |-
-                GetRunPlanDiff returns a finished plan's full diffs, with every value
-                the component marks sensitive masked: a Kubernetes Secret's `data` and
-                `stringData`, a Terraform value declared `sensitive`. FAILED_PRECONDITION until the plan has succeeded.
+                GetRunPlanDiff returns a finished plan's full diffs, output changes,
+                drift and errors. The agent redacts every value the component marks
+                sensitive before it uploads: a Kubernetes Secret's `data` and
+                `stringData`, a Terraform value declared `sensitive`. A failed plan's
+                diff holds its errors, every one it found. FAILED_PRECONDITION until the
+                plan has finished.
             description: 'Scope: `run:read`'
             operationId: RunAPI_GetRunPlanDiff
             responses:
@@ -2591,6 +2598,33 @@ paths:
                   type: string
             tags:
                 - ServiceAccountAPI
+        post:
+            summary: |-
+                CreateServiceAccount makes a service account that runs no agent, which
+                signs in with a token from `issuer_id` carrying `subject`. For GitHub
+                Actions the subject names the repository and the ref or environment, so
+                a run from anywhere else cannot sign in as it. ALREADY_EXISTS when
+                another service account has the name, or trusts the same issuer and
+                subject.
+            description: 'Scope: `serviceaccount:write`'
+            operationId: ServiceAccountAPI_CreateServiceAccount
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateServiceAccountResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateServiceAccountRequest'
+            tags:
+                - ServiceAccountAPI
     /v1/service-accounts/{service_account_id}:
         get:
             summary: |-
@@ -2603,6 +2637,29 @@ paths:
                     description: A successful response.
                     schema:
                         $ref: '#/definitions/v1GetServiceAccountResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: service_account_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ServiceAccountAPI
+        delete:
+            summary: |-
+                DeleteServiceAccount removes a service account that runs no agent, and
+                the roles it holds. FAILED_PRECONDITION for an agent's, which goes with
+                its agent.
+            description: 'Scope: `serviceaccount:write`'
+            operationId: ServiceAccountAPI_DeleteServiceAccount
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteServiceAccountResponse'
                 default:
                     description: An unexpected error response.
                     schema:
@@ -2899,6 +2956,25 @@ definitions:
                 description: Attempt names the attempt a call belongs to.
         required:
             - attempt
+    AgentRuntimeAPIGetJobPlanFileBody:
+        type: object
+        properties:
+            attempt:
+                type: object
+                properties:
+                    attempt:
+                        type: integer
+                        format: int32
+                    lease_token:
+                        type: string
+                description: Attempt names the attempt a call belongs to.
+            component:
+                type: string
+            offset:
+                type: string
+                format: int64
+        required:
+            - attempt
     AgentRuntimeAPIRenewJobBody:
         type: object
         properties:
@@ -2946,6 +3022,47 @@ definitions:
         required:
             - attempt
             - diff
+    AgentRuntimeAPIUploadJobPlanFileBody:
+        type: object
+        properties:
+            attempt:
+                type: object
+                properties:
+                    attempt:
+                        type: integer
+                        format: int32
+                    lease_token:
+                        type: string
+                description: Attempt names the attempt a call belongs to.
+            component:
+                type: string
+            offset:
+                type: string
+                format: int64
+            chunk:
+                type: string
+                format: byte
+            last:
+                type: boolean
+                description: Set on the final chunk.
+        required:
+            - attempt
+    AmbientCredentialSource:
+        type: string
+        enum:
+            - SOURCE_UNSPECIFIED
+            - SOURCE_METADATA_SERVER
+            - SOURCE_WORKLOAD_IDENTITY
+            - SOURCE_ENVIRONMENT_VARIABLE
+            - SOURCE_FILE
+        default: SOURCE_UNSPECIFIED
+        description: |-
+            Source is where the agent found it.
+
+             - SOURCE_METADATA_SERVER: A cloud metadata server answered with a token.
+             - SOURCE_WORKLOAD_IDENTITY: The node's or pod's workload identity.
+             - SOURCE_ENVIRONMENT_VARIABLE: A standard credential variable in the agent's environment.
+             - SOURCE_FILE: A standard credential file.
     ApiKeyAPIRevokeApiKeyBody:
         type: object
         description: RevokeApiKeyRequest identifies an API key to revoke.
@@ -3241,14 +3358,6 @@ definitions:
              - MODE_REAPPLY: Reapply: a full plan of the chosen components, then apply. Its content
             was approved before, so the environment's rule does not apply; the rule
             of each agent it touches still does, since it uses their credentials.
-    EngineSupportEngine:
-        type: string
-        enum:
-            - ENGINE_UNSPECIFIED
-            - ENGINE_TERRAFORM
-            - ENGINE_OPENTOFU
-        default: ENGINE_UNSPECIFIED
-        description: Engine is a Terraform-compatible binary.
     EnvironmentAPIUpdateEnvironmentBody:
         type: object
         properties:
@@ -3326,6 +3435,22 @@ definitions:
                             The apply that produced the current generation. Absent until the first
                             apply changes the environment.
                         readOnly: true
+                    infra_backend:
+                        $ref: '#/definitions/v1InfraBackend'
+                        description: |-
+                            Where its Terraform components' state lives. Admiral writes it into every
+                            run at a location it derives per component, and a component may replace
+                            it. Absent means hosted state. Fixed once a Terraform component in the
+                            environment has applied.
+                    infra_engine:
+                        $ref: '#/definitions/v1InfraEngineVersion'
+                        description: |-
+                            The engine and exact version its Terraform components run. A component
+                            whose `required_version` is exact runs this engine at that version
+                            instead, and does not block a change here. Setting it is refused when a
+                            component's range refuses it, when it is below a version a component last
+                            applied with, or when a placed agent cannot run it; the refusal names
+                            every such component. Each component moves to it at its next plan.
                 description: |-
                     The environment with updated fields.
                     Only fields specified in `update_mask` are updated.
@@ -3334,7 +3459,8 @@ definitions:
                 description: |-
                     The set of fields to update. Optional; if omitted, all populated fields
                     are updated. Pass `*` for full replacement. Supported fields: `name`,
-                    `description`, `labels`, `agents`, `approval`.
+                    `description`, `labels`, `agents`, `approval`, `infra_backend`,
+                    `infra_engine`.
         description: UpdateEnvironmentRequest contains the environment fields to update.
         required:
             - environment
@@ -3386,6 +3512,15 @@ definitions:
             an admin to accept.
              - KEYS_FROM_ISSUER: Not compared: this issuer's keys are fetched from its `jwks_uri`, which
             Admiral refetches when a token names a key it has not seen.
+    HookRunPhase:
+        type: string
+        enum:
+            - PHASE_UNSPECIFIED
+            - PHASE_PRE_INIT
+            - PHASE_POST_PLAN
+            - PHASE_POST_APPLY
+        default: PHASE_UNSPECIFIED
+        description: Phase is when in a Terraform job the hook ran.
     ImportSourceArchive:
         type: object
         properties:
@@ -3617,13 +3752,17 @@ definitions:
             - ACTION_REPLACE
             - ACTION_DESTROY
             - ACTION_ORPHAN
+            - ACTION_TAKE_OVER
         default: ACTION_UNSPECIFIED
         description: |-
             Action is what applying a plan does to one object.
 
-             - ACTION_REPLACE: Deleted and created again: an immutable field changed.
-             - ACTION_ORPHAN: Left in the cluster and no longer managed: pruning is off for it, or it
-            is a Namespace, which is never deleted.
+             - ACTION_REPLACE: Deleted and created again: a field that cannot change in place did.
+             - ACTION_ORPHAN: Left in place and no longer managed: pruning is off for it, it is a
+            Namespace, which is never deleted, or a Terraform `removed` block
+            forgets it.
+             - ACTION_TAKE_OVER: A live Kubernetes object without Admiral's labels, which applying the
+            approved plan takes over.
     RevisionCause:
         type: string
         enum:
@@ -3974,17 +4113,6 @@ definitions:
                     run on this assignment. Empty on an assignment being added, which gets
                     one; send it back unchanged when updating the list, or the assignment is
                     treated as new and components placed on the old one are refused.
-            plan_profile:
-                type: string
-                description: |-
-                    The agent profiles a plan and an apply get: named sets of environment
-                    variables, with an optional identity to assume, that the agent's owner
-                    defines in the agent's own config, such as a read-only and an edit
-                    Cloudflare token. Admiral holds the names, never the values. Empty means
-                    the agent's `default` profile. A profile must be one the agent reports
-                    and its grants cover for this environment.
-            apply_profile:
-                type: string
             kubernetes:
                 $ref: '#/definitions/v1KubernetesSettings'
         description: |-
@@ -4007,17 +4135,8 @@ definitions:
                 type: string
             environment_id:
                 type: string
-            profiles:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    The agent profiles this grant covers, by name. Empty covers every
-                    profile; otherwise `default` is covered only when listed. Grants reaching
-                    one environment add up.
         description: |-
-            AgentGrant lets environments be assigned an agent, and which of its
-            profiles they may name. Set exactly one target; an agent can hold several
+            AgentGrant lets environments be assigned an agent. Set exactly one target; an agent can hold several
             grants, one per target.
     v1AgentKind:
         type: string
@@ -4039,16 +4158,19 @@ definitions:
             protocol_version:
                 type: integer
                 format: int32
-            profiles:
+            runtime:
+                $ref: '#/definitions/v1Runtime'
+                description: Where the agent runs.
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesReport'
+            infra:
+                $ref: '#/definitions/v1InfraReport'
+            ambient_credentials:
                 type: array
                 items:
                     type: object
-                    $ref: '#/definitions/v1ProfileReport'
-                description: |-
-                    The profiles the agent defines and what each serves. Names and
-                    provider addresses only, never values.
-            kubernetes:
-                $ref: '#/definitions/v1KubernetesReport'
+                    $ref: '#/definitions/v1AmbientCredential'
+                description: Credentials every job it runs can reach, found when it started.
             reported_at:
                 type: string
                 format: date-time
@@ -4063,6 +4185,24 @@ definitions:
             AgentSettings is what the agent's owner allows it, one block per kind.
             Environments that use the agent choose within these; they cannot exceed
             them.
+    v1AmbientCredential:
+        type: object
+        properties:
+            source:
+                $ref: '#/definitions/AmbientCredentialSource'
+            location:
+                type: string
+                description: |-
+                    What was found: the variable's name, the file's path, the metadata
+                    server's address.
+            principal:
+                type: string
+                description: |-
+                    Who it acts as, when the agent could tell: a service account email, a
+                    role ARN, a client id.
+        description: |-
+            AmbientCredential is a credential the agent found around it at start,
+            which every job it runs can reach. Where it was found, never its value.
     v1ApiKey:
         type: object
         properties:
@@ -4547,8 +4687,8 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1ResourceRef'
         description: |-
-            ComponentInventory is what the last apply of a component left in the
-            cluster.
+            ComponentInventory is what the last apply of a component left behind:
+            Kubernetes objects, or Terraform resource instances.
     v1ComponentKind:
         type: string
         enum:
@@ -4561,6 +4701,28 @@ definitions:
             ComponentKind is what a version's bundle is, detected by inspection at
             publish: a Chart.yaml means HELM, .tf files mean TERRAFORM, anything else
             that is Kubernetes YAML means MANIFESTS.
+    v1ComponentOutput:
+        type: object
+        properties:
+            name:
+                type: string
+            value: {}
+            sensitive:
+                type: boolean
+        description: |-
+            ComponentOutput is one output. Admiral seals a sensitive one when it
+            stores it, and shows it masked.
+    v1ComponentOutputs:
+        type: object
+        properties:
+            component:
+                type: string
+            outputs:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentOutput'
+        description: ComponentOutputs is one component's outputs after a successful apply.
     v1ComponentPlan:
         type: object
         properties:
@@ -4571,6 +4733,11 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1ResourceChange'
+            plan_file_digest:
+                type: string
+                description: |-
+                    `sha256:<hex>` of a Terraform component's saved plan file. The apply
+                    refuses a file that does not match.
     v1ComponentSettings:
         type: object
         properties:
@@ -4578,11 +4745,13 @@ definitions:
                 type: string
                 description: |-
                     The environment's agent assignment it runs on. Empty means the one
-                    assignment left after the agent's grants, allowed components and the
-                    providers its profiles serve rule the others out; required on a tie.
+                    assignment left after the agent's grants and allowed components rule
+                    the others out; required on a tie.
                     A placement nothing covers is refused, naming an agent that would.
             kubernetes:
                 $ref: '#/definitions/v1KubernetesComponentSettings'
+            terraform:
+                $ref: '#/definitions/v1TerraformComponentSettings'
         description: |-
             ComponentSettings is how Admiral deploys one component in an environment,
             as opposed to its values, which are what the component receives. Only the
@@ -4921,6 +5090,19 @@ definitions:
         properties:
             run:
                 $ref: '#/definitions/v1Run'
+    v1CreateServiceAccountRequest:
+        type: object
+        properties:
+            service_account:
+                $ref: '#/definitions/v1ServiceAccount'
+                description: 'The service account to create: `name`, `issuer_id` and `subject`.'
+        required:
+            - service_account
+    v1CreateServiceAccountResponse:
+        type: object
+        properties:
+            service_account:
+                $ref: '#/definitions/v1ServiceAccount'
     v1Credential:
         type: object
         properties:
@@ -5015,6 +5197,8 @@ definitions:
         description: DeleteEnvironmentResponse is empty on success.
     v1DeleteIssuerResponse:
         type: object
+    v1DeleteServiceAccountResponse:
+        type: object
     v1DeleteTagResponse:
         type: object
         description: DeleteTagResponse is empty.
@@ -5083,6 +5267,23 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1ComponentDiff'
+    v1DiffPath:
+        type: object
+        properties:
+            segments:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1DiffPathSegment'
+        description: DiffPath is a path into a resource's value.
+    v1DiffPathSegment:
+        type: object
+        properties:
+            key:
+                type: string
+            index:
+                type: integer
+                format: int32
     v1DiscardChangeSetResponse:
         type: object
         properties:
@@ -5127,7 +5328,7 @@ definitions:
         type: object
         properties:
             engine:
-                $ref: '#/definitions/EngineSupportEngine'
+                $ref: '#/definitions/v1InfraEngine'
             versions:
                 type: string
                 description: |-
@@ -5297,6 +5498,22 @@ definitions:
                     The apply that produced the current generation. Absent until the first
                     apply changes the environment.
                 readOnly: true
+            infra_backend:
+                $ref: '#/definitions/v1InfraBackend'
+                description: |-
+                    Where its Terraform components' state lives. Admiral writes it into every
+                    run at a location it derives per component, and a component may replace
+                    it. Absent means hosted state. Fixed once a Terraform component in the
+                    environment has applied.
+            infra_engine:
+                $ref: '#/definitions/v1InfraEngineVersion'
+                description: |-
+                    The engine and exact version its Terraform components run. A component
+                    whose `required_version` is exact runs this engine at that version
+                    instead, and does not block a change here. Setting it is refused when a
+                    component's range refuses it, when it is below a version a component last
+                    applied with, or when a placed agent cannot run it; the refusal names
+                    every such component. Each component moves to it at its next plan.
         description: |-
             Environment is a named place an application deploys to (dev, staging,
             prod).
@@ -5319,9 +5536,32 @@ definitions:
             last_apply:
                 $ref: '#/definitions/v1LastApply'
                 description: The apply that last changed this component.
+            outputs:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1EnvironmentComponentOutput'
+                description: |-
+                    Its outputs from the last successful apply. A sensitive output's value
+                    is null.
+            applied_engine:
+                $ref: '#/definitions/v1InfraEngineVersion'
+                description: |-
+                    The Terraform engine version it last applied with. The environment's
+                    engine version may not go below it.
         description: |-
             EnvironmentComponent is one component live in an environment: the version
             it runs and the apply that last changed it.
+    v1EnvironmentComponentOutput:
+        type: object
+        properties:
+            name:
+                type: string
+            value:
+                description: 'Null when sensitive: the value is sealed and never returned.'
+            sensitive:
+                type: boolean
+        description: EnvironmentComponentOutput is one output of a live component.
     v1FindingSeverity:
         type: string
         enum:
@@ -5454,8 +5694,10 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1ComponentInventory'
                 description: |-
-                    What the environment's last apply of each component left: a PLAN finds
-                    destroys in it, an APPLY prunes from it.
+                    What the environment's last apply of each component left. A Kubernetes
+                    PLAN finds destroys in it, and a Kubernetes APPLY prunes from it. A
+                    Terraform job ignores it: the component's state is its inventory, and a
+                    removed resource is a destroy in the engine's own plan.
     v1GetJobLogResponse:
         type: object
         properties:
@@ -5472,6 +5714,22 @@ definitions:
             truncated:
                 type: boolean
                 description: The log reached its cap and the server dropped part of the middle.
+    v1GetJobPlanFileResponse:
+        type: object
+        properties:
+            chunk:
+                type: string
+                format: byte
+                description: At most 4 MiB.
+            next_offset:
+                type: string
+                format: int64
+            last:
+                type: boolean
+                description: Set on the final chunk.
+            plan_file_digest:
+                type: string
+                description: '`sha256:<hex>` of the whole file, on every chunk.'
     v1GetJobResponse:
         type: object
         properties:
@@ -5567,17 +5825,19 @@ definitions:
                     plant a key. A set that differs from the trusted one is recorded in the
                     issuer's `pending_key_ids` for an admin; ignored for a `jwks_uri`
                     issuer, whose keys come from the issuer alone.
-            profiles:
+            runtime:
+                $ref: '#/definitions/v1Runtime'
+                description: Where the agent runs.
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesReport'
+            infra:
+                $ref: '#/definitions/v1InfraReport'
+            ambient_credentials:
                 type: array
                 items:
                     type: object
-                    $ref: '#/definitions/v1ProfileReport'
-                description: |-
-                    The profiles the agent defines and what each serves, read from its
-                    config. Names and provider addresses only, never values. An assignment
-                    naming a profile the agent has not reported is refused.
-            kubernetes:
-                $ref: '#/definitions/v1KubernetesReport'
+                    $ref: '#/definitions/v1AmbientCredential'
+                description: Credentials every job it runs can reach, found when it started.
     v1HeartbeatResponse:
         type: object
         properties:
@@ -5597,6 +5857,44 @@ definitions:
                 format: date-time
                 description: When the partial apply finished.
         description: Hold is the state a partial apply leaves an environment in.
+    v1HookFinding:
+        type: object
+        properties:
+            message:
+                type: string
+            location:
+                type: string
+                description: 'Where it found it: a file and line, a resource address.'
+        description: HookFinding is one thing a hook reported.
+    v1HookRun:
+        type: object
+        properties:
+            name:
+                type: string
+                description: The hook's name in the agent's config.
+            phase:
+                $ref: '#/definitions/HookRunPhase'
+            component:
+                type: string
+                description: The component it ran for.
+            passed:
+                type: boolean
+            exit_code:
+                type: integer
+                format: int32
+            summary:
+                type: string
+            findings:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1HookFinding'
+                description: What the hook wrote to `$ADMIRAL_HOOK_REPORT`.
+            log_offset:
+                type: string
+                format: int64
+                description: Where its output starts in the job's log.
+        description: HookRun is one operator hook's result.
     v1ImportComponentRequest:
         type: object
         properties:
@@ -5677,10 +5975,57 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1EngineSupport'
                 description: |-
-                    The engines this agent runs. Placing a component that needs an engine or
-                    version outside them is refused when the change set is edited, naming an
-                    agent that runs it, so no job waits on it.
+                    The engines this agent may run. Setting an environment's engine version
+                    outside them, or placing a component pinned outside them, is refused,
+                    naming an agent that runs it, so no job waits on it.
         description: InfraAgentSettings is what an infra agent will run.
+    v1InfraBackend:
+        type: object
+        properties:
+            type:
+                type: string
+                description: |-
+                    The backend type as Terraform names it: `gcs`, `s3`, `azurerm`, `http`.
+                    Never `local`, which would leave state on the agent's disk.
+            config:
+                type: object
+                description: |-
+                    The backend's arguments, as the backend block takes them. On an
+                    environment, the bucket and its settings, without the key or prefix;
+                    Admiral derives the location per component. Admiral refuses credential
+                    arguments.
+        description: |-
+            InfraBackend is a Terraform state backend Admiral writes into every run, in
+            place of any backend block the code declares. It never holds credentials:
+            the agent's identity reaches the bucket.
+    v1InfraEngine:
+        type: string
+        enum:
+            - INFRA_ENGINE_UNSPECIFIED
+            - INFRA_ENGINE_TERRAFORM
+            - INFRA_ENGINE_OPENTOFU
+        default: INFRA_ENGINE_UNSPECIFIED
+        description: InfraEngine is a Terraform-compatible tool an infra agent runs.
+    v1InfraEngineVersion:
+        type: object
+        properties:
+            engine:
+                $ref: '#/definitions/v1InfraEngine'
+            version:
+                type: string
+                description: Exact, e.g. `1.10.6`.
+        description: InfraEngineVersion is one engine at one exact version.
+    v1InfraReport:
+        type: object
+        properties:
+            engines:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1InfraEngineVersion'
+        description: |-
+            InfraReport is what an infra agent can deploy: every engine version it
+            found installed or has fetched.
     v1Invitation:
         type: object
         properties:
@@ -5847,12 +6192,6 @@ definitions:
                 type: array
                 items:
                     type: string
-            profile:
-                type: string
-                description: |-
-                    The profile the agent loads for this job, resolved for its phase from
-                    the assignment; `default` when the assignment names none. The job starts
-                    with a clean environment holding only this profile.
             artifact_digest:
                 type: string
                 description: '`sha256:<hex>` of the artifact the job runs.'
@@ -5906,8 +6245,25 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1ComponentInventory'
                 description: |-
-                    Set by an APPLY: what each component it reached left in the cluster,
-                    including one that failed partway.
+                    Set by an APPLY: what each component it reached left behind, including
+                    one that failed partway.
+            outputs:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentOutputs'
+                description: |-
+                    Set by a successful APPLY: each component's outputs. They replace the
+                    component's stored outputs; a failed apply keeps the old ones. Never
+                    returned on a job read: read them on the environment's component.
+            hooks:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1HookRun'
+                description: |-
+                    Each hook the agent's operator configured that ran, in order. A failing
+                    hook fails the job.
     v1JobStatus:
         type: string
         enum:
@@ -5955,6 +6311,21 @@ definitions:
             can_write_cluster_scoped:
                 type: boolean
         description: KubernetesCapabilities is what the agent's own RBAC lets it do, as it measured.
+    v1KubernetesChange:
+        type: object
+        properties:
+            taken:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1TakenField'
+                description: |-
+                    The fields another manager owns that the apply takes from it: on
+                    ACTION_TAKE_OVER, and on an update forcing a field away from Helm or
+                    kubectl.
+        description: |-
+            KubernetesChange is what a Kubernetes plan says about an object beyond its
+            values.
     v1KubernetesComponentSettings:
         type: object
         properties:
@@ -5987,10 +6358,27 @@ definitions:
                     type: string
             capabilities:
                 $ref: '#/definitions/v1KubernetesCapabilities'
+        description: KubernetesReport is what a Kubernetes agent can deploy against.
+    v1KubernetesResourceRef:
+        type: object
+        properties:
+            api_version:
+                type: string
+            kind:
+                type: string
+            namespace:
+                type: string
+                description: Empty for a cluster-scoped object.
+            name:
+                type: string
+        description: KubernetesResourceRef names one Kubernetes object.
+    v1KubernetesRuntime:
+        type: object
+        properties:
             cluster_uid:
                 type: string
                 description: 'The kube-system namespace UID: an accident detector, not a proof.'
-        description: KubernetesReport is what a Kubernetes agent reports about where it runs.
+        description: KubernetesRuntime is the cluster the agent's pod runs in.
     v1KubernetesSettings:
         type: object
         properties:
@@ -6227,6 +6615,13 @@ definitions:
             next_page_token:
                 type: string
         description: ListVersionsResponse contains a page of versions, newest first.
+    v1MachineRuntime:
+        type: object
+        properties:
+            machine_id:
+                type: string
+                description: The machine's own stable id (`/etc/machine-id`, the cloud instance id).
+        description: MachineRuntime is the VM or host the agent runs on.
     v1Offer:
         type: object
         properties:
@@ -6250,6 +6645,24 @@ definitions:
         description: OrphanComponent stops managing a live component without tearing it down.
         required:
             - component
+    v1OutputChange:
+        type: object
+        properties:
+            component:
+                type: string
+            name:
+                type: string
+            action:
+                $ref: '#/definitions/ResourceChangeAction'
+            before:
+                description: Null when sensitive.
+            after:
+                description: Null when sensitive or unknown until applied.
+            sensitive:
+                type: boolean
+            unknown:
+                type: boolean
+        description: OutputChange is one component output the apply would change.
     v1PathDiff:
         type: object
         properties:
@@ -6283,7 +6696,51 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/v1ResourceDiff'
-        description: PlanDiff is a plan's full diffs, stored apart from the job.
+            outputs:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1OutputChange'
+                description: The outputs the apply would change.
+            drift:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ResourceDiff'
+                description: Changes made outside Admiral since the last apply, found while planning.
+            errors:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PlanError'
+                description: |-
+                    Why the plan failed, every reason it found. For Kubernetes, every verb
+                    the agent may not use on an object the plan touches, found before it
+                    diffs. For Terraform, every error diagnostic the engine produced, as it
+                    produced it.
+        description: |-
+            PlanDiff is a plan's full diffs, stored apart from the job. A failed plan
+            uploads one too, carrying its errors and whatever diffs it reached.
+    v1PlanError:
+        type: object
+        properties:
+            component:
+                type: string
+            resource:
+                $ref: '#/definitions/v1ResourceRef'
+                description: |-
+                    The resource it concerns. Absent for one about the component as a whole,
+                    such as a provider that could not authenticate.
+            summary:
+                type: string
+            detail:
+                type: string
+            location:
+                type: string
+                description: |-
+                    Where in the code it points, `file:line`, for an error the engine ties to
+                    the code rather than to a resource.
+        description: PlanError is one reason a plan failed.
     v1PlanPhase:
         type: object
         properties:
@@ -6401,21 +6858,6 @@ definitions:
         description: |-
             PresentedCredential is one credential an import presented, as it was named at
             the time; the credential may since have been renamed or deleted.
-    v1ProfileReport:
-        type: object
-        properties:
-            name:
-                type: string
-            serves:
-                type: array
-                items:
-                    type: string
-                description: |-
-                    The providers this profile can authenticate, as `namespace/type`
-                    addresses without a registry host, such as `cloudflare/cloudflare`. A
-                    provider becomes a need once some agent in the tenant serves it; a
-                    component that needs one is placed only where the profiles serve it.
-        description: ProfileReport is one profile an agent defines, as its config declares it.
     v1Progress:
         type: object
         properties:
@@ -6585,7 +7027,8 @@ definitions:
                 type: string
         description: |-
             RemoveComponent drops a component this change set adds, or destroys a live
-            one.
+            one. A live Terraform component is refused for now: destroying it needs
+            the code it was last applied from.
         required:
             - component
     v1RenewJobResponse:
@@ -6637,7 +7080,9 @@ definitions:
                 $ref: '#/definitions/ResourceChangeAction'
             diff_digest:
                 type: string
-                description: '`sha256:<hex>` of this resource''s diff in the PlanDiff. Empty for ACTION_NO_OP.'
+                description: |-
+                    `sha256:<hex>` of this resource's ResourceDiff in the PlanDiff,
+                    deterministically marshaled. Empty for ACTION_NO_OP.
     v1ResourceDiff:
         type: object
         properties:
@@ -6645,25 +7090,47 @@ definitions:
                 type: string
             resource:
                 $ref: '#/definitions/v1ResourceRef'
-            diff:
-                type: string
+            action:
+                $ref: '#/definitions/ResourceChangeAction'
+            before:
+                description: The resource as it is, normalized; absent on a create.
+            after:
                 description: |-
-                    Unified diff from the live object to the desired one, both normalized.
-                    A Secret's data shows each key as added, changed or removed, never a
-                    value.
+                    The resource as the apply leaves it; absent on a destroy. A Kubernetes
+                    create carries the whole object.
+            sensitive_paths:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1SensitivePath'
+            unknown_paths:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1DiffPath'
+                description: Values in `after` known only once applied.
+            replace_paths:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1DiffPath'
+                description: The fields forcing ACTION_REPLACE.
+            terraform:
+                $ref: '#/definitions/v1TerraformChange'
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesChange'
+        description: |-
+            ResourceDiff is one resource's change, redacted by the agent before it
+            leaves: a sensitive value is replaced by null, and `sensitive_paths` says
+            where it was.
     v1ResourceRef:
         type: object
         properties:
-            api_version:
-                type: string
-            kind:
-                type: string
-            namespace:
-                type: string
-                description: Empty for a cluster-scoped object.
-            name:
-                type: string
-        description: ResourceRef names one Kubernetes object.
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesResourceRef'
+            terraform:
+                $ref: '#/definitions/v1TerraformResourceRef'
+        description: ResourceRef names one thing a component manages.
     v1RevertChangeSetResponse:
         type: object
         properties:
@@ -6848,6 +7315,14 @@ definitions:
              - STATUS_FAILED: The plan or the apply failed; the phase says which.
              - STATUS_CLEAN: A drift check found the environment as desired.
              - STATUS_DRIFTED: A drift check found changes made outside Admiral.
+    v1Runtime:
+        type: object
+        properties:
+            kubernetes:
+                $ref: '#/definitions/v1KubernetesRuntime'
+            machine:
+                $ref: '#/definitions/v1MachineRuntime'
+        description: Runtime is where an agent runs, apart from what it deploys.
     v1SSHKeyAuth:
         type: object
         properties:
@@ -6858,6 +7333,16 @@ definitions:
                 type: string
                 description: Write-only.
         description: SSHKeyAuth is a PEM-encoded private key and its passphrase, if any.
+    v1SensitivePath:
+        type: object
+        properties:
+            path:
+                $ref: '#/definitions/v1DiffPath'
+            changed:
+                type: boolean
+        description: |-
+            SensitivePath is where a redacted value was, and whether the plan changes
+            it. Never the value.
     v1ServiceAccount:
         type: object
         properties:
@@ -6874,15 +7359,15 @@ definitions:
                 type: string
                 description: |-
                     `iss-`: the issuer whose tokens it accepts. For an agent's, set when the
-                    agent enrolls; empty before.
-                readOnly: true
+                    agent enrolls; empty before. For one that runs no agent, set on create.
             subject:
                 type: string
                 description: |-
                     The `sub` a token must carry. For a Kubernetes service account,
-                    `system:serviceaccount:<namespace>:<name>`. For an agent's, recorded from
-                    its verified token when it enrolls and fixed from then on; empty before.
-                readOnly: true
+                    `system:serviceaccount:<namespace>:<name>`; for GitHub Actions,
+                    `repo:<owner>/<repo>:ref:refs/heads/<branch>` or
+                    `repo:<owner>/<repo>:environment:<name>`. For an agent's, recorded from
+                    its verified token when it enrolls; empty before. Fixed once set.
             enrolled_at:
                 type: string
                 format: date-time
@@ -6894,6 +7379,9 @@ definitions:
                 type: string
                 format: date-time
                 readOnly: true
+            name:
+                type: string
+                description: An agent's takes the agent's name. Unique in the organization.
         description: |-
             ServiceAccount is a non-human principal. With `issuer_id` and `subject` set
             it signs in with a token from that issuer carrying that subject, matched
@@ -7010,6 +7498,28 @@ definitions:
                 type: integer
                 format: int32
                 description: The job is failed once it has run this long, renewed or not.
+            state_access:
+                $ref: '#/definitions/v1StateAccess'
+                description: |-
+                    Set for a Terraform job whose state is hosted; empty when it is in the
+                    customer's backend.
+    v1StateAccess:
+        type: object
+        properties:
+            host:
+                type: string
+            token:
+                type: string
+                description: |-
+                    Bound to this attempt: refused once another attempt holds the job. A
+                    PLAN's token reads and locks; only an APPLY's writes.
+            expires_at:
+                type: string
+                format: date-time
+        description: |-
+            StateAccess is how a Terraform job reaches hosted state. The agent writes
+            the token into the job's CLI config for `host`; the job's code never sees
+            it.
     v1Step:
         type: object
         properties:
@@ -7046,6 +7556,15 @@ definitions:
                 format: date-time
                 readOnly: true
         description: Tag is a name pointing at a version.
+    v1TakenField:
+        type: object
+        properties:
+            manager:
+                type: string
+                description: 'The field manager that owns it now: `helm`, `kubectl-client-side-apply`.'
+            path:
+                $ref: '#/definitions/v1DiffPath'
+        description: TakenField is one field the apply takes from another field manager.
     v1Tenant:
         type: object
         properties:
@@ -7096,6 +7615,51 @@ definitions:
              - STATUS_UNSPECIFIED: Default value. Must not be used.
              - STATUS_ACTIVE: Normal operation.
              - STATUS_SUSPENDED: Access is withheld, typically for billing or abuse. Data is retained.
+    v1TerraformChange:
+        type: object
+        properties:
+            previous_address:
+                type: string
+                description: Set when a `moved` block or a refactor moved it from this address.
+            importing:
+                type: boolean
+                description: Set when an `import` block brings it under management.
+            deposed:
+                type: string
+                description: |-
+                    Set on an old copy a create_before_destroy replace left behind, which
+                    the apply destroys. It shares its address with the current object.
+        description: |-
+            TerraformChange is what a Terraform plan says about a resource beyond its
+            values.
+    v1TerraformComponentSettings:
+        type: object
+        properties:
+            backend:
+                $ref: '#/definitions/v1InfraBackend'
+                description: |-
+                    Replaces the environment's backend for this component, location included:
+                    for adopting state that already exists somewhere else. Empty uses the
+                    environment's, at a location Admiral derives. Fixed at the component's
+                    first apply.
+        description: |-
+            TerraformComponentSettings is where a Terraform component's state lives.
+            The engine and version are the environment's, gated by the component's own
+            `required_version`.
+    v1TerraformResourceRef:
+        type: object
+        properties:
+            address:
+                type: string
+                description: |-
+                    The full address, module path and index included:
+                    `module.net.aws_subnet.private["a"]`.
+            type:
+                type: string
+            provider:
+                type: string
+                description: 'The provider''s source address: `registry.opentofu.org/hashicorp/aws`.'
+        description: TerraformResourceRef names one Terraform resource instance.
     v1UnsetValue:
         type: object
         properties:
@@ -7178,6 +7742,15 @@ definitions:
             diff_digest:
                 type: string
                 description: '`sha256:<hex>` of the diff as stored.'
+    v1UploadJobPlanFileResponse:
+        type: object
+        properties:
+            next_offset:
+                type: string
+                format: int64
+            plan_file_digest:
+                type: string
+                description: '`sha256:<hex>` of the whole file, on the final chunk.'
     v1User:
         type: object
         properties:
@@ -7374,16 +7947,22 @@ definitions:
                 description: |-
                     The Terraform providers the bundle's root and vendored modules require,
                     as `namespace/type` addresses without a registry host, read offline at
-                    publish. Empty for a Kubernetes component. A provider some agent in the
-                    tenant serves is a need: adding the component, setting its version or
-                    settings, or changing an assignment is refused unless the plan and apply
-                    profiles serve every need.
+                    publish. Empty for a Kubernetes component.
                 readOnly: true
             baseline_values_json:
                 type: string
                 description: |-
                     The organization's defaults stored with this version, as a JSON object;
                     empty when there are none. The contract's defaults already include them.
+                readOnly: true
+            required_version:
+                type: string
+                description: |-
+                    The `required_version` constraint of a Terraform bundle's root, read at
+                    publish; empty when it states none. A range must accept the environment's
+                    version. An exact constraint (`= 1.10.6`) pins the component: it runs the
+                    environment's engine at that version, whatever version the environment
+                    sets, and never blocks the environment's version from moving.
                 readOnly: true
         description: Version is one published artifact. Immutable except for its status.
     v1VersionRef:
@@ -7445,8 +8024,8 @@ definitions:
             - WAIT_REASON_ENVIRONMENT_BUSY
             - WAIT_REASON_BACKOFF
             - WAIT_REASON_AGENT_NOT_ENROLLED
-            - WAIT_REASON_PROFILE_MISSING
             - WAIT_REASON_COMPONENT_NOT_ALLOWED
+            - WAIT_REASON_ENGINE_MISSING
         default: WAIT_REASON_UNSPECIFIED
         description: |-
             WaitReason says why a queued job is not running.
@@ -7454,8 +8033,8 @@ definitions:
              - WAIT_REASON_ENVIRONMENT_BUSY: Another APPLY holds the environment.
              - WAIT_REASON_BACKOFF: Retrying after a failed attempt.
              - WAIT_REASON_AGENT_NOT_ENROLLED: The agent has not enrolled.
-             - WAIT_REASON_PROFILE_MISSING: The agent has not reported the profile the job needs.
              - WAIT_REASON_COMPONENT_NOT_ALLOWED: The agent's owner no longer allows a component this job covers.
+             - WAIT_REASON_ENGINE_MISSING: The agent no longer reports the engine version the job's artifact names.
 servers:
     - url: "{baseUrl}"
       description: Admiral API server
