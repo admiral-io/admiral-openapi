@@ -37,6 +37,10 @@
       "description": "Service accounts, and the issuers they accept tokens from."
     },
     {
+      "name": "state",
+      "description": "Hosted Terraform state and its versions."
+    },
+    {
       "name": "tenant",
       "description": "Your tenant."
     },
@@ -162,6 +166,17 @@
       "description": "Register issuers, change their keys, and delete them.",
       "implies": [
         "serviceaccount:read"
+      ]
+    },
+    {
+      "name": "state:read",
+      "description": "Read hosted Terraform state, its outputs and its versions."
+    },
+    {
+      "name": "state:write",
+      "description": "Lock, write and force-unlock hosted Terraform state. Whether you may is decided per environment, not by holding this.",
+      "implies": [
+        "state:read"
       ]
     },
     {
