@@ -4647,12 +4647,15 @@ definitions:
             - STATUS_SUCCEEDED
             - STATUS_FAILED
             - STATUS_SKIPPED
+            - STATUS_UNKNOWN
         default: STATUS_UNSPECIFIED
         description: |-
             Status is where one component's apply stands.
 
              - STATUS_QUEUED: Not reached yet.
              - STATUS_SKIPPED: Not attempted: the apply stopped before reaching it.
+             - STATUS_UNKNOWN: The apply ended without a report, so whether this component changed is
+            not known.
     v1ComponentDiff:
         type: object
         properties:
@@ -7081,8 +7084,11 @@ definitions:
             diff_digest:
                 type: string
                 description: |-
-                    `sha256:<hex>` of this resource's ResourceDiff in the PlanDiff,
-                    deterministically marshaled. Empty for ACTION_NO_OP.
+                    `sha256:<hex>` of what the apply changes in this Kubernetes object: the
+                    action and each changed path with its before and after value, so a field
+                    the apply does not touch, such as replicas an autoscaler moved, leaves it
+                    unchanged. Empty for a Terraform resource, whose saved plan file pins what
+                    the apply changes, and for ACTION_NO_OP.
     v1ResourceDiff:
         type: object
         properties:
@@ -7299,11 +7305,12 @@ definitions:
             - STATUS_CANCELLED
             - STATUS_CLEAN
             - STATUS_DRIFTED
+            - STATUS_UNKNOWN
         default: STATUS_UNSPECIFIED
         description: |-
             Status is where the run is. A change set run or a reapply ends APPLIED,
-            PARTIAL, NO_CHANGES, SUPERSEDED, FAILED or CANCELLED; a drift check ends
-            CLEAN, DRIFTED, FAILED or CANCELLED.
+            PARTIAL, UNKNOWN, NO_CHANGES, SUPERSEDED, FAILED or CANCELLED; a drift
+            check ends CLEAN, DRIFTED, FAILED or CANCELLED.
 
              - STATUS_PREPARING: The revision is being rendered into its artifact.
              - STATUS_QUEUED: Waiting for an agent; `wait_reason` says why.
@@ -7315,6 +7322,9 @@ definitions:
              - STATUS_FAILED: The plan or the apply failed; the phase says which.
              - STATUS_CLEAN: A drift check found the environment as desired.
              - STATUS_DRIFTED: A drift check found changes made outside Admiral.
+             - STATUS_UNKNOWN: The apply started and its agent never reported, so what it changed is
+            not known. The environment is held as for PARTIAL: plan to see what
+            landed, then revert or accept.
     v1Runtime:
         type: object
         properties:

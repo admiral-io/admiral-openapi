@@ -4707,8 +4707,11 @@ components:
                     title: diff_digest
                     maxLength: 71
                     description: |-
-                        `sha256:<hex>` of this resource's ResourceDiff in the PlanDiff,
-                         deterministically marshaled. Empty for ACTION_NO_OP.
+                        `sha256:<hex>` of what the apply changes in this Kubernetes object: the
+                         action and each changed path with its before and after value, so a field
+                         the apply does not touch, such as replicas an autoscaler moved, leaves it
+                         unchanged. Empty for a Terraform resource, whose saved plan file pins what
+                         the apply changes, and for ACTION_NO_OP.
             title: ResourceChange
             additionalProperties: false
         admiral.api.agent.v1.ResourceChange.Action:
@@ -9899,6 +9902,7 @@ components:
                 - STATUS_SUCCEEDED
                 - STATUS_FAILED
                 - STATUS_SKIPPED
+                - STATUS_UNKNOWN
             description: Status is where one component's apply stands.
         admiral.api.run.v1.CreateRunRequest:
             type: object
@@ -10279,10 +10283,11 @@ components:
                 - STATUS_CANCELLED
                 - STATUS_CLEAN
                 - STATUS_DRIFTED
+                - STATUS_UNKNOWN
             description: |-
                 Status is where the run is. A change set run or a reapply ends APPLIED,
-                 PARTIAL, NO_CHANGES, SUPERSEDED, FAILED or CANCELLED; a drift check ends
-                 CLEAN, DRIFTED, FAILED or CANCELLED.
+                 PARTIAL, UNKNOWN, NO_CHANGES, SUPERSEDED, FAILED or CANCELLED; a drift
+                 check ends CLEAN, DRIFTED, FAILED or CANCELLED.
         admiral.api.run.v1.Run.Trigger:
             type: string
             title: Trigger
