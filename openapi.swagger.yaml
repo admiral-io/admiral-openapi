@@ -1009,11 +1009,18 @@ paths:
     /v1/changesets/{change_set_id}/revert:
         post:
             summary: |-
-                RevertChangeSet opens a new change set that returns every component the
-                given change set's apply changed to its state before that apply. History
-                moves forward: the revert is planned, approved and applied like any other
-                change set, and may apply while the reverted apply holds the environment.
-            description: 'Scope: `changeset:write`'
+                RevertChangeSet returns components a change set touched to their content
+                from before it. History moves forward: a revert is planned, approved and
+                applied like any other change.
+            description: |-
+                A change set that holds its environment is reverted in place: a new
+                revision of the same change set, for the components named or every one it
+                touched. When every component is back, it reads REVERTED; when some are
+                kept, it reads APPLIED with what it kept. A change set that has closed is
+                reverted whole by a new change set, which may apply only while the
+                environment has not moved past it.
+
+                Scope: `changeset:write`
             operationId: ChangeSetAPI_RevertChangeSet
             responses:
                 "200":
@@ -3216,8 +3223,16 @@ definitions:
             change_set:
                 $ref: '#/definitions/v1ChangeSet'
                 description: |-
-                    The new change set's title and description. An empty title becomes
-                    "Revert" and the reverted change set's title.
+                    The new change set's title and description, when the revert opens one.
+                    An empty title becomes "Revert" and the reverted change set's title.
+            components:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    The components to return, by name, for a change set that holds its
+                    environment. Empty returns every component it touched. A change set that
+                    has closed is reverted whole, so naming components is refused.
     ChangeSetAPIUpdateChangeSetBody:
         type: object
         properties:
@@ -3270,6 +3285,12 @@ definitions:
                         description: |-
                             The change set's newest run; empty before its first. Its status is the
                             change set's progress: planning, awaiting approval, applying, failed.
+                        readOnly: true
+                    reverted_by_change_set_id:
+                        type: string
+                        description: |-
+                            Set when another change set reverted this one: the change set that did.
+                            Empty for a revert in place.
                         readOnly: true
                 description: |-
                     The change set with updated fields. Its `id` identifies it; only fields
@@ -4512,6 +4533,12 @@ definitions:
                     The change set's newest run; empty before its first. Its status is the
                     change set's progress: planning, awaiting approval, applying, failed.
                 readOnly: true
+            reverted_by_change_set_id:
+                type: string
+                description: |-
+                    Set when another change set reverted this one: the change set that did.
+                    Empty for a revert in place.
+                readOnly: true
     v1ChangeSetStatus:
         type: string
         enum:
@@ -4519,14 +4546,17 @@ definitions:
             - STATUS_OPEN
             - STATUS_APPLIED
             - STATUS_CLOSED
+            - STATUS_REVERTED
         default: STATUS_UNSPECIFIED
         description: |4-
              - STATUS_OPEN: Being proposed: edited, planned, approved, applied. What is happening
             to it right now (planning, applying, holding the environment) is on
             its runs, not here.
-             - STATUS_APPLIED: It took effect: its apply succeeded, or a partial apply was accepted.
-             - STATUS_CLOSED: It ended without taking effect: discarded, or its partial apply was
-            reverted.
+             - STATUS_APPLIED: It took effect: every component in it landed, or its live state was
+            recorded as it is under break-glass.
+             - STATUS_CLOSED: It ended without taking effect: discarded before it applied.
+             - STATUS_REVERTED: Every component it touched is back to its content from before it, by a
+            revert in place or by the change set in `reverted_by_change_set_id`.
     v1CheckJobPlanResponse:
         type: object
         properties:
@@ -7142,6 +7172,9 @@ definitions:
         properties:
             change_set:
                 $ref: '#/definitions/v1ChangeSet'
+                description: |-
+                    The change set that carries the revert: the held one, at its new
+                    revision, or the new change set.
     v1Revision:
         type: object
         properties:

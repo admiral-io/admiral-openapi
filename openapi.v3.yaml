@@ -939,7 +939,15 @@ paths:
             tags:
                 - ChangeSets
             summary: Revert a change set
-            description: 'Scope: `changeset:write`'
+            description: |-
+                A change set that holds its environment is reverted in place: a new
+                 revision of the same change set, for the components named or every one it
+                 touched. When every component is back, it reads REVERTED; when some are
+                 kept, it reads APPLIED with what it kept. A change set that has closed is
+                 reverted whole by a new change set, which may apply only while the
+                 environment has not moved past it.
+
+                 Scope: `changeset:write`
             operationId: ChangeSetAPI_RevertChangeSet
             parameters:
                 - name: change_set_id
@@ -961,8 +969,20 @@ paths:
                                         - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                                     title: change_set
                                     description: |-
-                                        The new change set's title and description. An empty title becomes
-                                         "Revert" and the reverted change set's title.
+                                        The new change set's title and description, when the revert opens one.
+                                         An empty title becomes "Revert" and the reverted change set's title.
+                                components:
+                                    type: array
+                                    items:
+                                        type: string
+                                        pattern: ^[a-z]([a-z0-9-]{0,51}[a-z0-9])?$
+                                    title: components
+                                    maxItems: 256
+                                    uniqueItems: true
+                                    description: |-
+                                        The components to return, by name, for a change set that holds its
+                                         environment. Empty returns every component it touched. A change set that
+                                         has closed is reverted whole, so naming components is refused.
                             title: RevertChangeSetRequest
                             additionalProperties: false
                 required: true
@@ -5770,6 +5790,13 @@ components:
                         The change set's newest run; empty before its first. Its status is the
                          change set's progress: planning, awaiting approval, applying, failed.
                     readOnly: true
+                reverted_by_change_set_id:
+                    type: string
+                    title: reverted_by_change_set_id
+                    description: |-
+                        Set when another change set reverted this one: the change set that did.
+                         Empty for a revert in place.
+                    readOnly: true
             title: ChangeSet
             additionalProperties: false
         admiral.api.changeset.v1.ChangeSet.Status:
@@ -5780,6 +5807,7 @@ components:
                 - STATUS_OPEN
                 - STATUS_APPLIED
                 - STATUS_CLOSED
+                - STATUS_REVERTED
         admiral.api.changeset.v1.ComponentDiff:
             type: object
             properties:
@@ -6874,8 +6902,20 @@ components:
                         - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
                     description: |-
-                        The new change set's title and description. An empty title becomes
-                         "Revert" and the reverted change set's title.
+                        The new change set's title and description, when the revert opens one.
+                         An empty title becomes "Revert" and the reverted change set's title.
+                components:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[a-z]([a-z0-9-]{0,51}[a-z0-9])?$
+                    title: components
+                    maxItems: 256
+                    uniqueItems: true
+                    description: |-
+                        The components to return, by name, for a change set that holds its
+                         environment. Empty returns every component it touched. A change set that
+                         has closed is reverted whole, so naming components is refused.
             title: RevertChangeSetRequest
             required:
                 - change_set_id
@@ -6887,6 +6927,9 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.changeset.v1.ChangeSet'
                     title: change_set
+                    description: |-
+                        The change set that carries the revert: the held one, at its new
+                         revision, or the new change set.
             title: RevertChangeSetResponse
             additionalProperties: false
         admiral.api.changeset.v1.Revision:
