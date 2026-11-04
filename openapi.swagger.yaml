@@ -3472,6 +3472,12 @@ definitions:
                             component's range refuses it, when it is below a version a component last
                             applied with, or when a placed agent cannot run it; the refusal names
                             every such component. Each component moves to it at its next plan.
+                    tracking:
+                        $ref: '#/definitions/v1Tracking'
+                        description: |-
+                            How the environment takes newly published versions of the components it
+                            runs. Unset, the environment is pinned: a publish changes nothing here,
+                            and it moves only by a change set someone writes.
                 description: |-
                     The environment with updated fields.
                     Only fields specified in `update_mask` are updated.
@@ -3481,7 +3487,7 @@ definitions:
                     The set of fields to update. Optional; if omitted, all populated fields
                     are updated. Pass `*` for full replacement. Supported fields: `name`,
                     `description`, `labels`, `agents`, `approval`, `infra_backend`,
-                    `infra_engine`.
+                    `infra_engine`, `tracking`.
         description: UpdateEnvironmentRequest contains the environment fields to update.
         required:
             - environment
@@ -5547,6 +5553,12 @@ definitions:
                     component's range refuses it, when it is below a version a component last
                     applied with, or when a placed agent cannot run it; the refusal names
                     every such component. Each component moves to it at its next plan.
+            tracking:
+                $ref: '#/definitions/v1Tracking'
+                description: |-
+                    How the environment takes newly published versions of the components it
+                    runs. Unset, the environment is pinned: a publish changes nothing here,
+                    and it moves only by a change set someone writes.
         description: |-
             Environment is a named place an application deploys to (dev, staging,
             prod).
@@ -5582,6 +5594,12 @@ definitions:
                 description: |-
                     The Terraform engine version it last applied with. The environment's
                     engine version may not go below it.
+            newest_matching:
+                $ref: '#/definitions/v1VersionRef'
+                description: |-
+                    The newest published version the environment's tracking matches, when
+                    it is not the one running. Absent when the environment is pinned or
+                    runs the newest match: how far behind the component is.
         description: |-
             EnvironmentComponent is one component live in an environment: the version
             it runs and the apply that last changed it.
@@ -7703,6 +7721,40 @@ definitions:
                 type: string
                 description: 'The provider''s source address: `registry.opentofu.org/hashicorp/aws`.'
         description: TerraformResourceRef names one Terraform resource instance.
+    v1Tracking:
+        type: object
+        properties:
+            kind:
+                $ref: '#/definitions/v1TrackingKind'
+            pattern:
+                type: string
+        description: |-
+            Tracking is an environment's policy for following publishes. When a newly
+            published version of a component the environment runs matches, the
+            environment's draft change set for that component opens or is updated to
+            that version and plans. Tracking never applies; an apply comes from a
+            person, a deploy or a promotion.
+        required:
+            - kind
+            - pattern
+    v1TrackingKind:
+        type: string
+        enum:
+            - KIND_UNSPECIFIED
+            - KIND_BRANCH
+            - KIND_TAG
+            - KIND_RANGE
+        default: KIND_UNSPECIFIED
+        description: |4-
+             - KIND_BRANCH: The pattern is a branch name or glob (`main`, `release/*`). A branch
+            is a floating tag the publisher applies, so the match is the version
+            the tag points at.
+             - KIND_TAG: The pattern is a glob over the component's tags (`v*`, `stable-*`).
+            The newest matching tag by publish time wins.
+             - KIND_RANGE: The pattern is a semver range (`>=1.4.0 <2.0.0`, `~1.4`) over the
+            component's semantic version tags, which never move. The highest
+            matching version wins. A pre-release matches only a range that names
+            one.
     v1UnsetValue:
         type: object
         properties:
