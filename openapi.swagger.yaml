@@ -119,6 +119,22 @@ tags:
         HealthcheckAPI provides health check operations for monitoring service
         availability. All RPCs in this service are public (no authentication
         required), suitable for load balancer probes.
+    - name: IntegrationAPI
+      description: |-
+        IntegrationAPI lists and manages the integrations your organization
+        connects: one resource with a kind, a settings block per kind and a
+        status. An organization connects GitHub once, here; a project or
+        environment then names the integration and sets what it uses from it.
+
+        The GitHub kind is an installation of Admiral's own GitHub App. It holds no
+        credential of yours: Admiral's App key stays with Admiral, and the
+        installation is what GitHub lets Admiral do on your repositories. Only
+        the GitHub kind exists today.
+
+        An installed kind connects in two steps. `InstallIntegration` returns the
+        vendor URL to open; the person installs Admiral's app there; the vendor
+        returns to Admiral with a code, and `ConnectIntegration` turns that
+        callback into the integration.
     - name: UserAPI
       description: |-
         UserAPI provides user profile retrieval and the list of a tenant's members.
@@ -1938,6 +1954,162 @@ paths:
                   type: boolean
             tags:
                 - EnvironmentAPI
+    /v1/integrations:
+        get:
+            summary: |-
+                ListIntegrations pages through your organization's integrations, every
+                status included.
+            description: 'Scope: `integration:read`'
+            operationId: IntegrationAPI_ListIntegrations
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListIntegrationsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                    Filterable fields:
+                      - `name`: filter by integration name.
+                      - `kind`: filter by kind.
+                      - `status`: filter by status.
+
+                    Example: `field['kind'] = 'KIND_GITHUB' AND field['status'] = 'STATUS_CONNECTED'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - IntegrationAPI
+    /v1/integrations/connect:
+        post:
+            summary: |-
+                ConnectIntegration turns the vendor's callback into an integration. The
+                callback carries the state `InstallIntegration` issued, a single-use code
+                the vendor issued for the user who installed, and for KIND_GITHUB the
+                installation id. Admiral proves the installation is the user's before it
+                binds it.
+            description: |-
+                The integration's name is the vendor account's login, lowercased.
+
+                  - INVALID_ARGUMENT when the callback variant does not match `kind`.
+                  - FAILED_PRECONDITION when the state is invalid or expired, or the
+                    vendor rejected the code. Install again.
+                  - PERMISSION_DENIED when the state belongs to another organization or
+                    user, or the installation is not the user's.
+                  - ALREADY_EXISTS when another organization holds this installation.
+                  - OK with the existing integration when this organization already
+                    holds it, including a reinstall of a disconnected one.
+
+                Scope: `integration:write`
+            operationId: IntegrationAPI_ConnectIntegration
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ConnectIntegrationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1ConnectIntegrationRequest'
+            tags:
+                - IntegrationAPI
+    /v1/integrations/install:
+        post:
+            summary: |-
+                InstallIntegration returns where to install Admiral's app of the given
+                kind: the vendor URL to open in a browser, carrying a signed state that
+                binds this organization, the calling user and the kind for ten minutes.
+                Nothing is written until `ConnectIntegration`.
+            description: |-
+                For KIND_GITHUB the person must be an owner of the GitHub organization,
+                since GitHub lets only an owner install an app that asks for
+                organization permissions.
+
+                Scope: `integration:write`
+            operationId: IntegrationAPI_InstallIntegration
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1InstallIntegrationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1InstallIntegrationRequest'
+            tags:
+                - IntegrationAPI
+    /v1/integrations/{integration_id}:
+        get:
+            summary: GetIntegration returns one integration by id.
+            description: 'Scope: `integration:read`'
+            operationId: IntegrationAPI_GetIntegration
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetIntegrationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: integration_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - IntegrationAPI
+        delete:
+            summary: |-
+                DeleteIntegration removes an integration. For the GitHub kind it also
+                uninstalls Admiral's App from your GitHub account, so nothing is left
+                installed that reaches nothing. A project or environment that named the
+                integration keeps its reference and reports it missing.
+            description: 'Scope: `integration:write`'
+            operationId: IntegrationAPI_DeleteIntegration
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteIntegrationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: integration_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - IntegrationAPI
     /v1/invitations:
         get:
             summary: |-
@@ -3522,6 +3694,26 @@ definitions:
         description: |4-
              - OUTCOME_DUPLICATE: The same finish_request_id was already accepted.
              - OUTCOME_LATE: The attempt had lost its lease: kept as evidence, no state change.
+    GitHubIntegrationSettingsAccountType:
+        type: string
+        enum:
+            - ACCOUNT_TYPE_UNSPECIFIED
+            - ACCOUNT_TYPE_ORGANIZATION
+            - ACCOUNT_TYPE_USER
+        default: ACCOUNT_TYPE_UNSPECIFIED
+        description: AccountType is what the App is installed on.
+    GitHubIntegrationSettingsRepositorySelection:
+        type: string
+        enum:
+            - REPOSITORY_SELECTION_UNSPECIFIED
+            - REPOSITORY_SELECTION_ALL
+            - REPOSITORY_SELECTION_SELECTED
+        default: REPOSITORY_SELECTION_UNSPECIFIED
+        description: |-
+            RepositorySelection is how the installation was scoped on GitHub.
+
+             - REPOSITORY_SELECTION_ALL: Every repository the account has, including ones created later.
+             - REPOSITORY_SELECTION_SELECTED: The repositories listed in `repositories` and no others.
     HeartbeatResponseKeys:
         type: string
         enum:
@@ -4851,6 +5043,30 @@ definitions:
              - KIND_VALUE: Both set a value at `path`, or one path contains the other.
              - KIND_VERSION: Both moved the component's version.
              - KIND_REMOVED: The environment no longer has the component.
+    v1ConnectIntegrationRequest:
+        type: object
+        properties:
+            kind:
+                $ref: '#/definitions/v1IntegrationKind'
+            state:
+                type: string
+                description: '`state` from the callback query, as InstallIntegration issued it.'
+            code:
+                type: string
+                description: |-
+                    `code` from the callback query: the vendor's single-use user
+                    authorization code.
+            github:
+                $ref: '#/definitions/v1GitHubInstallCallback'
+        required:
+            - kind
+            - state
+            - code
+    v1ConnectIntegrationResponse:
+        type: object
+        properties:
+            integration:
+                $ref: '#/definitions/v1Integration'
     v1Contract:
         type: object
         properties:
@@ -5234,6 +5450,8 @@ definitions:
     v1DeleteEnvironmentResponse:
         type: object
         description: DeleteEnvironmentResponse is empty on success.
+    v1DeleteIntegrationResponse:
+        type: object
     v1DeleteIssuerResponse:
         type: object
     v1DeleteServiceAccountResponse:
@@ -5726,6 +5944,11 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The retrieved environment.
         description: GetEnvironmentResponse contains the environment record.
+    v1GetIntegrationResponse:
+        type: object
+        properties:
+            integration:
+                $ref: '#/definitions/v1Integration'
     v1GetIssuerResponse:
         type: object
         properties:
@@ -5858,6 +6081,60 @@ definitions:
         description: |-
             GitHubAppAuth identifies a GitHub App installation and holds the app's
             private key, from which the platform mints installation tokens.
+    v1GitHubInstallCallback:
+        type: object
+        properties:
+            installation_id:
+                type: string
+                format: int64
+                description: '`installation_id` from the callback query.'
+        description: |-
+            GitHubInstallCallback is what GitHub's callback carries beyond code and
+            state.
+        required:
+            - installation_id
+    v1GitHubIntegrationSettings:
+        type: object
+        properties:
+            installation_id:
+                type: string
+                format: int64
+                description: GitHub's id for the installation.
+                readOnly: true
+            account_login:
+                type: string
+                description: |-
+                    The login of the organization or user the App is installed on, as GitHub
+                    spells it.
+                readOnly: true
+            account_type:
+                $ref: '#/definitions/GitHubIntegrationSettingsAccountType'
+                readOnly: true
+            repository_selection:
+                $ref: '#/definitions/GitHubIntegrationSettingsRepositorySelection'
+                readOnly: true
+            repositories:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Full names, `owner/name`, when the selection is SELECTED. Empty when it
+                    is ALL, and empty on a DISCONNECTED integration.
+                readOnly: true
+            url:
+                type: string
+                description: |-
+                    The page on GitHub where the installation is managed. Empty on a
+                    DISCONNECTED integration.
+                readOnly: true
+            suspended_at:
+                type: string
+                format: date-time
+                description: Set while GitHub has the installation suspended.
+                readOnly: true
+        description: |-
+            GitHubIntegrationSettings describes one installation of Admiral's GitHub
+            App. GitHub is the source of every field, so all of it is read only.
     v1GrantAgentUseResponse:
         type: object
     v1HeartbeatRequest:
@@ -6077,6 +6354,91 @@ definitions:
         description: |-
             InfraReport is what an infra agent can deploy: every engine version it
             found installed or has fetched.
+    v1InstallIntegrationRequest:
+        type: object
+        properties:
+            kind:
+                $ref: '#/definitions/v1IntegrationKind'
+        required:
+            - kind
+    v1InstallIntegrationResponse:
+        type: object
+        properties:
+            url:
+                type: string
+                description: |-
+                    Where to send the browser: the vendor's install page with the signed
+                    state already in its query.
+    v1Integration:
+        type: object
+        properties:
+            id:
+                type: string
+                readOnly: true
+            name:
+                type: string
+                description: |-
+                    Unique within the organization. Derived from the vendor account for an
+                    installed kind, so it may start with a digit.
+                readOnly: true
+            kind:
+                $ref: '#/definitions/v1IntegrationKind'
+            status:
+                $ref: '#/definitions/v1IntegrationStatus'
+                readOnly: true
+            status_reason:
+                type: string
+                description: Why, and when, the status last left CONNECTED. Empty while connected.
+                readOnly: true
+            settings:
+                $ref: '#/definitions/v1IntegrationSettings'
+                description: The block for `kind`. Exactly one variant is populated.
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                description: Who connected it.
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+            updated_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: |-
+            Integration is a connection your organization holds to an outside
+            service.
+    v1IntegrationKind:
+        type: string
+        enum:
+            - KIND_UNSPECIFIED
+            - KIND_GITHUB
+        default: KIND_UNSPECIFIED
+        description: |-
+            Kind is fixed at create and selects which settings block is populated.
+
+             - KIND_GITHUB: Admiral's own GitHub App, installed on a GitHub organization or user.
+    v1IntegrationSettings:
+        type: object
+        properties:
+            github:
+                $ref: '#/definitions/v1GitHubIntegrationSettings'
+        description: IntegrationSettings is what an integration connects to, one block per kind.
+    v1IntegrationStatus:
+        type: string
+        enum:
+            - STATUS_UNSPECIFIED
+            - STATUS_CONNECTED
+            - STATUS_NEEDS_ATTENTION
+            - STATUS_DISCONNECTED
+        default: STATUS_UNSPECIFIED
+        description: |4-
+             - STATUS_CONNECTED: Reachable, and the last time Admiral used it, it worked.
+             - STATUS_NEEDS_ATTENTION: Still installed on the other side, but Admiral cannot use it: GitHub
+            suspended the installation, or the last use failed. `status_reason`
+            says which.
+             - STATUS_DISCONNECTED: Removed on the other side, such as an App uninstalled on GitHub. The
+            integration stays until an administrator deletes it or installs again.
     v1Invitation:
         type: object
         properties:
@@ -6581,6 +6943,16 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListEnvironmentsResponse contains a page of environments.
+    v1ListIntegrationsResponse:
+        type: object
+        properties:
+            integrations:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Integration'
+            next_page_token:
+                type: string
     v1ListInvitationsResponse:
         type: object
         properties:

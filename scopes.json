@@ -29,6 +29,10 @@
       "description": "Deployment environments and the components in them."
     },
     {
+      "name": "integration",
+      "description": "Integrations your organization connects, such as the GitHub App."
+    },
+    {
       "name": "run",
       "description": "Runs of change sets and drift checks, plan through apply."
     },
@@ -144,6 +148,17 @@
       "description": "Create, update, and delete environments.",
       "implies": [
         "env:read"
+      ]
+    },
+    {
+      "name": "integration:read",
+      "description": "Read integrations, their status and what they connect to."
+    },
+    {
+      "name": "integration:write",
+      "description": "Connect, install and remove integrations.",
+      "implies": [
+        "integration:read"
       ]
     },
     {

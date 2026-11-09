@@ -2021,6 +2021,153 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.environment.v1.GetEnvironmentComponentValuesResponse'
+    /v1/integrations:
+        get:
+            tags:
+                - Integrations
+            summary: List integrations
+            description: 'Scope: `integration:read`'
+            operationId: IntegrationAPI_ListIntegrations
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                     Filterable fields:
+                       - `name`: filter by integration name.
+                       - `kind`: filter by kind.
+                       - `status`: filter by status.
+
+                     Example: `field['kind'] = 'KIND_GITHUB' AND field['status'] = 'STATUS_CONNECTED'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: The page_size query parameter.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: The page_token query parameter.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.integration.v1.ListIntegrationsResponse'
+    /v1/integrations/connect:
+        post:
+            tags:
+                - Integrations
+            summary: Connect an installed app
+            description: |-
+                The integration's name is the vendor account's login, lowercased.
+
+                   - INVALID_ARGUMENT when the callback variant does not match `kind`.
+                   - FAILED_PRECONDITION when the state is invalid or expired, or the
+                     vendor rejected the code. Install again.
+                   - PERMISSION_DENIED when the state belongs to another organization or
+                     user, or the installation is not the user's.
+                   - ALREADY_EXISTS when another organization holds this installation.
+                   - OK with the existing integration when this organization already
+                     holds it, including a reinstall of a disconnected one.
+
+                 Scope: `integration:write`
+            operationId: IntegrationAPI_ConnectIntegration
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.integration.v1.ConnectIntegrationRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.integration.v1.ConnectIntegrationResponse'
+    /v1/integrations/install:
+        post:
+            tags:
+                - Integrations
+            summary: Start installing an app
+            description: |-
+                For KIND_GITHUB the person must be an owner of the GitHub organization,
+                 since GitHub lets only an owner install an app that asks for
+                 organization permissions.
+
+                 Scope: `integration:write`
+            operationId: IntegrationAPI_InstallIntegration
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.integration.v1.InstallIntegrationRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.integration.v1.InstallIntegrationResponse'
+    /v1/integrations/{integration_id}:
+        get:
+            tags:
+                - Integrations
+            summary: Get an integration
+            description: 'Scope: `integration:read`'
+            operationId: IntegrationAPI_GetIntegration
+            parameters:
+                - name: integration_id
+                  in: path
+                  description: The integration_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: integration_id
+                    pattern: ^int-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.integration.v1.GetIntegrationResponse'
+        delete:
+            tags:
+                - Integrations
+            summary: Delete an integration
+            description: 'Scope: `integration:write`'
+            operationId: IntegrationAPI_DeleteIntegration
+            parameters:
+                - name: integration_id
+                  in: path
+                  description: The integration_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: integration_id
+                    pattern: ^int-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.integration.v1.DeleteIntegrationResponse'
     /v1/invitations:
         get:
             tags:
@@ -8335,6 +8482,332 @@ components:
             additionalProperties: false
             description: |-
                 Empty response indicating the service is healthy.
+        admiral.api.integration.v1.ConnectIntegrationRequest:
+            type: object
+            anyOf:
+                - type: object
+                  properties:
+                    github:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.integration.v1.GitHubInstallCallback'
+                        title: github
+                  title: github
+            unevaluatedProperties: false
+            properties:
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.Integration.Kind'
+                    not:
+                        enum:
+                            - KIND_UNSPECIFIED
+                    title: kind
+                    description: |
+                        enum.defined_only = true
+                state:
+                    type: string
+                    title: state
+                    maxLength: 2048
+                    minLength: 1
+                    description: '`state` from the callback query, as InstallIntegration issued it.'
+                code:
+                    type: string
+                    title: code
+                    maxLength: 256
+                    minLength: 1
+                    description: |-
+                        `code` from the callback query: the vendor's single-use user
+                         authorization code.
+            title: ConnectIntegrationRequest
+            required:
+                - kind
+                - state
+                - code
+            description: |
+                callback_matches_kind // the callback variant must match kind
+        admiral.api.integration.v1.ConnectIntegrationResponse:
+            type: object
+            properties:
+                integration:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.Integration'
+                    title: integration
+            title: ConnectIntegrationResponse
+            additionalProperties: false
+        admiral.api.integration.v1.DeleteIntegrationRequest:
+            type: object
+            properties:
+                integration_id:
+                    type: string
+                    title: integration_id
+                    pattern: ^int-[0-9a-z]+$
+            title: DeleteIntegrationRequest
+            required:
+                - integration_id
+            additionalProperties: false
+        admiral.api.integration.v1.DeleteIntegrationResponse:
+            type: object
+            title: DeleteIntegrationResponse
+            additionalProperties: false
+        admiral.api.integration.v1.GetIntegrationRequest:
+            type: object
+            properties:
+                integration_id:
+                    type: string
+                    title: integration_id
+                    pattern: ^int-[0-9a-z]+$
+            title: GetIntegrationRequest
+            required:
+                - integration_id
+            additionalProperties: false
+        admiral.api.integration.v1.GetIntegrationResponse:
+            type: object
+            properties:
+                integration:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.Integration'
+                    title: integration
+            title: GetIntegrationResponse
+            additionalProperties: false
+        admiral.api.integration.v1.GitHubInstallCallback:
+            type: object
+            properties:
+                installation_id:
+                    exclusiveMinimum: 0
+                    type: string
+                    title: installation_id
+                    format: int64
+                    description: '`installation_id` from the callback query.'
+            title: GitHubInstallCallback
+            required:
+                - installation_id
+            additionalProperties: false
+            description: |-
+                GitHubInstallCallback is what GitHub's callback carries beyond code and
+                 state.
+        admiral.api.integration.v1.GitHubIntegrationSettings:
+            type: object
+            properties:
+                installation_id:
+                    type: string
+                    title: installation_id
+                    format: int64
+                    description: GitHub's id for the installation.
+                    readOnly: true
+                account_login:
+                    type: string
+                    title: account_login
+                    description: |-
+                        The login of the organization or user the App is installed on, as GitHub
+                         spells it.
+                    readOnly: true
+                account_type:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.GitHubIntegrationSettings.AccountType'
+                    title: account_type
+                    readOnly: true
+                repository_selection:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.GitHubIntegrationSettings.RepositorySelection'
+                    title: repository_selection
+                    readOnly: true
+                repositories:
+                    type: array
+                    items:
+                        type: string
+                        readOnly: true
+                    title: repositories
+                    description: |-
+                        Full names, `owner/name`, when the selection is SELECTED. Empty when it
+                         is ALL, and empty on a DISCONNECTED integration.
+                    readOnly: true
+                url:
+                    type: string
+                    title: url
+                    description: |-
+                        The page on GitHub where the installation is managed. Empty on a
+                         DISCONNECTED integration.
+                    readOnly: true
+                suspended_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: suspended_at
+                    description: Set while GitHub has the installation suspended.
+                    readOnly: true
+            title: GitHubIntegrationSettings
+            additionalProperties: false
+            description: |-
+                GitHubIntegrationSettings describes one installation of Admiral's GitHub
+                 App. GitHub is the source of every field, so all of it is read only.
+        admiral.api.integration.v1.GitHubIntegrationSettings.AccountType:
+            type: string
+            title: AccountType
+            enum:
+                - ACCOUNT_TYPE_UNSPECIFIED
+                - ACCOUNT_TYPE_ORGANIZATION
+                - ACCOUNT_TYPE_USER
+            description: AccountType is what the App is installed on.
+        admiral.api.integration.v1.GitHubIntegrationSettings.RepositorySelection:
+            type: string
+            title: RepositorySelection
+            enum:
+                - REPOSITORY_SELECTION_UNSPECIFIED
+                - REPOSITORY_SELECTION_ALL
+                - REPOSITORY_SELECTION_SELECTED
+            description: RepositorySelection is how the installation was scoped on GitHub.
+        admiral.api.integration.v1.InstallIntegrationRequest:
+            type: object
+            properties:
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.Integration.Kind'
+                    not:
+                        enum:
+                            - KIND_UNSPECIFIED
+                    title: kind
+                    description: |
+                        enum.defined_only = true
+            title: InstallIntegrationRequest
+            required:
+                - kind
+            additionalProperties: false
+        admiral.api.integration.v1.InstallIntegrationResponse:
+            type: object
+            properties:
+                url:
+                    type: string
+                    title: url
+                    description: |-
+                        Where to send the browser: the vendor's install page with the signed
+                         state already in its query.
+            title: InstallIntegrationResponse
+            additionalProperties: false
+        admiral.api.integration.v1.Integration:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    pattern: ^int-[0-9a-z]+$
+                    readOnly: true
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        Unique within the organization. Derived from the vendor account for an
+                         installed kind, so it may start with a digit.
+                    readOnly: true
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.Integration.Kind'
+                    title: kind
+                    description: '(IMMUTABLE) '
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.Integration.Status'
+                    title: status
+                    readOnly: true
+                status_reason:
+                    type: string
+                    title: status_reason
+                    description: Why, and when, the status last left CONNECTED. Empty while connected.
+                    readOnly: true
+                settings:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.integration.v1.IntegrationSettings'
+                    title: settings
+                    description: The block for `kind`. Exactly one variant is populated.
+                created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: created_by
+                    description: Who connected it.
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+                updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: updated_at
+                    readOnly: true
+            title: Integration
+            additionalProperties: false
+            description: |-
+                Integration is a connection your organization holds to an outside
+                 service.
+        admiral.api.integration.v1.Integration.Kind:
+            type: string
+            title: Kind
+            enum:
+                - KIND_UNSPECIFIED
+                - KIND_GITHUB
+            description: Kind is fixed at create and selects which settings block is populated.
+        admiral.api.integration.v1.Integration.Status:
+            type: string
+            title: Status
+            enum:
+                - STATUS_UNSPECIFIED
+                - STATUS_CONNECTED
+                - STATUS_NEEDS_ATTENTION
+                - STATUS_DISCONNECTED
+        admiral.api.integration.v1.IntegrationSettings:
+            type: object
+            anyOf:
+                - type: object
+                  properties:
+                    github:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.integration.v1.GitHubIntegrationSettings'
+                        title: github
+                  title: github
+            unevaluatedProperties: false
+            title: IntegrationSettings
+            description: IntegrationSettings is what an integration connects to, one block per kind.
+        admiral.api.integration.v1.ListIntegrationsRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Filterable fields:
+                           - `name`: filter by integration name.
+                           - `kind`: filter by kind.
+                           - `status`: filter by status.
+
+                         Example: `field['kind'] = 'KIND_GITHUB' AND field['status'] = 'STATUS_CONNECTED'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                page_token:
+                    type: string
+                    title: page_token
+            title: ListIntegrationsRequest
+            additionalProperties: false
+        admiral.api.integration.v1.ListIntegrationsResponse:
+            type: object
+            properties:
+                integrations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.integration.v1.Integration'
+                    title: integrations
+                next_page_token:
+                    type: string
+                    title: next_page_token
+            title: ListIntegrationsResponse
+            additionalProperties: false
         admiral.api.invitation.v1.CreateInvitationRequest:
             type: object
             properties:
@@ -11277,6 +11750,8 @@ tags:
       description: 'Your organization: its name, slug, status and logo.'
     - name: Credentials
       description: Manage credentials for accessing external systems.
+    - name: Integrations
+      description: The outside services your organization connects, such as Admiral's GitHub App, and the install flow that connects one.
     - name: Service Accounts
       description: The non-human principals your agents run as, and the issuer and subject each signs in with.
     - name: Issuers
