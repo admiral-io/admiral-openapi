@@ -168,6 +168,28 @@ tags:
         planned run cannot apply; the run of its rebased revision supersedes it.
         Every plan is a new run, so a change set's runs are the history of how it
         reached what was approved.
+    - name: SourceAPI
+      description: |-
+        SourceAPI is the system-of-record service for an organization's sources: one
+        upstream location each, with the standing grant that reaches it and the
+        bound on what may enter through it (admiral-knowledge, "a source is one
+        upstream location with a standing credential, and a push to a repository
+        publishes through it", and "a GitHub repository source is reached through
+        the integration or through a credential").
+
+        This is the PUBLISHED surface. The organization comes from the token, and
+        the edge forwards each call to the platform plane by field name.
+
+        A source's trigger says who causes a version to exist. REQUEST: a person
+        imports through it, choosing a version, and nothing imports on its own.
+        PUSH: Admiral's GitHub App publishes what the repository's admiral.yaml
+        declares when the repository is pushed. The push itself arrives on the
+        App's webhook stream and is consumed by the platform, so there is no RPC
+        for it here; the import through a REQUEST source is the registry's
+        ImportComponent naming a source and a version.
+
+        Nothing on this service returns a credential or a token. A member who
+        imports through a source causes the grant's effects and never sees it.
     - name: TenantAPI
       description: |-
         TenantAPI exposes the caller's OWN tenant.
@@ -2850,6 +2872,249 @@ paths:
                   type: string
             tags:
                 - ServiceAccountAPI
+    /v1/sources:
+        get:
+            summary: ListSources pages through an organization's sources, every status included.
+            description: 'Scope: `source:read`'
+            operationId: SourceAPI_ListSources
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListSourcesResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                    Filterable fields:
+                      - `name`: filter by source name.
+                      - `kind`: filter by kind.
+                      - `trigger`: filter by trigger.
+                      - `status`: filter by status.
+                      - `integration_id`: sources reached through one integration.
+                      - `credential_id`: sources reached through one credential.
+
+                    Example: `field['trigger'] = 'TRIGGER_PUSH' AND field['status'] = 'STATUS_READY'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - SourceAPI
+        post:
+            summary: |-
+                CreateSource records a source. Creating one is the curated act: it is
+                where the location, the grant and `allows` are chosen, and no second
+                endorsement exists. The grant must reach the location, which the
+                platform checks differently per arm:
+            description: |-
+                - An integration grant is checked here, with no network call. The
+                    integration must be a CONNECTED GitHub integration of this organization
+                    and the location must be a repository its installation reaches:
+                    under the installation's account, and in its repository list when
+                    the selection is SELECTED. FAILED_PRECONDITION otherwise, naming
+                    which.
+                  - A credential grant is checked at fetch, the way an import is, since
+                    a credential carries hosts and never repositories. The credential
+                    must exist in this organization and allow the location's host.
+                    FAILED_PRECONDITION when it does not.
+
+                ALREADY_EXISTS when the organization has a source of this name.
+
+                Scope: `source:write`
+            operationId: SourceAPI_CreateSource
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateSourceResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateSourceRequest'
+            tags:
+                - SourceAPI
+    /v1/sources/{source.id}:
+        patch:
+            summary: |-
+                UpdateSource changes what may change: the description, the grant, the
+                trigger, `allows` and the settings. The kind and the location are
+                immutable, because a component records the source and path it came
+                from, and moving a source would rewrite that lineage; make a new source
+                instead. A changed grant is checked as CreateSource checks it.
+                Tightening `allows` never touches a running environment, since applied
+                bytes are frozen; it blocks new imports and new revisions.
+            description: 'Scope: `source:write`'
+            operationId: SourceAPI_UpdateSource
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdateSourceResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: source.id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/SourceAPIUpdateSourceBody'
+            tags:
+                - SourceAPI
+    /v1/sources/{source_id}:
+        get:
+            summary: GetSource returns one source by id.
+            description: 'Scope: `source:read`'
+            operationId: SourceAPI_GetSource
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetSourceResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: source_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - SourceAPI
+        delete:
+            summary: |-
+                DeleteSource removes a source. Components that came through it keep
+                their versions and their provenance; they can no longer gain versions
+                through it. A PUSH source stops publishing at once.
+            description: 'Scope: `source:write`'
+            operationId: SourceAPI_DeleteSource
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteSourceResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: source_id
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - SourceAPI
+    /v1/sources/{source_id}/artifacts:
+        get:
+            summary: |-
+                ListSourceArtifacts browses what a source offers, for the kinds whose
+                protocol serves a catalog: a Helm repository's index and a Terraform
+                registry's namespace. A container registry does not list, and a git
+                repository's artifacts are paths, so for KIND_OCI_REGISTRY and KIND_GIT
+                the answer is FAILED_PRECONDITION and the caller names the artifact.
+                The list is bounded by `allows`; what the upstream has beyond it is
+                not shown.
+            description: 'Scope: `source:read`'
+            operationId: SourceAPI_ListSourceArtifacts
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListSourceArtifactsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: source_id
+                  in: path
+                  required: true
+                  type: string
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - SourceAPI
+    /v1/sources/{source_id}/versions:
+        get:
+            summary: |-
+                ListSourceVersions discovers the versions of one artifact in a source.
+                It is a read-through cache: fetched from the upstream when the cached
+                list is older than the window, served stale with `stale_reason` set
+                when the upstream fails, never refreshed in the background. A version
+                is ordered when the protocol orders it, a tag or a registry version; a
+                branch is a moving head and carries the commit it points at.
+            description: |-
+                FAILED_PRECONDITION when the artifact is outside `allows` or the grant
+                no longer reaches the source.
+
+                Scope: `source:read`
+            operationId: SourceAPI_ListSourceVersions
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListSourceVersionsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: source_id
+                  in: path
+                  required: true
+                  type: string
+                - name: artifact
+                  description: |-
+                    The artifact whose versions to list, as `allows` names it: a chart
+                    name, `name/provider`, a name under the namespace. Empty for a git
+                    source, whose versions are the repository's tags and branches.
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - SourceAPI
     /v1/tenant:
         get:
             summary: GetTenant returns the caller's own tenant.
@@ -3226,22 +3491,6 @@ definitions:
                 description: Set on the final chunk.
         required:
             - attempt
-    AmbientCredentialSource:
-        type: string
-        enum:
-            - SOURCE_UNSPECIFIED
-            - SOURCE_METADATA_SERVER
-            - SOURCE_WORKLOAD_IDENTITY
-            - SOURCE_ENVIRONMENT_VARIABLE
-            - SOURCE_FILE
-        default: SOURCE_UNSPECIFIED
-        description: |-
-            Source is where the agent found it.
-
-             - SOURCE_METADATA_SERVER: A cloud metadata server answered with a token.
-             - SOURCE_WORKLOAD_IDENTITY: The node's or pod's workload identity.
-             - SOURCE_ENVIRONMENT_VARIABLE: A standard credential variable in the agent's environment.
-             - SOURCE_FILE: A standard credential file.
     ApiKeyAPIRevokeApiKeyBody:
         type: object
         description: RevokeApiKeyRequest identifies an API key to revoke.
@@ -4020,23 +4269,81 @@ definitions:
             - plan_digest
     RunAPICancelRunBody:
         type: object
-    RunTrigger:
-        type: string
-        enum:
-            - TRIGGER_UNSPECIFIED
-            - TRIGGER_USER
-            - TRIGGER_SCHEDULE
-            - TRIGGER_GATE
-        default: TRIGGER_UNSPECIFIED
-        description: |-
-            Trigger is what started the run.
-
-             - TRIGGER_USER: A person or an API call.
-             - TRIGGER_SCHEDULE: A drift check on the environment's schedule.
-             - TRIGGER_GATE: A drift check the environment requires right before an apply.
     SetIssuerKeysRequestAcceptPending:
         type: object
         description: AcceptPending marks accepting the keys in `pending_key_ids`.
+    SourceAPIUpdateSourceBody:
+        type: object
+        properties:
+            source:
+                type: object
+                properties:
+                    name:
+                        type: string
+                        description: |-
+                            Unique within the organization. Typed by the administrator who creates the
+                            source, so like a credential's name it starts with a letter.
+                    description:
+                        type: string
+                    kind:
+                        $ref: '#/definitions/v1SourceKind'
+                    location:
+                        type: string
+                        description: |-
+                            The narrowest thing the protocol addresses: one repository, one Helm
+                            repository URL, one registry namespace. Never a bare host, and never a
+                            whole GitHub organization. Picking the source is picking the grant, so
+                            the location is what bounds the grant's reach.
+                    credential_id:
+                        type: string
+                    integration_id:
+                        type: string
+                    trigger:
+                        $ref: '#/definitions/v1SourceTrigger'
+                    allows:
+                        type: array
+                        items:
+                            type: string
+                        description: |-
+                            What may enter through the source: artifact names, exact or with a
+                            trailing `*`. For a git source an artifact is a path in the repository;
+                            for a Helm repository a chart name; for a registry a name under the
+                            namespace. Required and never empty; `*` alone is how a source says
+                            everything. An allow list, enforced on the server at import and at
+                            push, per artifact.
+                    settings:
+                        $ref: '#/definitions/v1SourceSettings'
+                        description: |-
+                            The block for `kind`, where the kind has one. Only git has settings
+                            today, and only a push source needs them.
+                    status:
+                        $ref: '#/definitions/v1SourceStatus'
+                        readOnly: true
+                    status_reason:
+                        type: string
+                        description: Why the status left READY. Empty while ready.
+                        readOnly: true
+                    created_by:
+                        $ref: '#/definitions/v1ActorRef'
+                        readOnly: true
+                    created_at:
+                        type: string
+                        format: date-time
+                        readOnly: true
+                    updated_at:
+                        type: string
+                        format: date-time
+                        readOnly: true
+                description: Carries the id and the new values.
+                title: Carries the id and the new values.
+            update_mask:
+                type: string
+                description: |-
+                    Paths from `description`, `credential_id`, `integration_id`, `trigger`,
+                    `allows`, `settings`. Empty means every updatable field the message
+                    carries.
+        required:
+            - source
     ValueSourceOrigin:
         type: string
         enum:
@@ -4235,6 +4542,68 @@ definitions:
             The JSON representation for `NullValue` is JSON `null`.
 
              - NULL_VALUE: Null value.
+    sourceV1Source:
+        type: object
+        properties:
+            id:
+                type: string
+                readOnly: true
+            name:
+                type: string
+                description: |-
+                    Unique within the organization. Typed by the administrator who creates the
+                    source, so like a credential's name it starts with a letter.
+            description:
+                type: string
+            kind:
+                $ref: '#/definitions/v1SourceKind'
+            location:
+                type: string
+                description: |-
+                    The narrowest thing the protocol addresses: one repository, one Helm
+                    repository URL, one registry namespace. Never a bare host, and never a
+                    whole GitHub organization. Picking the source is picking the grant, so
+                    the location is what bounds the grant's reach.
+            credential_id:
+                type: string
+            integration_id:
+                type: string
+            trigger:
+                $ref: '#/definitions/v1SourceTrigger'
+            allows:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    What may enter through the source: artifact names, exact or with a
+                    trailing `*`. For a git source an artifact is a path in the repository;
+                    for a Helm repository a chart name; for a registry a name under the
+                    namespace. Required and never empty; `*` alone is how a source says
+                    everything. An allow list, enforced on the server at import and at
+                    push, per artifact.
+            settings:
+                $ref: '#/definitions/v1SourceSettings'
+                description: |-
+                    The block for `kind`, where the kind has one. Only git has settings
+                    today, and only a push source needs them.
+            status:
+                $ref: '#/definitions/v1SourceStatus'
+                readOnly: true
+            status_reason:
+                type: string
+                description: Why the status left READY. Empty while ready.
+                readOnly: true
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+            updated_at:
+                type: string
+                format: date-time
+                readOnly: true
     v1AcceptRunResponse:
         type: object
         properties:
@@ -4408,7 +4777,7 @@ definitions:
         type: object
         properties:
             source:
-                $ref: '#/definitions/AmbientCredentialSource'
+                $ref: '#/definitions/v1AmbientCredentialSource'
             location:
                 type: string
                 description: |-
@@ -4422,6 +4791,22 @@ definitions:
         description: |-
             AmbientCredential is a credential the agent found around it at start,
             which every job it runs can reach. Where it was found, never its value.
+    v1AmbientCredentialSource:
+        type: string
+        enum:
+            - SOURCE_UNSPECIFIED
+            - SOURCE_METADATA_SERVER
+            - SOURCE_WORKLOAD_IDENTITY
+            - SOURCE_ENVIRONMENT_VARIABLE
+            - SOURCE_FILE
+        default: SOURCE_UNSPECIFIED
+        description: |-
+            Source is where the agent found it.
+
+             - SOURCE_METADATA_SERVER: A cloud metadata server answered with a token.
+             - SOURCE_WORKLOAD_IDENTITY: The node's or pod's workload identity.
+             - SOURCE_ENVIRONMENT_VARIABLE: A standard credential variable in the agent's environment.
+             - SOURCE_FILE: A standard credential file.
     v1ApiKey:
         type: object
         properties:
@@ -5358,6 +5743,21 @@ definitions:
         properties:
             service_account:
                 $ref: '#/definitions/v1ServiceAccount'
+    v1CreateSourceRequest:
+        type: object
+        properties:
+            source:
+                $ref: '#/definitions/sourceV1Source'
+                description: |-
+                    The source to create: `name`, `kind`, `location`, one grant, `trigger`,
+                    `allows`, and `settings` where the kind and trigger need them.
+        required:
+            - source
+    v1CreateSourceResponse:
+        type: object
+        properties:
+            source:
+                $ref: '#/definitions/sourceV1Source'
     v1Credential:
         type: object
         properties:
@@ -5455,6 +5855,8 @@ definitions:
     v1DeleteIssuerResponse:
         type: object
     v1DeleteServiceAccountResponse:
+        type: object
+    v1DeleteSourceResponse:
         type: object
     v1DeleteTagResponse:
         type: object
@@ -6041,6 +6443,11 @@ definitions:
         properties:
             service_account:
                 $ref: '#/definitions/v1ServiceAccount'
+    v1GetSourceResponse:
+        type: object
+        properties:
+            source:
+                $ref: '#/definitions/sourceV1Source'
     v1GetTenantResponse:
         type: object
         properties:
@@ -6135,6 +6542,21 @@ definitions:
         description: |-
             GitHubIntegrationSettings describes one installation of Admiral's GitHub
             App. GitHub is the source of every field, so all of it is read only.
+    v1GitSourceSettings:
+        type: object
+        properties:
+            branches:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Branches whose pushes publish, exact or with a trailing `*`; `*` alone
+                    is every branch. Required on a push source and ignored on a request
+                    source. Every publish tags the version with the branch name, floating,
+                    and `sha-<short>`.
+        description: |-
+            GitSourceSettings is what a git source adds. Today that is only which
+            branches a push source listens to.
     v1GrantAgentUseResponse:
         type: object
     v1HeartbeatRequest:
@@ -7015,6 +7437,55 @@ definitions:
                     $ref: '#/definitions/v1ServiceAccount'
             next_page_token:
                 type: string
+    v1ListSourceArtifactsResponse:
+        type: object
+        properties:
+            artifacts:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1SourceArtifact'
+            next_page_token:
+                type: string
+            refreshed_at:
+                type: string
+                format: date-time
+                description: When the catalog was last read from the upstream.
+            stale_reason:
+                type: string
+                description: |-
+                    Set when the upstream failed on this read and the list is the last one
+                    that succeeded. Empty when fresh.
+    v1ListSourceVersionsResponse:
+        type: object
+        properties:
+            versions:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1SourceVersion'
+                description: Ordered versions newest first, then branches.
+            next_page_token:
+                type: string
+            refreshed_at:
+                type: string
+                format: date-time
+                description: When the versions were last read from the upstream.
+            stale_reason:
+                type: string
+                description: |-
+                    Set when the upstream failed on this read and the list is the last one
+                    that succeeded. Empty when fresh.
+    v1ListSourcesResponse:
+        type: object
+        properties:
+            sources:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/sourceV1Source'
+            next_page_token:
+                type: string
     v1ListUsersResponse:
         type: object
         properties:
@@ -7639,7 +8110,7 @@ definitions:
                 $ref: '#/definitions/v1RunStatus'
                 readOnly: true
             trigger:
-                $ref: '#/definitions/RunTrigger'
+                $ref: '#/definitions/v1RunTrigger'
                 readOnly: true
             wait_reason:
                 $ref: '#/definitions/v1WaitReason'
@@ -7748,6 +8219,20 @@ definitions:
              - STATUS_UNKNOWN: The apply started and its agent never reported, so what it changed is
             not known. The environment is held as for PARTIAL: plan to see what
             landed, then revert or accept.
+    v1RunTrigger:
+        type: string
+        enum:
+            - TRIGGER_UNSPECIFIED
+            - TRIGGER_USER
+            - TRIGGER_SCHEDULE
+            - TRIGGER_GATE
+        default: TRIGGER_UNSPECIFIED
+        description: |-
+            Trigger is what started the run.
+
+             - TRIGGER_USER: A person or an API call.
+             - TRIGGER_SCHEDULE: A drift check on the environment's schedule.
+             - TRIGGER_GATE: A drift check the environment requires right before an apply.
     v1Runtime:
         type: object
         properties:
@@ -7920,6 +8405,104 @@ definitions:
                     The most of this kind the agent runs at once. The server offers no more
                     than this, whatever `free` says.
         description: Slots is how many more jobs of a kind the agent will take now.
+    v1SourceArtifact:
+        type: object
+        properties:
+            name:
+                type: string
+                description: |-
+                    The name as the upstream spells it: a chart name, `name/provider` for a
+                    registry module.
+            description:
+                type: string
+            latest_version:
+                type: string
+                description: The newest ordered version the catalog lists, when it says.
+        description: SourceArtifact is one thing a source offers, as its catalog names it.
+    v1SourceKind:
+        type: string
+        enum:
+            - KIND_UNSPECIFIED
+            - KIND_GIT
+            - KIND_HELM_REPO
+            - KIND_OCI_REGISTRY
+            - KIND_TERRAFORM_REGISTRY
+        default: KIND_UNSPECIFIED
+        description: |-
+            Kind is the protocol of the location, never what is inside. One git
+            source can yield a Terraform module and a Helm chart as two components,
+            each recording its path. An archive at a URL is not a source, because a
+            URL has no versions.
+
+             - KIND_GIT: One git repository. The location is its clone URL.
+             - KIND_HELM_REPO: One Helm repository served over HTTP. The location is the repository
+            URL whose index.yaml lists the charts.
+             - KIND_OCI_REGISTRY: One namespace in a container registry. The location is `oci://` plus
+            the host and namespace; artifacts are the names under it.
+             - KIND_TERRAFORM_REGISTRY: One namespace in a Terraform registry. The location is the host and
+            namespace; artifacts are `name/provider`.
+    v1SourceSettings:
+        type: object
+        properties:
+            git:
+                $ref: '#/definitions/v1GitSourceSettings'
+        description: SourceSettings is what a kind adds, one block per kind that has one.
+    v1SourceStatus:
+        type: string
+        enum:
+            - STATUS_UNSPECIFIED
+            - STATUS_READY
+            - STATUS_NEEDS_ATTENTION
+        default: STATUS_UNSPECIFIED
+        description: |4-
+             - STATUS_READY: The grant reaches the location as far as the platform knows.
+             - STATUS_NEEDS_ATTENTION: The grant no longer reaches the location: the integration is not
+            connected or its installation lost the repository, or the credential
+            was deleted. `status_reason` says which. The source stays so what
+            came through it keeps its lineage.
+    v1SourceTrigger:
+        type: string
+        enum:
+            - TRIGGER_UNSPECIFIED
+            - TRIGGER_REQUEST
+            - TRIGGER_PUSH
+        default: TRIGGER_UNSPECIFIED
+        description: |-
+            Trigger is who causes a version to exist through this source.
+
+             - TRIGGER_REQUEST: A person imports through the source, choosing a version. Nothing
+            imports on its own.
+             - TRIGGER_PUSH: Admiral's GitHub App publishes what the repository's admiral.yaml
+            declares when the repository is pushed. KIND_GIT through an
+            integration only.
+    v1SourceVersion:
+        type: object
+        properties:
+            name:
+                type: string
+                description: 'The version as the upstream spells it: `1.14.5`, `v2.3.0`, `main`.'
+            kind:
+                $ref: '#/definitions/v1SourceVersionKind'
+            commit:
+                type: string
+                description: For a git source, the commit the tag or branch resolves to.
+            created_at:
+                type: string
+                format: date-time
+                description: When the upstream says the version was made, when it says.
+        description: SourceVersion is one version of one artifact as the upstream offers it.
+    v1SourceVersionKind:
+        type: string
+        enum:
+            - KIND_UNSPECIFIED
+            - KIND_VERSION
+            - KIND_BRANCH
+        default: KIND_UNSPECIFIED
+        description: |-
+            Kind says whether the version compares.
+
+             - KIND_VERSION: An ordered version: a chart version, a registry version, a git tag.
+             - KIND_BRANCH: A moving head. `commit` says where it points now.
     v1StartJobResponse:
         type: object
         properties:
@@ -8182,6 +8765,11 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The updated environment.
         description: UpdateEnvironmentResponse contains the updated environment.
+    v1UpdateSourceResponse:
+        type: object
+        properties:
+            source:
+                $ref: '#/definitions/sourceV1Source'
     v1UpdateTenantRequest:
         type: object
         properties:

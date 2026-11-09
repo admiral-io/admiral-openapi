@@ -2962,6 +2962,263 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.serviceaccount.v1.DeleteServiceAccountResponse'
+    /v1/sources:
+        get:
+            tags:
+                - Sources
+            summary: List sources
+            description: 'Scope: `source:read`'
+            operationId: SourceAPI_ListSources
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                     Filterable fields:
+                       - `name`: filter by source name.
+                       - `kind`: filter by kind.
+                       - `trigger`: filter by trigger.
+                       - `status`: filter by status.
+                       - `integration_id`: sources reached through one integration.
+                       - `credential_id`: sources reached through one credential.
+
+                     Example: `field['trigger'] = 'TRIGGER_PUSH' AND field['status'] = 'STATUS_READY'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: The page_size query parameter.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: The page_token query parameter.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.source.v1.ListSourcesResponse'
+        post:
+            tags:
+                - Sources
+            summary: Create a source
+            description: |-
+                - An integration grant is checked here, with no network call. The
+                     integration must be a CONNECTED GitHub integration of this organization
+                     and the location must be a repository its installation reaches:
+                     under the installation's account, and in its repository list when
+                     the selection is SELECTED. FAILED_PRECONDITION otherwise, naming
+                     which.
+                   - A credential grant is checked at fetch, the way an import is, since
+                     a credential carries hosts and never repositories. The credential
+                     must exist in this organization and allow the location's host.
+                     FAILED_PRECONDITION when it does not.
+
+                 ALREADY_EXISTS when the organization has a source of this name.
+
+                 Scope: `source:write`
+            operationId: SourceAPI_CreateSource
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.source.v1.CreateSourceRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.source.v1.CreateSourceResponse'
+    /v1/sources/{source.id}:
+        patch:
+            tags:
+                - Sources
+            summary: Update a source
+            description: 'Scope: `source:write`'
+            operationId: SourceAPI_UpdateSource
+            parameters:
+                - name: source.id
+                  in: path
+                  description: The source.id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: id
+                    pattern: ^src-[0-9a-z]+$
+                    readOnly: true
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
+                                    title: update_mask
+                                    description: |-
+                                        Paths from `description`, `credential_id`, `integration_id`, `trigger`,
+                                         `allows`, `settings`. Empty means every updatable field the message
+                                         carries.
+                            title: UpdateSourceRequest
+                            additionalProperties: false
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.source.v1.UpdateSourceResponse'
+    /v1/sources/{source_id}:
+        get:
+            tags:
+                - Sources
+            summary: Get a source
+            description: 'Scope: `source:read`'
+            operationId: SourceAPI_GetSource
+            parameters:
+                - name: source_id
+                  in: path
+                  description: The source_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.source.v1.GetSourceResponse'
+        delete:
+            tags:
+                - Sources
+            summary: Delete a source
+            description: 'Scope: `source:write`'
+            operationId: SourceAPI_DeleteSource
+            parameters:
+                - name: source_id
+                  in: path
+                  description: The source_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.source.v1.DeleteSourceResponse'
+    /v1/sources/{source_id}/artifacts:
+        get:
+            tags:
+                - Sources
+            summary: Browse what a source offers
+            description: 'Scope: `source:read`'
+            operationId: SourceAPI_ListSourceArtifacts
+            parameters:
+                - name: source_id
+                  in: path
+                  description: The source_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+                - name: page_size
+                  in: query
+                  description: The page_size query parameter.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 200
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: The page_token query parameter.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.source.v1.ListSourceArtifactsResponse'
+    /v1/sources/{source_id}/versions:
+        get:
+            tags:
+                - Sources
+            summary: Discover versions of an artifact in a source
+            description: |-
+                FAILED_PRECONDITION when the artifact is outside `allows` or the grant
+                 no longer reaches the source.
+
+                 Scope: `source:read`
+            operationId: SourceAPI_ListSourceVersions
+            parameters:
+                - name: source_id
+                  in: path
+                  description: The source_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+                - name: artifact
+                  in: query
+                  description: |-
+                    The artifact whose versions to list, as `allows` names it: a chart
+                     name, `name/provider`, a name under the namespace. Empty for a git
+                     source, whose versions are the repository's tags and branches.
+                  schema:
+                    type: string
+                    title: artifact
+                    maxLength: 256
+                - name: page_size
+                  in: query
+                  description: The page_size query parameter.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 200
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: The page_token query parameter.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.source.v1.ListSourceVersionsResponse'
     /v1/tenant:
         get:
             tags:
@@ -11366,6 +11623,481 @@ components:
                     title: issuer
             title: SetIssuerKeysResponse
             additionalProperties: false
+        admiral.api.source.v1.CreateSourceRequest:
+            type: object
+            properties:
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
+                    title: source
+                    description: |-
+                        The source to create: `name`, `kind`, `location`, one grant, `trigger`,
+                         `allows`, and `settings` where the kind and trigger need them.
+            title: CreateSourceRequest
+            required:
+                - source
+            additionalProperties: false
+        admiral.api.source.v1.CreateSourceResponse:
+            type: object
+            properties:
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
+                    title: source
+            title: CreateSourceResponse
+            additionalProperties: false
+        admiral.api.source.v1.DeleteSourceRequest:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+            title: DeleteSourceRequest
+            required:
+                - source_id
+            additionalProperties: false
+        admiral.api.source.v1.DeleteSourceResponse:
+            type: object
+            title: DeleteSourceResponse
+            additionalProperties: false
+        admiral.api.source.v1.GetSourceRequest:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+            title: GetSourceRequest
+            required:
+                - source_id
+            additionalProperties: false
+        admiral.api.source.v1.GetSourceResponse:
+            type: object
+            properties:
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
+                    title: source
+            title: GetSourceResponse
+            additionalProperties: false
+        admiral.api.source.v1.GitSourceSettings:
+            type: object
+            properties:
+                branches:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 256
+                        pattern: ^(\*|[A-Za-z0-9._-][A-Za-z0-9._/-]*\*?)$
+                    title: branches
+                    maxItems: 32
+                    uniqueItems: true
+                    description: |-
+                        Branches whose pushes publish, exact or with a trailing `*`; `*` alone
+                         is every branch. Required on a push source and ignored on a request
+                         source. Every publish tags the version with the branch name, floating,
+                         and `sha-<short>`.
+            title: GitSourceSettings
+            additionalProperties: false
+            description: |-
+                GitSourceSettings is what a git source adds. Today that is only which
+                 branches a push source listens to.
+        admiral.api.source.v1.ListSourceArtifactsRequest:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 200
+                    minimum: 0
+                    format: int32
+                page_token:
+                    type: string
+                    title: page_token
+            title: ListSourceArtifactsRequest
+            required:
+                - source_id
+            additionalProperties: false
+        admiral.api.source.v1.ListSourceArtifactsResponse:
+            type: object
+            properties:
+                artifacts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.source.v1.SourceArtifact'
+                    title: artifacts
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                refreshed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: refreshed_at
+                    description: When the catalog was last read from the upstream.
+                stale_reason:
+                    type: string
+                    title: stale_reason
+                    description: |-
+                        Set when the upstream failed on this read and the list is the last one
+                         that succeeded. Empty when fresh.
+            title: ListSourceArtifactsResponse
+            additionalProperties: false
+        admiral.api.source.v1.ListSourceVersionsRequest:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+                artifact:
+                    type: string
+                    title: artifact
+                    maxLength: 256
+                    description: |-
+                        The artifact whose versions to list, as `allows` names it: a chart
+                         name, `name/provider`, a name under the namespace. Empty for a git
+                         source, whose versions are the repository's tags and branches.
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 200
+                    minimum: 0
+                    format: int32
+                page_token:
+                    type: string
+                    title: page_token
+            title: ListSourceVersionsRequest
+            required:
+                - source_id
+            additionalProperties: false
+        admiral.api.source.v1.ListSourceVersionsResponse:
+            type: object
+            properties:
+                versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.source.v1.SourceVersion'
+                    title: versions
+                    description: Ordered versions newest first, then branches.
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                refreshed_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: refreshed_at
+                    description: When the versions were last read from the upstream.
+                stale_reason:
+                    type: string
+                    title: stale_reason
+                    description: |-
+                        Set when the upstream failed on this read and the list is the last one
+                         that succeeded. Empty when fresh.
+            title: ListSourceVersionsResponse
+            additionalProperties: false
+        admiral.api.source.v1.ListSourcesRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL.
+
+                         Filterable fields:
+                           - `name`: filter by source name.
+                           - `kind`: filter by kind.
+                           - `trigger`: filter by trigger.
+                           - `status`: filter by status.
+                           - `integration_id`: sources reached through one integration.
+                           - `credential_id`: sources reached through one credential.
+
+                         Example: `field['trigger'] = 'TRIGGER_PUSH' AND field['status'] = 'STATUS_READY'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                page_token:
+                    type: string
+                    title: page_token
+            title: ListSourcesRequest
+            additionalProperties: false
+        admiral.api.source.v1.ListSourcesResponse:
+            type: object
+            properties:
+                sources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.source.v1.Source'
+                    title: sources
+                next_page_token:
+                    type: string
+                    title: next_page_token
+            title: ListSourcesResponse
+            additionalProperties: false
+        admiral.api.source.v1.Source:
+            type: object
+            anyOf:
+                - type: object
+                  properties:
+                    credential_id:
+                        type: string
+                        title: credential_id
+                        pattern: ^cred-[0-9a-z]+$
+                  title: credential_id
+                - type: object
+                  properties:
+                    integration_id:
+                        type: string
+                        title: integration_id
+                        pattern: ^int-[0-9a-z]+$
+                  title: integration_id
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - credential_id
+                        - required:
+                            - integration_id
+                    - not:
+                        oneOf:
+                            - required:
+                                - credential_id
+                            - required:
+                                - integration_id
+            properties:
+                id:
+                    type: string
+                    title: id
+                    pattern: ^src-[0-9a-z]+$
+                    readOnly: true
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        Unique within the organization. Typed by the administrator who creates the
+                         source, so like a credential's name it starts with a letter.
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source.Kind'
+                    not:
+                        enum:
+                            - KIND_UNSPECIFIED
+                    title: kind
+                    description: |
+                        (IMMUTABLE) enum.defined_only = true
+                location:
+                    type: string
+                    title: location
+                    maxLength: 512
+                    minLength: 1
+                    description: |-
+                        (IMMUTABLE) The narrowest thing the protocol addresses: one repository, one Helm
+                         repository URL, one registry namespace. Never a bare host, and never a
+                         whole GitHub organization. Picking the source is picking the grant, so
+                         the location is what bounds the grant's reach.
+                trigger:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source.Trigger'
+                    not:
+                        enum:
+                            - TRIGGER_UNSPECIFIED
+                    title: trigger
+                    description: |
+                        enum.defined_only = true
+                allows:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 256
+                        pattern: ^(\*|[A-Za-z0-9._-][A-Za-z0-9._/-]*\*?)$
+                    title: allows
+                    maxItems: 64
+                    minItems: 1
+                    uniqueItems: true
+                    description: |-
+                        What may enter through the source: artifact names, exact or with a
+                         trailing `*`. For a git source an artifact is a path in the repository;
+                         for a Helm repository a chart name; for a registry a name under the
+                         namespace. Required and never empty; `*` alone is how a source says
+                         everything. An allow list, enforced on the server at import and at
+                         push, per artifact.
+                settings:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceSettings'
+                    title: settings
+                    description: |-
+                        The block for `kind`, where the kind has one. Only git has settings
+                         today, and only a push source needs them.
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source.Status'
+                    title: status
+                    readOnly: true
+                status_reason:
+                    type: string
+                    title: status_reason
+                    description: Why the status left READY. Empty while ready.
+                    readOnly: true
+                created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: created_by
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+                updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: updated_at
+                    readOnly: true
+            title: Source
+            description: |
+                source.grant_present // a source carries exactly one grant, a credential or an integration
+                source.integration_is_git // an integration reaches a git repository
+                source.push_names_branches // a push source names the branches whose pushes publish
+                source.push_needs_integration // a push source is reached through the GitHub integration
+                source.settings_match_kind // git settings belong to a git source
+        admiral.api.source.v1.Source.Kind:
+            type: string
+            title: Kind
+            enum:
+                - KIND_UNSPECIFIED
+                - KIND_GIT
+                - KIND_HELM_REPO
+                - KIND_OCI_REGISTRY
+                - KIND_TERRAFORM_REGISTRY
+            description: |-
+                Kind is the protocol of the location, never what is inside. One git
+                 source can yield a Terraform module and a Helm chart as two components,
+                 each recording its path. An archive at a URL is not a source, because a
+                 URL has no versions.
+        admiral.api.source.v1.Source.Status:
+            type: string
+            title: Status
+            enum:
+                - STATUS_UNSPECIFIED
+                - STATUS_READY
+                - STATUS_NEEDS_ATTENTION
+        admiral.api.source.v1.Source.Trigger:
+            type: string
+            title: Trigger
+            enum:
+                - TRIGGER_UNSPECIFIED
+                - TRIGGER_REQUEST
+                - TRIGGER_PUSH
+            description: Trigger is who causes a version to exist through this source.
+        admiral.api.source.v1.SourceArtifact:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    description: |-
+                        The name as the upstream spells it: a chart name, `name/provider` for a
+                         registry module.
+                description:
+                    type: string
+                    title: description
+                latest_version:
+                    type: string
+                    title: latest_version
+                    description: The newest ordered version the catalog lists, when it says.
+            title: SourceArtifact
+            additionalProperties: false
+            description: SourceArtifact is one thing a source offers, as its catalog names it.
+        admiral.api.source.v1.SourceSettings:
+            type: object
+            anyOf:
+                - type: object
+                  properties:
+                    git:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.source.v1.GitSourceSettings'
+                        title: git
+                  title: git
+            unevaluatedProperties: false
+            title: SourceSettings
+            description: SourceSettings is what a kind adds, one block per kind that has one.
+        admiral.api.source.v1.SourceVersion:
+            type: object
+            properties:
+                name:
+                    type: string
+                    title: name
+                    description: 'The version as the upstream spells it: `1.14.5`, `v2.3.0`, `main`.'
+                kind:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.SourceVersion.Kind'
+                    title: kind
+                commit:
+                    type: string
+                    title: commit
+                    description: For a git source, the commit the tag or branch resolves to.
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    description: When the upstream says the version was made, when it says.
+            title: SourceVersion
+            additionalProperties: false
+            description: SourceVersion is one version of one artifact as the upstream offers it.
+        admiral.api.source.v1.SourceVersion.Kind:
+            type: string
+            title: Kind
+            enum:
+                - KIND_UNSPECIFIED
+                - KIND_VERSION
+                - KIND_BRANCH
+            description: Kind says whether the version compares.
+        admiral.api.source.v1.UpdateSourceRequest:
+            type: object
+            properties:
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
+                    title: source
+                    description: Carries the id and the new values.
+                update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
+                    title: update_mask
+                    description: |-
+                        Paths from `description`, `credential_id`, `integration_id`, `trigger`,
+                         `allows`, `settings`. Empty means every updatable field the message
+                         carries.
+            title: UpdateSourceRequest
+            required:
+                - source
+            additionalProperties: false
+        admiral.api.source.v1.UpdateSourceResponse:
+            type: object
+            properties:
+                source:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.Source'
+                    title: source
+            title: UpdateSourceResponse
+            additionalProperties: false
         admiral.api.tenant.v1.GetTenantRequest:
             type: object
             title: GetTenantRequest
@@ -11752,6 +12484,8 @@ tags:
       description: Manage credentials for accessing external systems.
     - name: Integrations
       description: The outside services your organization connects, such as Admiral's GitHub App, and the install flow that connects one.
+    - name: Sources
+      description: The upstream locations components come from, a repository, a Helm repository or a registry namespace, with the grant that reaches each and what may enter through it.
     - name: Service Accounts
       description: The non-human principals your agents run as, and the issuer and subject each signs in with.
     - name: Issuers
