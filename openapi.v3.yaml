@@ -9685,6 +9685,7 @@ components:
             additionalProperties: false
             description: |
                 import_component.name_not_an_id // a component name cannot start with cmp-, which marks an id
+                import_component.source_carries_the_grant // an import through a source names no credentials; the source carries the grant
                 import_component.tags.tag_not_an_id // a tag cannot start with ver-, which marks a version id
         admiral.api.registry.v1.ImportComponentResponse:
             type: object
@@ -9713,6 +9714,13 @@ components:
                             - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.Archive'
                         title: archive
                   title: archive
+                - type: object
+                  properties:
+                    from_source:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.FromSource'
+                        title: from_source
+                  title: from_source
                 - type: object
                   properties:
                     git_tree:
@@ -9748,6 +9756,8 @@ components:
                         - required:
                             - archive
                         - required:
+                            - from_source
+                        - required:
                             - git_tree
                         - required:
                             - helm_chart
@@ -9759,6 +9769,8 @@ components:
                         oneOf:
                             - required:
                                 - archive
+                            - required:
+                                - from_source
                             - required:
                                 - git_tree
                             - required:
@@ -9786,6 +9798,37 @@ components:
                 - url
             additionalProperties: false
             description: An archive at a URL, unpacked by its extension.
+        admiral.api.registry.v1.ImportSource.FromSource:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+                artifact:
+                    type: string
+                    title: artifact
+                    maxLength: 256
+                version:
+                    type: string
+                    title: version
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._/+-]{0,127}$
+            title: FromSource
+            required:
+                - source_id
+                - version
+            additionalProperties: false
+            description: |-
+                FromSource is an artifact reached through one of the organization's
+                 sources, under the source's own grant, and bounded by its `allows`. No
+                 credential rides the request: picking the source is picking the
+                 credential. The version is exact, spelled as ListSourceVersions returns
+                 it, an ordered version or a branch name; no keyword, range or
+                 constraint is accepted, so `latest` imports a tag literally named
+                 latest, and the server fills the provenance from what the source
+                 resolved. For a git source the artifact is a path in the repository,
+                 empty for the root; for a Helm repository a chart name; for a registry
+                 a name under the namespace.
         admiral.api.registry.v1.ImportSource.GitTree:
             type: object
             properties:
@@ -10089,6 +10132,15 @@ components:
                     title: commit_author
                     maxLength: 256
                     description: Who wrote that commit, by name. Not the email address.
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+                    description: |-
+                        The source the version came through, set by the server on an import
+                         through a source and on a push. Empty for a CLI publish or an import by
+                         raw coordinates.
+                    readOnly: true
             title: Provenance
             additionalProperties: false
             description: |-

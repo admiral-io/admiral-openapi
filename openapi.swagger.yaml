@@ -3997,6 +3997,29 @@ definitions:
         description: An archive at a URL, unpacked by its extension.
         required:
             - url
+    ImportSourceFromSource:
+        type: object
+        properties:
+            source_id:
+                type: string
+            artifact:
+                type: string
+            version:
+                type: string
+        description: |-
+            FromSource is an artifact reached through one of the organization's
+            sources, under the source's own grant, and bounded by its `allows`. No
+            credential rides the request: picking the source is picking the
+            credential. The version is exact, spelled as ListSourceVersions returns
+            it, an ordered version or a branch name; no keyword, range or
+            constraint is accepted, so `latest` imports a tag literally named
+            latest, and the server fills the provenance from what the source
+            resolved. For a git source the artifact is a path in the repository,
+            empty for the root; for a Helm repository a chart name; for a registry
+            a name under the namespace.
+        required:
+            - source_id
+            - version
     ImportSourceGitTree:
         type: object
         properties:
@@ -6711,6 +6734,8 @@ definitions:
                 $ref: '#/definitions/ImportSourceGitTree'
             archive:
                 $ref: '#/definitions/ImportSourceArchive'
+            from_source:
+                $ref: '#/definitions/ImportSourceFromSource'
         description: |-
             ImportSource names an artifact to import. One variant. The kind of the
             resulting component follows from it: a chart from OCI or a Helm
@@ -7814,6 +7839,13 @@ definitions:
             commit_author:
                 type: string
                 description: Who wrote that commit, by name. Not the email address.
+            source_id:
+                type: string
+                description: |-
+                    The source the version came through, set by the server on an import
+                    through a source and on a push. Empty for a CLI publish or an import by
+                    raw coordinates.
+                readOnly: true
         description: |-
             Provenance is where a version's bytes came from: the audit trail behind
             the digest.
