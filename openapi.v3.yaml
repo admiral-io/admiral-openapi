@@ -8679,6 +8679,12 @@ components:
                     title: pattern
                     maxLength: 128
                     minLength: 1
+                after_merge:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.environment.v1.Tracking.AfterMerge'
+                    title: after_merge
+                    description: |
+                        enum.defined_only = true
             title: Tracking
             required:
                 - kind
@@ -8690,6 +8696,19 @@ components:
                  environment's draft change set for that component opens or is updated to
                  that version and plans. Tracking never applies; an apply comes from a
                  person, a deploy or a promotion.
+        admiral.api.environment.v1.Tracking.AfterMerge:
+            type: string
+            title: AfterMerge
+            enum:
+                - AFTER_MERGE_UNSPECIFIED
+                - AFTER_MERGE_APPLY
+                - AFTER_MERGE_WAIT
+            description: |-
+                AfterMerge is what a pull request's approved plan does when the pull
+                 request merges and the merge publishes the same bytes: APPLY, the
+                 default, applies it with no second step; WAIT leaves it planned for a
+                 person. A merge that publishes different bytes re-plans either way,
+                 with no approvals (records: a reviewed plan applies after merge).
         admiral.api.environment.v1.Tracking.Kind:
             type: string
             title: Kind

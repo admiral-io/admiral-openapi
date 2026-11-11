@@ -4384,6 +4384,21 @@ definitions:
                     carries.
         required:
             - source
+    TrackingAfterMerge:
+        type: string
+        enum:
+            - AFTER_MERGE_UNSPECIFIED
+            - AFTER_MERGE_APPLY
+            - AFTER_MERGE_WAIT
+        default: AFTER_MERGE_UNSPECIFIED
+        description: |-
+            AfterMerge is what a pull request's approved plan does when the pull
+            request merges and the merge publishes the same bytes: APPLY, the
+            default, applies it with no second step; WAIT leaves it planned for a
+            person. A merge that publishes different bytes re-plans either way,
+            with no approvals (records: a reviewed plan applies after merge).
+
+             - AFTER_MERGE_UNSPECIFIED: APPLY.
     ValueSourceOrigin:
         type: string
         enum:
@@ -8737,6 +8752,8 @@ definitions:
                 $ref: '#/definitions/v1TrackingKind'
             pattern:
                 type: string
+            after_merge:
+                $ref: '#/definitions/TrackingAfterMerge'
         description: |-
             Tracking is an environment's policy for following publishes. When a newly
             published version of a component the environment runs matches, the
