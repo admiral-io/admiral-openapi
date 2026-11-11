@@ -3963,6 +3963,23 @@ definitions:
 
              - REPOSITORY_SELECTION_ALL: Every repository the account has, including ones created later.
              - REPOSITORY_SELECTION_SELECTED: The repositories listed in `repositories` and no others.
+    GitSourceSettingsPullRequestComment:
+        type: string
+        enum:
+            - PULL_REQUEST_COMMENT_UNSPECIFIED
+            - PULL_REQUEST_COMMENT_SUMMARY
+            - PULL_REQUEST_COMMENT_FULL
+            - PULL_REQUEST_COMMENT_OFF
+        default: PULL_REQUEST_COMMENT_UNSPECIFIED
+        description: |-
+            PullRequestComment is what the App's one comment on a pull request of
+            this repository carries. The check run is posted whatever this says.
+
+             - PULL_REQUEST_COMMENT_UNSPECIFIED: SUMMARY.
+             - PULL_REQUEST_COMMENT_SUMMARY: Counts per component, with the resources listed only where a plan
+            failed, destroys or replaces.
+             - PULL_REQUEST_COMMENT_FULL: Every resource with its action.
+             - PULL_REQUEST_COMMENT_OFF: No comment; the check run only.
     HeartbeatResponseKeys:
         type: string
         enum:
@@ -6577,6 +6594,11 @@ definitions:
                     is every branch. Required on a push source and ignored on a request
                     source. Every publish tags the version with the branch name, floating,
                     and `sha-<short>`.
+            pull_request_comment:
+                $ref: '#/definitions/GitSourceSettingsPullRequestComment'
+                description: |-
+                    What the comment on a pull request carries; unset is SUMMARY. Read on
+                    a push source only.
         description: |-
             GitSourceSettings is what a git source adds. Today that is only which
             branches a push source listens to.

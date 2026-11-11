@@ -11750,11 +11750,30 @@ components:
                          is every branch. Required on a push source and ignored on a request
                          source. Every publish tags the version with the branch name, floating,
                          and `sha-<short>`.
+                pull_request_comment:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.source.v1.GitSourceSettings.PullRequestComment'
+                    title: pull_request_comment
+                    description: |
+                        What the comment on a pull request carries; unset is SUMMARY. Read on
+                         a push source only.
+                        enum.defined_only = true
             title: GitSourceSettings
             additionalProperties: false
             description: |-
                 GitSourceSettings is what a git source adds. Today that is only which
                  branches a push source listens to.
+        admiral.api.source.v1.GitSourceSettings.PullRequestComment:
+            type: string
+            title: PullRequestComment
+            enum:
+                - PULL_REQUEST_COMMENT_UNSPECIFIED
+                - PULL_REQUEST_COMMENT_SUMMARY
+                - PULL_REQUEST_COMMENT_FULL
+                - PULL_REQUEST_COMMENT_OFF
+            description: |-
+                PullRequestComment is what the App's one comment on a pull request of
+                 this repository carries. The check run is posted whatever this says.
         admiral.api.source.v1.ListSourceArtifactsRequest:
             type: object
             properties:
