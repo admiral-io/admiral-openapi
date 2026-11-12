@@ -5013,6 +5013,15 @@ definitions:
             accepted_at:
                 type: string
                 format: date-time
+            planned:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1ComponentPlan'
+                description: |-
+                    The components the reviewed plan deferred, planned by the apply once what
+                    each waited on had applied. Each names its changes and plan file as a
+                    plan does; `GetRunPlanDiff` carries their diffs beside the reviewed ones.
         description: ApplyPhase is the apply of a run's plan.
     v1ApplyRunResponse:
         type: object
@@ -5409,6 +5418,14 @@ definitions:
                 description: |-
                     `sha256:<hex>` of a Terraform component's saved plan file. The apply
                     refuses a file that does not match.
+            deferred:
+                $ref: '#/definitions/v1DeferredPlan'
+                description: |-
+                    Set when the component could not be planned yet: an input of its
+                    references an output another component in the same run only knows once
+                    it applies. `changes` and `plan_file_digest` are then empty. The apply
+                    plans it after what it waits on has applied, under the run's approval,
+                    and applies that plan.
     v1ComponentSettings:
         type: object
         properties:
@@ -5892,6 +5909,17 @@ definitions:
             mints a short-lived installation token from the app's private key at
             fetch time and presents that as a bearer token. Works for github.com,
             GitHub Enterprise Cloud and GitHub Enterprise Server.
+    v1DeferredPlan:
+        type: object
+        properties:
+            waits_for:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1PendingInput'
+        description: |-
+            DeferredPlan says why a component waits for an apply before it can be
+            planned.
     v1DeleteAgentResponse:
         type: object
     v1DeleteApplicationResponse:
@@ -6118,7 +6146,18 @@ definitions:
                 type: array
                 items:
                     type: string
-                description: Components this one applies after, after this change set.
+                description: |-
+                    Components this one applies after, after this change set. A component
+                    whose outputs this one's values reference is always among them.
+            consumes:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Components whose outputs this one's values reference. An entry with no
+                    ops whose `consumes` names a changed component is planned because that
+                    component changes.
+                readOnly: true
         description: Entry is what one revision does to one component.
     v1EntryAction:
         type: string
@@ -7109,6 +7148,14 @@ definitions:
             finished_at:
                 type: string
                 format: date-time
+            deferred:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    On an APPLY, the components the reviewed plan deferred: each waits on an
+                    output another component in the job produces. The agent plans each one
+                    after what it waits on has applied, and applies that plan.
     v1JobKind:
         type: string
         enum:
@@ -7135,7 +7182,9 @@ definitions:
                     $ref: '#/definitions/v1Step'
             plan:
                 $ref: '#/definitions/v1PlanResult'
-                description: Set by a PLAN.
+                description: |-
+                    Set by a PLAN. Set by an APPLY for the components it planned itself,
+                    the ones the reviewed plan deferred.
             inventory:
                 type: array
                 items:
@@ -7644,6 +7693,21 @@ definitions:
             key:
                 type: string
         description: PathSegment is one step into a values tree. Only map keys exist.
+    v1PendingInput:
+        type: object
+        properties:
+            path:
+                type: string
+                description: The path in the component's values, `a.b[0].c`.
+            component:
+                type: string
+                description: The component whose apply makes it known.
+            output:
+                type: string
+                description: Its output the path references.
+        description: |-
+            PendingInput is one value in a component's inputs that is known only
+            after another component applies.
     v1PlanDiff:
         type: object
         properties:

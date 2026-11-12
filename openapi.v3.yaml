@@ -3866,6 +3866,16 @@ components:
                     description: |-
                         `sha256:<hex>` of a Terraform component's saved plan file. The apply
                          refuses a file that does not match.
+                deferred:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.DeferredPlan'
+                    title: deferred
+                    description: |-
+                        Set when the component could not be planned yet: an input of its
+                         references an output another component in the same run only knows once
+                         it applies. `changes` and `plan_file_digest` are then empty. The apply
+                         plans it after what it waits on has applied, under the run's approval,
+                         and applies that plan.
             title: ComponentPlan
             additionalProperties: false
         admiral.api.agent.v1.CreateAgentRequest:
@@ -3930,6 +3940,21 @@ components:
                     title: enrollment_key
             title: CreateEnrollmentKeyResponse
             additionalProperties: false
+        admiral.api.agent.v1.DeferredPlan:
+            type: object
+            properties:
+                waits_for:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.PendingInput'
+                    title: waits_for
+                    maxItems: 1000
+                    minItems: 1
+            title: DeferredPlan
+            additionalProperties: false
+            description: |-
+                DeferredPlan says why a component waits for an apply before it can be
+                 planned.
         admiral.api.agent.v1.DeleteAgentRequest:
             type: object
             properties:
@@ -4564,6 +4589,16 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: finished_at
+                deferred:
+                    type: array
+                    items:
+                        type: string
+                    title: deferred
+                    maxItems: 256
+                    description: |-
+                        On an APPLY, the components the reviewed plan deferred: each waits on an
+                         output another component in the job produces. The agent plans each one
+                         after what it waits on has applied, and applies that plan.
             title: Job
             additionalProperties: false
         admiral.api.agent.v1.JobKind:
@@ -4598,7 +4633,9 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.agent.v1.PlanResult'
                     title: plan
-                    description: Set by a PLAN.
+                    description: |-
+                        Set by a PLAN. Set by an APPLY for the components it planned itself,
+                         the ones the reviewed plan deferred.
                 inventory:
                     type: array
                     items:
@@ -4975,6 +5012,29 @@ components:
             title: OutputChange
             additionalProperties: false
             description: OutputChange is one component output the apply would change.
+        admiral.api.agent.v1.PendingInput:
+            type: object
+            properties:
+                path:
+                    type: string
+                    title: path
+                    maxLength: 1024
+                    description: The path in the component's values, `a.b[0].c`.
+                component:
+                    type: string
+                    title: component
+                    maxLength: 63
+                    description: The component whose apply makes it known.
+                output:
+                    type: string
+                    title: output
+                    maxLength: 256
+                    description: Its output the path references.
+            title: PendingInput
+            additionalProperties: false
+            description: |-
+                PendingInput is one value in a component's inputs that is known only
+                 after another component applies.
         admiral.api.agent.v1.PlanDiff:
             type: object
             properties:
@@ -6655,7 +6715,20 @@ components:
                     items:
                         type: string
                     title: depends_on
-                    description: Components this one applies after, after this change set.
+                    description: |-
+                        Components this one applies after, after this change set. A component
+                         whose outputs this one's values reference is always among them.
+                consumes:
+                    type: array
+                    items:
+                        type: string
+                        readOnly: true
+                    title: consumes
+                    description: |-
+                        Components whose outputs this one's values reference. An entry with no
+                         ops whose `consumes` names a changed component is planned because that
+                         component changes.
+                    readOnly: true
             title: Entry
             additionalProperties: false
             description: Entry is what one revision does to one component.
@@ -10668,6 +10741,15 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: accepted_at
+                planned:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.agent.v1.ComponentPlan'
+                    title: planned
+                    description: |-
+                        The components the reviewed plan deferred, planned by the apply once what
+                         each waited on had applied. Each names its changes and plan file as a
+                         plan does; `GetRunPlanDiff` carries their diffs beside the reviewed ones.
             title: ApplyPhase
             additionalProperties: false
             description: ApplyPhase is the apply of a run's plan.
