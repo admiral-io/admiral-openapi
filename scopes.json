@@ -9,10 +9,6 @@
       "description": "Your own API keys."
     },
     {
-      "name": "app",
-      "description": "Applications."
-    },
-    {
       "name": "changeset",
       "description": "Change sets, their revisions, and the component values they propose."
     },
@@ -33,6 +29,14 @@
       "description": "Integrations your organization connects, such as the GitHub App."
     },
     {
+      "name": "organization",
+      "description": "Your organization."
+    },
+    {
+      "name": "project",
+      "description": "Projects."
+    },
+    {
       "name": "run",
       "description": "Runs of change sets and drift checks, plan through apply."
     },
@@ -49,12 +53,8 @@
       "description": "Hosted Terraform state and its versions."
     },
     {
-      "name": "tenant",
-      "description": "Your tenant."
-    },
-    {
       "name": "user",
-      "description": "Members of your tenant."
+      "description": "Members of your organization."
     }
   ],
   "scopes": [
@@ -90,17 +90,6 @@
       "description": "Create, update, and revoke your own API keys.",
       "implies": [
         "apikey:read"
-      ]
-    },
-    {
-      "name": "app:read",
-      "description": "Read applications."
-    },
-    {
-      "name": "app:write",
-      "description": "Create, update, and delete applications.",
-      "implies": [
-        "app:read"
       ]
     },
     {
@@ -166,6 +155,28 @@
       ]
     },
     {
+      "name": "organization:read",
+      "description": "Read organizations, their name, slug, status and logo."
+    },
+    {
+      "name": "organization:write",
+      "description": "Update an organization's settings, and register, suspend, reactivate and delete organizations.",
+      "implies": [
+        "organization:read"
+      ]
+    },
+    {
+      "name": "project:read",
+      "description": "Read projects."
+    },
+    {
+      "name": "project:write",
+      "description": "Create, update, and delete projects.",
+      "implies": [
+        "project:read"
+      ]
+    },
+    {
       "name": "run:read",
       "description": "Read runs, their plans, applies and approvals."
     },
@@ -207,17 +218,6 @@
       "description": "Lock, write and force-unlock hosted Terraform state. Whether you may is decided per environment, not by holding this. Enforced by admiral-state.",
       "implies": [
         "state:read"
-      ]
-    },
-    {
-      "name": "tenant:read",
-      "description": "Read tenants, their name, slug, status and logo."
-    },
-    {
-      "name": "tenant:write",
-      "description": "Update a tenant's settings, and register, suspend, reactivate and delete tenants.",
-      "implies": [
-        "tenant:read"
       ]
     },
     {

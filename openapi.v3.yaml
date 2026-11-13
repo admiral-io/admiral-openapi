@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
     title: Admiral API
-    description: The Admiral REST API for managing applications, infrastructure, and runs. See https://admiral.io/docs for complete documentation.
+    description: The Admiral REST API for managing projects, infrastructure, and runs. See https://admiral.io/docs for complete documentation.
     version: v1
 paths:
     /v1/agents:
@@ -20,9 +20,9 @@ paths:
                      Filterable fields:
                        - `name`: filter by agent name.
                        - `kind`: filter by agent kind.
-                       - `assignable_to`: agents an application's environments may be assigned (an application id).
+                       - `assignable_to`: agents a project's environments may be assigned (a project id).
 
-                     Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'app-4m8q2x7k1p9c'`
+                     Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'prj-4m8q2x7k1p9c'`
                   schema:
                     type: string
                     title: filter
@@ -439,159 +439,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.apikey.v1.RevokeApiKeyResponse'
-    /v1/applications:
-        get:
-            tags:
-                - Applications
-            summary: List applications
-            description: 'Scope: `app:read`'
-            operationId: ApplicationAPI_ListApplications
-            parameters:
-                - name: filter
-                  in: query
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                     API documentation for the full operator and predicate reference).
-
-                     Filterable fields:
-                       - `name`: filter by application name.
-                       - `labels.key`: filter by label key.
-
-                     Example: `field['name'] = 'inventory-api' AND field['labels.team'] = 'logistics'`
-                  schema:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                - name: page_size
-                  in: query
-                  description: |-
-                    Maximum number of applications to return per page. Defaults to 50 when
-                     omitted or 0; must not exceed 100.
-                  schema:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                - name: page_token
-                  in: query
-                  description: Opaque pagination token from a previous response.
-                  schema:
-                    type: string
-                    title: page_token
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.application.v1.ListApplicationsResponse'
-        post:
-            tags:
-                - Applications
-            summary: Create an application
-            description: 'Scope: `app:write`'
-            operationId: ApplicationAPI_CreateApplication
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.application.v1.CreateApplicationRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.application.v1.CreateApplicationResponse'
-    /v1/applications/{application.id}:
-        patch:
-            tags:
-                - Applications
-            summary: Update an application
-            description: 'Scope: `app:write`'
-            operationId: ApplicationAPI_UpdateApplication
-            parameters:
-                - name: application.id
-                  in: path
-                  description: Unique identifier for the application.
-                  required: true
-                  schema:
-                    type: string
-                    title: id
-                    pattern: ^app-[0-9a-z]+$
-                    readOnly: true
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            type: object
-                            properties:
-                                update_mask:
-                                    allOf:
-                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
-                                    title: update_mask
-                                    description: |-
-                                        The set of fields to update. Optional; if omitted, all populated fields
-                                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                                         `description`, `labels`.
-                            title: UpdateApplicationRequest
-                            additionalProperties: false
-                            description: UpdateApplicationRequest contains the application fields to update.
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.application.v1.UpdateApplicationResponse'
-    /v1/applications/{application_id}:
-        get:
-            tags:
-                - Applications
-            summary: Retrieve an application
-            description: 'Scope: `app:read`'
-            operationId: ApplicationAPI_GetApplication
-            parameters:
-                - name: application_id
-                  in: path
-                  description: The unique identifier of the application.
-                  required: true
-                  schema:
-                    type: string
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.application.v1.GetApplicationResponse'
-        delete:
-            tags:
-                - Applications
-            summary: Delete an application
-            description: 'Scope: `app:write`'
-            operationId: ApplicationAPI_DeleteApplication
-            parameters:
-                - name: application_id
-                  in: path
-                  description: The unique identifier of the application to delete.
-                  required: true
-                  schema:
-                    type: string
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.application.v1.DeleteApplicationResponse'
     /v1/changesets:
         get:
             tags:
@@ -1827,15 +1674,15 @@ paths:
             description: 'Scope: `env:read`'
             operationId: EnvironmentAPI_ListEnvironments
             parameters:
-                - name: application_id
+                - name: project_id
                   in: query
                   description: |-
-                    The application to list environments of. Omitted lists every
-                     environment the caller can see, across applications.
+                    The project to list environments of. Omitted lists every
+                     environment the caller can see, across projects.
                   schema:
                     type: string
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
                 - name: filter
                   in: query
                   description: |-
@@ -2218,7 +2065,7 @@ paths:
         post:
             tags:
                 - Invitations
-            summary: Invite someone into the current tenant
+            summary: Invite someone into the current organization
             description: |-
                 A live invitation for the same address is retired and replaced, so a retry
                  or a "send it again" is this same call. ALREADY_EXISTS when the address is
@@ -2583,6 +2430,197 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.agent.v1.GetJobLogResponse'
+    /v1/organization:
+        get:
+            tags:
+                - Organization
+            summary: Get the current organization
+            description: 'Scope: `organization:read`'
+            operationId: OrganizationAPI_GetOrganization
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.organization.v1.GetOrganizationResponse'
+        patch:
+            tags:
+                - Organization
+            summary: Update the current organization
+            description: |-
+                Only `display_name` is mutable. `slug` is part of the account's identity
+                 and `status` is set by lifecycle operations, neither of which an organization
+                 performs on itself. The logo is set in the console.
+
+                 Scope: `organization:write`
+            operationId: OrganizationAPI_UpdateOrganization
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.organization.v1.UpdateOrganizationRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.organization.v1.UpdateOrganizationResponse'
+    /v1/projects:
+        get:
+            tags:
+                - Projects
+            summary: List projects
+            description: 'Scope: `project:read`'
+            operationId: ProjectAPI_ListProjects
+            parameters:
+                - name: filter
+                  in: query
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                     API documentation for the full operator and predicate reference).
+
+                     Filterable fields:
+                       - `name`: filter by project name.
+                       - `labels.key`: filter by label key.
+
+                     Example: `field['name'] = 'inventory-api' AND field['labels.team'] = 'logistics'`
+                  schema:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                - name: page_size
+                  in: query
+                  description: |-
+                    Maximum number of projects to return per page. Defaults to 50 when
+                     omitted or 0; must not exceed 100.
+                  schema:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                - name: page_token
+                  in: query
+                  description: Opaque pagination token from a previous response.
+                  schema:
+                    type: string
+                    title: page_token
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.project.v1.ListProjectsResponse'
+        post:
+            tags:
+                - Projects
+            summary: Create a project
+            description: 'Scope: `project:write`'
+            operationId: ProjectAPI_CreateProject
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/admiral.api.project.v1.CreateProjectRequest'
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.project.v1.CreateProjectResponse'
+    /v1/projects/{project.id}:
+        patch:
+            tags:
+                - Projects
+            summary: Update a project
+            description: 'Scope: `project:write`'
+            operationId: ProjectAPI_UpdateProject
+            parameters:
+                - name: project.id
+                  in: path
+                  description: Unique identifier for the project.
+                  required: true
+                  schema:
+                    type: string
+                    title: id
+                    pattern: ^prj-[0-9a-z]+$
+                    readOnly: true
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                update_mask:
+                                    allOf:
+                                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
+                                    title: update_mask
+                                    description: |-
+                                        The set of fields to update. Optional; if omitted, all populated fields
+                                         are updated. Pass `*` for full replacement. Supported fields: `name`,
+                                         `description`, `labels`.
+                            title: UpdateProjectRequest
+                            additionalProperties: false
+                            description: UpdateProjectRequest contains the project fields to update.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.project.v1.UpdateProjectResponse'
+    /v1/projects/{project_id}:
+        get:
+            tags:
+                - Projects
+            summary: Retrieve a project
+            description: 'Scope: `project:read`'
+            operationId: ProjectAPI_GetProject
+            parameters:
+                - name: project_id
+                  in: path
+                  description: The unique identifier of the project.
+                  required: true
+                  schema:
+                    type: string
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.project.v1.GetProjectResponse'
+        delete:
+            tags:
+                - Projects
+            summary: Delete a project
+            description: 'Scope: `project:write`'
+            operationId: ProjectAPI_DeleteProject
+            parameters:
+                - name: project_id
+                  in: path
+                  description: The unique identifier of the project to delete.
+                  required: true
+                  schema:
+                    type: string
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.project.v1.DeleteProjectResponse'
     /v1/runs:
         get:
             tags:
@@ -3219,44 +3257,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.source.v1.ListSourceVersionsResponse'
-    /v1/tenant:
-        get:
-            tags:
-                - Tenant
-            summary: Get the current tenant
-            description: 'Scope: `tenant:read`'
-            operationId: TenantAPI_GetTenant
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.tenant.v1.GetTenantResponse'
-        patch:
-            tags:
-                - Tenant
-            summary: Update the current tenant
-            description: |-
-                Only `display_name` is mutable. `slug` is part of the account's identity
-                 and `status` is set by lifecycle operations, neither of which a tenant
-                 performs on itself. The logo is set in the console.
-
-                 Scope: `tenant:write`
-            operationId: TenantAPI_UpdateTenant
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/admiral.api.tenant.v1.UpdateTenantRequest'
-                required: true
-            responses:
-                "200":
-                    description: Success
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/admiral.api.tenant.v1.UpdateTenantResponse'
     /v1/user/me:
         get:
             tags:
@@ -3275,7 +3275,7 @@ paths:
         get:
             tags:
                 - User
-            summary: List the members of the current tenant
+            summary: List the members of the current organization
             description: 'Scope: `user:read`'
             operationId: UserAPI_ListUsers
             parameters:
@@ -3442,17 +3442,10 @@ components:
                     - required:
                         - group_id
                     - required:
-                        - application_id
+                        - project_id
                     - required:
                         - environment_id
             anyOf:
-                - type: object
-                  properties:
-                    application_id:
-                        type: string
-                        title: application_id
-                        pattern: ^app-[0-9a-z]+$
-                  title: application_id
                 - type: object
                   properties:
                     environment_id:
@@ -3478,28 +3471,35 @@ components:
                         title: organization
                         description: Every environment in the organization.
                   title: organization
+                - type: object
+                  properties:
+                    project_id:
+                        type: string
+                        title: project_id
+                        pattern: ^prj-[0-9a-z]+$
+                  title: project_id
             unevaluatedProperties: false
             not:
                 allOf:
                     - anyOf:
-                        - required:
-                            - application_id
                         - required:
                             - environment_id
                         - required:
                             - group_id
                         - required:
                             - organization
+                        - required:
+                            - project_id
                     - not:
                         oneOf:
-                            - required:
-                                - application_id
                             - required:
                                 - environment_id
                             - required:
                                 - group_id
                             - required:
                                 - organization
+                            - required:
+                                - project_id
             title: AgentGrant
             description: |-
                 AgentGrant lets environments be assigned an agent. Set exactly one target; an agent can hold several
@@ -4858,9 +4858,9 @@ components:
                          Filterable fields:
                            - `name`: filter by agent name.
                            - `kind`: filter by agent kind.
-                           - `assignable_to`: agents an application's environments may be assigned (an application id).
+                           - `assignable_to`: agents a project's environments may be assigned (a project id).
 
-                         Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'app-4m8q2x7k1p9c'`
+                         Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'prj-4m8q2x7k1p9c'`
                 page_size:
                     type: integer
                     title: page_size
@@ -5727,7 +5727,7 @@ components:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: expires_at
                     description: |-
-                        (IMMUTABLE) When the key expires. Unset never expires. Fixed at creation; tenant
+                        (IMMUTABLE) When the key expires. Unset never expires. Fixed at creation; organization
                          policy may cap it.
                 last_used_at:
                     allOf:
@@ -5764,7 +5764,7 @@ components:
                 name: "ci-deploy-key"
                 scopes:
                     - "changeset:write"
-                    - "app:read"
+                    - "project:read"
                     - "env:read"
                 status: "API_KEY_STATUS_ACTIVE"
                 created_by:
@@ -5933,227 +5933,6 @@ components:
             title: UpdateApiKeyResponse
             additionalProperties: false
             description: UpdateApiKeyResponse contains the updated API key metadata.
-        admiral.api.application.v1.Application:
-            type: object
-            properties:
-                id:
-                    type: string
-                    title: id
-                    pattern: ^app-[0-9a-z]+$
-                    description: Unique identifier for the application.
-                    readOnly: true
-                name:
-                    type: string
-                    title: name
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: |-
-                        URL-safe, human-readable identifier (e.g., "inventory-api"). Unique within
-                         the tenant. Lowercase alphanumeric and hyphens only, must start with a
-                         letter and end with an alphanumeric character (1-63 chars).
-                description:
-                    type: string
-                    title: description
-                    maxLength: 1024
-                    description: |-
-                        Optional longer-form description of the application's purpose
-                         (e.g., "Core inventory service tracking warehouse stock and fulfillment").
-                labels:
-                    type: object
-                    title: labels
-                    maxProperties: 64
-                    additionalProperties:
-                        type: string
-                        title: value
-                        maxLength: 256
-                    description: |-
-                        Arbitrary key-value labels for organizing and filtering applications
-                         (e.g., `{"team": "logistics", "tier": "critical"}`).
-                created_by:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
-                    title: created_by
-                    description: The user or agent who created this application (server-populated from token).
-                    readOnly: true
-                created_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: created_at
-                    description: When the application was created.
-                    readOnly: true
-                updated_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: updated_at
-                    description: When the application was last updated.
-                    readOnly: true
-            title: Application
-            additionalProperties: false
-            description: |-
-                Application represents a deployable unit within a tenant. An application
-                 groups environments.
-            example:
-                id: "app-4m8q2x7k1p9c"
-                name: "inventory-api"
-                description: "Core inventory management service for tracking warehouse stock levels and fulfillment."
-                labels:
-                    team: "logistics"
-                    tier: "critical"
-                created_by:
-                    id: "usr-5k2m8q1x7p4c"
-                    display_name: "Alex Chen"
-                    email: "alex.chen@example.com"
-                created_at: "2025-09-15T10:30:00Z"
-                updated_at: "2025-11-02T14:22:00Z"
-        admiral.api.application.v1.CreateApplicationRequest:
-            type: object
-            properties:
-                application:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
-                    title: application
-                    description: The application to create. Server-populated fields are ignored.
-            title: CreateApplicationRequest
-            required:
-                - application
-            additionalProperties: false
-            description: CreateApplicationRequest creates an application in the caller's tenant.
-        admiral.api.application.v1.CreateApplicationResponse:
-            type: object
-            properties:
-                application:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
-                    title: application
-                    description: The created application.
-            title: CreateApplicationResponse
-            additionalProperties: false
-            description: CreateApplicationResponse contains the newly created application.
-        admiral.api.application.v1.DeleteApplicationRequest:
-            type: object
-            properties:
-                application_id:
-                    type: string
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
-                    description: The unique identifier of the application to delete.
-            title: DeleteApplicationRequest
-            required:
-                - application_id
-            additionalProperties: false
-            description: DeleteApplicationRequest identifies an application to delete.
-        admiral.api.application.v1.DeleteApplicationResponse:
-            type: object
-            title: DeleteApplicationResponse
-            additionalProperties: false
-            description: DeleteApplicationResponse is empty on success.
-        admiral.api.application.v1.GetApplicationRequest:
-            type: object
-            properties:
-                application_id:
-                    type: string
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
-                    description: The unique identifier of the application.
-            title: GetApplicationRequest
-            required:
-                - application_id
-            additionalProperties: false
-            description: GetApplicationRequest identifies an application to retrieve.
-        admiral.api.application.v1.GetApplicationResponse:
-            type: object
-            properties:
-                application:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
-                    title: application
-                    description: The retrieved application.
-            title: GetApplicationResponse
-            additionalProperties: false
-            description: GetApplicationResponse contains the application record.
-        admiral.api.application.v1.ListApplicationsRequest:
-            type: object
-            properties:
-                filter:
-                    type: string
-                    title: filter
-                    maxLength: 1024
-                    description: |-
-                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                         API documentation for the full operator and predicate reference).
-
-                         Filterable fields:
-                           - `name`: filter by application name.
-                           - `labels.key`: filter by label key.
-
-                         Example: `field['name'] = 'inventory-api' AND field['labels.team'] = 'logistics'`
-                page_size:
-                    type: integer
-                    title: page_size
-                    maximum: 100
-                    minimum: 0
-                    format: int32
-                    description: |-
-                        Maximum number of applications to return per page. Defaults to 50 when
-                         omitted or 0; must not exceed 100.
-                page_token:
-                    type: string
-                    title: page_token
-                    description: Opaque pagination token from a previous response.
-            title: ListApplicationsRequest
-            additionalProperties: false
-            description: ListApplicationsRequest contains pagination and filter parameters.
-        admiral.api.application.v1.ListApplicationsResponse:
-            type: object
-            properties:
-                applications:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/admiral.api.application.v1.Application'
-                    title: applications
-                    description: The list of applications.
-                next_page_token:
-                    type: string
-                    title: next_page_token
-                    description: Pagination token for the next page. Empty when there are no more results.
-            title: ListApplicationsResponse
-            additionalProperties: false
-            description: ListApplicationsResponse contains a page of applications.
-        admiral.api.application.v1.UpdateApplicationRequest:
-            type: object
-            properties:
-                application:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
-                    title: application
-                    description: |-
-                        The application with updated fields. Its `id` identifies the application;
-                         only fields named in `update_mask` are applied.
-                update_mask:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
-                    title: update_mask
-                    description: |-
-                        The set of fields to update. Optional; if omitted, all populated fields
-                         are updated. Pass `*` for full replacement. Supported fields: `name`,
-                         `description`, `labels`.
-            title: UpdateApplicationRequest
-            required:
-                - application
-            additionalProperties: false
-            description: UpdateApplicationRequest contains the application fields to update.
-        admiral.api.application.v1.UpdateApplicationResponse:
-            type: object
-            properties:
-                application:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.application.v1.Application'
-                    title: application
-                    description: The updated application.
-            title: UpdateApplicationResponse
-            additionalProperties: false
-            description: UpdateApplicationResponse contains the updated application.
         admiral.api.changeset.v1.AddComponent:
             type: object
             properties:
@@ -6191,9 +5970,9 @@ components:
                     pattern: ^cs-[0-9a-z]+$
                     description: '`cs-` and twelve lowercase base36 characters.'
                     readOnly: true
-                application_id:
+                project_id:
                     type: string
-                    title: application_id
+                    title: project_id
                     readOnly: true
                 environment_id:
                     type: string
@@ -7846,7 +7625,7 @@ components:
             required:
                 - credential
             additionalProperties: false
-            description: CreateCredentialRequest registers a credential in the caller's tenant.
+            description: CreateCredentialRequest registers a credential in the caller's organization.
         admiral.api.credential.v1.CreateCredentialResponse:
             type: object
             properties:
@@ -7870,7 +7649,7 @@ components:
                     maxLength: 63
                     minLength: 1
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
-                    description: Unique within the tenant.
+                    description: Unique within the organization.
                 description:
                     type: string
                     title: description
@@ -8124,7 +7903,7 @@ components:
                     pattern: ^agt-[0-9a-z]+$
                     description: |-
                         The agent. Its owner must have granted it to the organization, a team,
-                         this application or this environment.
+                         this project or this environment.
                 id:
                     type: string
                     title: id
@@ -8190,11 +7969,11 @@ components:
         admiral.api.environment.v1.CreateEnvironmentRequest:
             type: object
             properties:
-                application_id:
+                project_id:
                     type: string
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
-                    description: The application the environment belongs to.
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
+                    description: The project the environment belongs to.
                 environment:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.environment.v1.Environment'
@@ -8202,10 +7981,10 @@ components:
                     description: The environment to create. Server-populated fields are ignored.
             title: CreateEnvironmentRequest
             required:
-                - application_id
+                - project_id
                 - environment
             additionalProperties: false
-            description: CreateEnvironmentRequest creates an environment under an application.
+            description: CreateEnvironmentRequest creates an environment under a project.
         admiral.api.environment.v1.CreateEnvironmentResponse:
             type: object
             properties:
@@ -8244,11 +8023,11 @@ components:
                     pattern: ^env-[0-9a-z]+$
                     description: Unique identifier for the environment.
                     readOnly: true
-                application_id:
+                project_id:
                     type: string
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
-                    description: The application this environment belongs to.
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
+                    description: The project this environment belongs to.
                     readOnly: true
                 name:
                     type: string
@@ -8258,7 +8037,7 @@ components:
                     pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
                     description: |-
                         URL-safe, human-readable identifier (e.g., "prod", "staging-us-east").
-                         Unique within the application. Lowercase alphanumeric and hyphens only,
+                         Unique within the project. Lowercase alphanumeric and hyphens only,
                          must start with a letter and end with an alphanumeric character (1-63 chars).
                 description:
                     type: string
@@ -8369,11 +8148,11 @@ components:
             title: Environment
             additionalProperties: false
             description: |-
-                Environment is a named place an application deploys to (dev, staging,
+                Environment is a named place a project deploys to (dev, staging,
                  prod).
             example:
                 id: "env-7q2k9m4x8p1c"
-                application_id: "app-4m8q2x7k1p9c"
+                project_id: "prj-4m8q2x7k1p9c"
                 name: "staging"
                 description: "Shared staging environment for QA validation before production promotion."
                 labels:
@@ -8566,7 +8345,7 @@ components:
                     pattern: ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$
                     description: |-
                         The namespace a component renders into unless it names its own. Set to
-                         `<application>-<environment>` when the environment is created if left
+                         `<project>-<environment>` when the environment is created if left
                          empty; at most 63 characters.
                 create_namespaces:
                     type:
@@ -8681,15 +8460,15 @@ components:
         admiral.api.environment.v1.ListEnvironmentsRequest:
             type: object
             properties:
-                application_id:
+                project_id:
                     type:
                         - string
                         - "null"
-                    title: application_id
-                    pattern: ^app-[0-9a-z]+$
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
                     description: |-
-                        The application to list environments of. Omitted lists every
-                         environment the caller can see, across applications.
+                        The project to list environments of. Omitted lists every
+                         environment the caller can see, across projects.
                 filter:
                     type: string
                     title: filter
@@ -9169,7 +8948,7 @@ components:
             required:
                 - invitation
             additionalProperties: false
-            description: CreateInvitationRequest invites one address into the caller's tenant.
+            description: CreateInvitationRequest invites one address into the caller's organization.
         admiral.api.invitation.v1.CreateInvitationResponse:
             type: object
             properties:
@@ -9216,7 +8995,7 @@ components:
                     title: invited_by
                     description: |-
                         The member who issued it. Absent when it was issued by an operator from
-                         outside the tenant.
+                         outside the organization.
                     readOnly: true
                 created_at:
                     allOf:
@@ -9253,7 +9032,7 @@ components:
             title: Invitation
             additionalProperties: false
             description: |-
-                Invitation is one person invited into the caller's tenant. Never carries
+                Invitation is one person invited into the caller's organization. Never carries
                  the link or its token.
         admiral.api.invitation.v1.Invitation.Status:
             type: string
@@ -9296,7 +9075,7 @@ components:
                     description: Opaque pagination token from a previous response.
             title: ListInvitationsRequest
             additionalProperties: false
-            description: ListInvitationsRequest pages through the caller's tenant's invitations.
+            description: ListInvitationsRequest pages through the caller's organization's invitations.
         admiral.api.invitation.v1.ListInvitationsResponse:
             type: object
             properties:
@@ -9324,7 +9103,7 @@ components:
             required:
                 - invitation_id
             additionalProperties: false
-            description: RevokeInvitationRequest names one invitation in the caller's tenant.
+            description: RevokeInvitationRequest names one invitation in the caller's organization.
         admiral.api.invitation.v1.RevokeInvitationResponse:
             type: object
             properties:
@@ -9335,6 +9114,332 @@ components:
             title: RevokeInvitationResponse
             additionalProperties: false
             description: RevokeInvitationResponse carries the invitation as it now stands.
+        admiral.api.organization.v1.GetOrganizationRequest:
+            type: object
+            title: GetOrganizationRequest
+            additionalProperties: false
+            description: 'GetOrganizationRequest names nothing: the organization is the caller''s own.'
+        admiral.api.organization.v1.GetOrganizationResponse:
+            type: object
+            properties:
+                organization:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.organization.v1.Organization'
+                    title: organization
+            title: GetOrganizationResponse
+            additionalProperties: false
+        admiral.api.organization.v1.Organization:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    pattern: ^org-[0-9a-z]+$
+                    description: Unique identifier.
+                    readOnly: true
+                slug:
+                    type: string
+                    title: slug
+                    description: URL-safe identifier, unique across Admiral. Fixed at creation.
+                    readOnly: true
+                display_name:
+                    type: string
+                    title: display_name
+                    maxLength: 256
+                    description: Human-readable name.
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.organization.v1.Organization.Status'
+                    title: status
+                    description: Lifecycle state.
+                    readOnly: true
+                avatar_url:
+                    type:
+                        - string
+                        - "null"
+                    title: avatar_url
+                    description: |-
+                        The organization's logo, shown on its sign-in page and in the console.
+                         Absent when none is set.
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    readOnly: true
+                updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: updated_at
+                    readOnly: true
+            title: Organization
+            additionalProperties: false
+            description: |-
+                Organization is the account as its own members see it: its identity, its lifecycle
+                 state, and the settings they control. Operational detail about how the
+                 account is run is not part of this view.
+        admiral.api.organization.v1.Organization.Status:
+            type: string
+            title: Status
+            enum:
+                - STATUS_UNSPECIFIED
+                - STATUS_ACTIVE
+                - STATUS_SUSPENDED
+            description: |-
+                Status is the account's lifecycle state. A caller sees it but cannot
+                 set it: suspension and reactivation are imposed, not requested.
+        admiral.api.organization.v1.UpdateOrganizationRequest:
+            type: object
+            properties:
+                organization:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.organization.v1.Organization'
+                    title: organization
+                    description: |-
+                        The organization with updated fields. Only fields named in `update_mask` are
+                         applied.
+                update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
+                    title: update_mask
+                    description: |-
+                        The set of fields to update. Optional; if omitted, all populated fields
+                         are updated. Supported fields: `display_name`.
+            title: UpdateOrganizationRequest
+            required:
+                - organization
+            additionalProperties: false
+            description: UpdateOrganizationRequest updates the caller's own organization, so it names no id.
+        admiral.api.organization.v1.UpdateOrganizationResponse:
+            type: object
+            properties:
+                organization:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.organization.v1.Organization'
+                    title: organization
+            title: UpdateOrganizationResponse
+            additionalProperties: false
+        admiral.api.project.v1.CreateProjectRequest:
+            type: object
+            properties:
+                project:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.project.v1.Project'
+                    title: project
+                    description: The project to create. Server-populated fields are ignored.
+            title: CreateProjectRequest
+            required:
+                - project
+            additionalProperties: false
+            description: CreateProjectRequest creates a project in the caller's organization.
+        admiral.api.project.v1.CreateProjectResponse:
+            type: object
+            properties:
+                project:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.project.v1.Project'
+                    title: project
+                    description: The created project.
+            title: CreateProjectResponse
+            additionalProperties: false
+            description: CreateProjectResponse contains the newly created project.
+        admiral.api.project.v1.DeleteProjectRequest:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
+                    description: The unique identifier of the project to delete.
+            title: DeleteProjectRequest
+            required:
+                - project_id
+            additionalProperties: false
+            description: DeleteProjectRequest identifies a project to delete.
+        admiral.api.project.v1.DeleteProjectResponse:
+            type: object
+            title: DeleteProjectResponse
+            additionalProperties: false
+            description: DeleteProjectResponse is empty on success.
+        admiral.api.project.v1.GetProjectRequest:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                    title: project_id
+                    pattern: ^prj-[0-9a-z]+$
+                    description: The unique identifier of the project.
+            title: GetProjectRequest
+            required:
+                - project_id
+            additionalProperties: false
+            description: GetProjectRequest identifies a project to retrieve.
+        admiral.api.project.v1.GetProjectResponse:
+            type: object
+            properties:
+                project:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.project.v1.Project'
+                    title: project
+                    description: The retrieved project.
+            title: GetProjectResponse
+            additionalProperties: false
+            description: GetProjectResponse contains the project record.
+        admiral.api.project.v1.ListProjectsRequest:
+            type: object
+            properties:
+                filter:
+                    type: string
+                    title: filter
+                    maxLength: 1024
+                    description: |-
+                        Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                         API documentation for the full operator and predicate reference).
+
+                         Filterable fields:
+                           - `name`: filter by project name.
+                           - `labels.key`: filter by label key.
+
+                         Example: `field['name'] = 'inventory-api' AND field['labels.team'] = 'logistics'`
+                page_size:
+                    type: integer
+                    title: page_size
+                    maximum: 100
+                    minimum: 0
+                    format: int32
+                    description: |-
+                        Maximum number of projects to return per page. Defaults to 50 when
+                         omitted or 0; must not exceed 100.
+                page_token:
+                    type: string
+                    title: page_token
+                    description: Opaque pagination token from a previous response.
+            title: ListProjectsRequest
+            additionalProperties: false
+            description: ListProjectsRequest contains pagination and filter parameters.
+        admiral.api.project.v1.ListProjectsResponse:
+            type: object
+            properties:
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/admiral.api.project.v1.Project'
+                    title: projects
+                    description: The list of projects.
+                next_page_token:
+                    type: string
+                    title: next_page_token
+                    description: Pagination token for the next page. Empty when there are no more results.
+            title: ListProjectsResponse
+            additionalProperties: false
+            description: ListProjectsResponse contains a page of projects.
+        admiral.api.project.v1.Project:
+            type: object
+            properties:
+                id:
+                    type: string
+                    title: id
+                    pattern: ^prj-[0-9a-z]+$
+                    description: Unique identifier for the project.
+                    readOnly: true
+                name:
+                    type: string
+                    title: name
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: |-
+                        URL-safe, human-readable identifier (e.g., "inventory-api"). Unique within
+                         the organization. Lowercase alphanumeric and hyphens only, must start with a
+                         letter and end with an alphanumeric character (1-63 chars).
+                description:
+                    type: string
+                    title: description
+                    maxLength: 1024
+                    description: |-
+                        Optional longer-form description of the project's purpose
+                         (e.g., "Core inventory service tracking warehouse stock and fulfillment").
+                labels:
+                    type: object
+                    title: labels
+                    maxProperties: 64
+                    additionalProperties:
+                        type: string
+                        title: value
+                        maxLength: 256
+                    description: |-
+                        Arbitrary key-value labels for organizing and filtering projects
+                         (e.g., `{"team": "logistics", "tier": "critical"}`).
+                created_by:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.common.v1.ActorRef'
+                    title: created_by
+                    description: The user or agent who created this project (server-populated from token).
+                    readOnly: true
+                created_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: created_at
+                    description: When the project was created.
+                    readOnly: true
+                updated_at:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
+                    title: updated_at
+                    description: When the project was last updated.
+                    readOnly: true
+            title: Project
+            additionalProperties: false
+            description: |-
+                Project represents a deployable unit within an organization. A project
+                 groups environments.
+            example:
+                id: "prj-4m8q2x7k1p9c"
+                name: "inventory-api"
+                description: "Core inventory management service for tracking warehouse stock levels and fulfillment."
+                labels:
+                    team: "logistics"
+                    tier: "critical"
+                created_by:
+                    id: "usr-5k2m8q1x7p4c"
+                    display_name: "Alex Chen"
+                    email: "alex.chen@example.com"
+                created_at: "2025-09-15T10:30:00Z"
+                updated_at: "2025-11-02T14:22:00Z"
+        admiral.api.project.v1.UpdateProjectRequest:
+            type: object
+            properties:
+                project:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.project.v1.Project'
+                    title: project
+                    description: |-
+                        The project with updated fields. Its `id` identifies the project;
+                         only fields named in `update_mask` are applied.
+                update_mask:
+                    allOf:
+                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
+                    title: update_mask
+                    description: |-
+                        The set of fields to update. Optional; if omitted, all populated fields
+                         are updated. Pass `*` for full replacement. Supported fields: `name`,
+                         `description`, `labels`.
+            title: UpdateProjectRequest
+            required:
+                - project
+            additionalProperties: false
+            description: UpdateProjectRequest contains the project fields to update.
+        admiral.api.project.v1.UpdateProjectResponse:
+            type: object
+            properties:
+                project:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.project.v1.Project'
+                    title: project
+                    description: The updated project.
+            title: UpdateProjectResponse
+            additionalProperties: false
+            description: UpdateProjectResponse contains the updated project.
         admiral.api.registry.v1.Component:
             type: object
             properties:
@@ -9348,7 +9453,7 @@ components:
                     type: string
                     title: name
                     description: |-
-                        Unique within the tenant, never changed: `cloud-sql`. Team grouping,
+                        Unique within the organization, never changed: `cloud-sql`. Team grouping,
                          when it lands, is a `team/` segment of the name (`payments/cloud-sql`);
                          moving a component means publishing under the new name and deprecating
                          the old one with it as the successor.
@@ -12270,111 +12375,6 @@ components:
                     title: source
             title: UpdateSourceResponse
             additionalProperties: false
-        admiral.api.tenant.v1.GetTenantRequest:
-            type: object
-            title: GetTenantRequest
-            additionalProperties: false
-            description: 'GetTenantRequest names nothing: the tenant is the caller''s own.'
-        admiral.api.tenant.v1.GetTenantResponse:
-            type: object
-            properties:
-                tenant:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
-                    title: tenant
-            title: GetTenantResponse
-            additionalProperties: false
-        admiral.api.tenant.v1.Tenant:
-            type: object
-            properties:
-                id:
-                    type: string
-                    title: id
-                    pattern: ^tnt-[0-9a-z]+$
-                    description: Unique identifier.
-                    readOnly: true
-                slug:
-                    type: string
-                    title: slug
-                    description: URL-safe identifier, unique across Admiral. Fixed at creation.
-                    readOnly: true
-                display_name:
-                    type: string
-                    title: display_name
-                    maxLength: 256
-                    description: Human-readable name.
-                status:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant.Status'
-                    title: status
-                    description: Lifecycle state.
-                    readOnly: true
-                avatar_url:
-                    type:
-                        - string
-                        - "null"
-                    title: avatar_url
-                    description: |-
-                        The organization's logo, shown on its sign-in page and in the console.
-                         Absent when none is set.
-                    readOnly: true
-                created_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: created_at
-                    readOnly: true
-                updated_at:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.Timestamp'
-                    title: updated_at
-                    readOnly: true
-            title: Tenant
-            additionalProperties: false
-            description: |-
-                Tenant is the account as its own members see it: its identity, its lifecycle
-                 state, and the settings they control. Operational detail about how the
-                 account is run is not part of this view.
-        admiral.api.tenant.v1.Tenant.Status:
-            type: string
-            title: Status
-            enum:
-                - STATUS_UNSPECIFIED
-                - STATUS_ACTIVE
-                - STATUS_SUSPENDED
-            description: |-
-                Status is the account's lifecycle state. A caller sees it but cannot
-                 set it: suspension and reactivation are imposed, not requested.
-        admiral.api.tenant.v1.UpdateTenantRequest:
-            type: object
-            properties:
-                tenant:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
-                    title: tenant
-                    description: |-
-                        The tenant with updated fields. Only fields named in `update_mask` are
-                         applied.
-                update_mask:
-                    allOf:
-                        - $ref: '#/components/schemas/google.protobuf.FieldMask'
-                    title: update_mask
-                    description: |-
-                        The set of fields to update. Optional; if omitted, all populated fields
-                         are updated. Supported fields: `display_name`.
-            title: UpdateTenantRequest
-            required:
-                - tenant
-            additionalProperties: false
-            description: UpdateTenantRequest updates the caller's own tenant, so it names no id.
-        admiral.api.tenant.v1.UpdateTenantResponse:
-            type: object
-            properties:
-                tenant:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.tenant.v1.Tenant'
-                    title: tenant
-            title: UpdateTenantResponse
-            additionalProperties: false
         admiral.api.user.v1.GetMeRequest:
             type: object
             title: GetMeRequest
@@ -12449,8 +12449,8 @@ components:
             title: ListUsersRequest
             additionalProperties: false
             description: |-
-                ListUsersRequest pages through the members of the caller's tenant. The
-                 tenant is never a parameter: it is the caller's own.
+                ListUsersRequest pages through the members of the caller's organization. The
+                 organization is never a parameter: it is the caller's own.
         admiral.api.user.v1.ListUsersResponse:
             type: object
             properties:
@@ -12524,7 +12524,7 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.user.v1.UserRole'
                     title: role
-                    description: The user's standing in the tenant.
+                    description: The user's standing in the organization.
                     readOnly: true
                 status:
                     allOf:
@@ -12553,7 +12553,7 @@ components:
                 - USER_ROLE_ADMIN
                 - USER_ROLE_MEMBER
             description: |-
-                UserRole is a member's standing in the tenant. The tiers imply one another
+                UserRole is a member's standing in the organization. The tiers imply one another
                  downward: an owner can do everything an administrator can, an administrator
                  everything a member can.
         admiral.api.user.v1.UserStatus:
@@ -12640,17 +12640,17 @@ components:
                 An API key, or an access token minted from one. Pass it in the Authorization header: `Bearer admp_...`
 security: [{bearerAuth: []}]
 tags:
-    - name: Applications
-      description: Manage application lifecycle and configuration.
+    - name: Projects
+      description: Manage project lifecycle and configuration.
     - name: Environments
-      description: Manage deployment environments within an application, and view the components deployed to them.
+      description: Manage deployment environments within a project, and view the components deployed to them.
     - name: ChangeSets
-      description: 'Manage change sets: scoped, isolated proposals to mutate the deployed state of an application within a single environment.'
+      description: 'Manage change sets: scoped, isolated proposals to mutate the deployed state of a project within a single environment.'
     - name: Runs
       description: Plan and apply change sets, check environments for drift, and reapply what they desire.
     - name: Components
       description: 'Publish, import and curate the component registry: components, their versions and tags.'
-    - name: Tenant
+    - name: Organization
       description: 'Your organization: its name, slug, status and logo.'
     - name: Credentials
       description: Manage credentials for accessing external systems.
@@ -12667,9 +12667,9 @@ tags:
     - name: Jobs
       description: Follow and cancel the work agents run.
     - name: User
-      description: Retrieve user profiles and list the members of your tenant.
+      description: Retrieve user profiles and list the members of your organization.
     - name: Invitations
-      description: Invite people into your tenant, see what is outstanding, and withdraw an invitation.
+      description: Invite people into your organization, see what is outstanding, and withdraw an invitation.
     - name: API Keys
       description: Manage your own API keys for authenticating scripts and CI.
 servers:
@@ -12684,9 +12684,9 @@ schemes:
     - https
     - http
 x-tagGroups:
-    - name: Applications
+    - name: Projects
       tags:
-        - Applications
+        - Projects
         - Environments
     - name: Deployments
       tags:
@@ -12702,7 +12702,7 @@ x-tagGroups:
         - Jobs
     - name: Identity & Access
       tags:
-        - Tenant
+        - Organization
         - User
         - Service Accounts
         - Issuers

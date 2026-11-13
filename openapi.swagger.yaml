@@ -3,9 +3,22 @@ info:
     title: Admiral API
     version: v1
 tags:
+    - name: ChangeSetAPI
+      description: |-
+        ChangeSetAPI manages change sets: proposals against the components of one
+        environment. Add a component from the registry, change its version, set or
+        remove values, remove it; each request cuts one immutable revision.
+        Nothing here plans or applies.
+
+        A change set is addressed by its id, `cs-` and twelve base36 characters.
+
+        Values are JSON text in `*_json` fields, so an integer above 2^53 keeps
+        every digit. A map whose only key is `$ref` is a reference to another
+        component's output (`{"$ref": "users-db.connection_name"}`); a real value
+        of that shape is written with `$$ref`.
     - name: RegistryAPI
       description: |-
-        RegistryAPI is the component registry: what a tenant has published,
+        RegistryAPI is the component registry: what an organization has published,
         addressed by digest.
 
         A component here is a REGISTRY ENTRY -- the thing `admiral component
@@ -26,24 +39,11 @@ tags:
         Publishing the same bytes under the same name twice yields the same
         version. Versions are never deleted; revoking one refuses new adoption
         while what already runs it keeps running.
-    - name: ChangeSetAPI
-      description: |-
-        ChangeSetAPI manages change sets: proposals against the components of one
-        environment. Add a component from the registry, change its version, set or
-        remove values, remove it; each request cuts one immutable revision.
-        Nothing here plans or applies.
-
-        A change set is addressed by its id, `cs-` and twelve base36 characters.
-
-        Values are JSON text in `*_json` fields, so an integer above 2^53 keeps
-        every digit. A map whose only key is `$ref` is a reference to another
-        component's output (`{"$ref": "users-db.connection_name"}`); a real value
-        of that shape is written with `$$ref`.
     - name: EnvironmentAPI
       description: |-
-        EnvironmentAPI manages environments within an application.
+        EnvironmentAPI manages environments within a project.
 
-        An environment is a named place an application deploys to (dev, staging,
+        An environment is a named place a project deploys to (dev, staging,
         prod). What it runs changes only through change sets.
     - name: ServiceAccountAPI
       description: |-
@@ -68,7 +68,7 @@ tags:
         (admiral.*.serviceaccount.v1), made with it.
 
         An environment deploys through the agents assigned to it, and may be assigned
-        only an agent granted to the organization, a team, its application, or the
+        only an agent granted to the organization, a team, its project, or the
         environment itself.
     - name: JobAPI
       description: JobAPI reads and cancels the jobs the platform hands agents.
@@ -92,15 +92,9 @@ tags:
         selected at creation and it may carry an expiration. An API key is the long-lived secret a caller presents; the
         short-lived access token minted in exchange for it is a different thing and
         never appears here.
-    - name: ApplicationAPI
-      description: |-
-        ApplicationAPI manages applications within a tenant.
-
-        An application is the fundamental unit in Admiral. It groups the
-        environments one system is deployed to, such as dev, staging and prod.
     - name: CredentialAPI
       description: |-
-        CredentialAPI manages the credentials a tenant registers for reaching
+        CredentialAPI manages the credentials an organization registers for reaching
         external systems at publish time: a git host, a Helm repository, an OCI
         registry, a module registry.
 
@@ -137,11 +131,11 @@ tags:
         callback into the integration.
     - name: UserAPI
       description: |-
-        UserAPI provides user profile retrieval and the list of a tenant's members.
+        UserAPI provides user profile retrieval and the list of an organization's members.
         The caller's own API keys are managed through ApiKeyAPI.
     - name: InvitationAPI
       description: |-
-        InvitationAPI brings a person into the caller's tenant.
+        InvitationAPI brings a person into the caller's organization.
 
         An invitation is its own resource: it has a lifecycle (PENDING, ACCEPTED,
         EXPIRED, REVOKED) and a user exists only once it is redeemed. Creating one
@@ -153,7 +147,25 @@ tags:
         for the same address retires the first and mails a new link, which is also
         how "send it again" works; there is no resend procedure.
 
-        Every request acts on the caller's own tenant; none names one.
+        Every request acts on the caller's own organization; none names one.
+    - name: OrganizationAPI
+      description: |-
+        OrganizationAPI exposes the caller's OWN organization.
+
+        Deliberately narrow. An organization is an account boundary, not a resource a caller
+        browses: there is no list, no create, and no delete here. Provisioning,
+        suspension, and deletion are administrative operations and are not part of
+        this API.
+
+        No request names an organization. The caller's organization comes from their token, so
+        there is no id to pass and none to get wrong -- and no shape in which a caller
+        could name someone else's.
+    - name: ProjectAPI
+      description: |-
+        ProjectAPI manages projects within an organization.
+
+        A project is the fundamental unit in Admiral. It groups the
+        environments one system is deployed to, such as dev, staging and prod.
     - name: RunAPI
       description: |-
         RunAPI plans and applies. A run belongs to an environment and has one plan
@@ -190,18 +202,6 @@ tags:
 
         Nothing on this service returns a credential or a token. A member who
         imports through a source causes the grant's effects and never sees it.
-    - name: TenantAPI
-      description: |-
-        TenantAPI exposes the caller's OWN tenant.
-
-        Deliberately narrow. A tenant is an account boundary, not a resource a caller
-        browses: there is no list, no create, and no delete here. Provisioning,
-        suspension, and deletion are administrative operations and are not part of
-        this API.
-
-        No request names a tenant. The caller's tenant comes from their token, so
-        there is no id to pass and none to get wrong -- and no shape in which a caller
-        could name someone else's.
 consumes:
     - application/json
 produces:
@@ -231,9 +231,9 @@ paths:
                     Filterable fields:
                       - `name`: filter by agent name.
                       - `kind`: filter by agent kind.
-                      - `assignable_to`: agents an application's environments may be assigned (an application id).
+                      - `assignable_to`: agents a project's environments may be assigned (a project id).
 
-                    Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'app-4m8q2x7k1p9c'`
+                    Example: `field['kind'] = 'KIND_KUBERNETES' AND field['assignable_to'] = 'prj-4m8q2x7k1p9c'`
                   in: query
                   required: false
                   type: string
@@ -407,9 +407,9 @@ paths:
                 - AgentAPI
         post:
             summary: |-
-                GrantAgentUse lets the organization, a team, an application's
+                GrantAgentUse lets the organization, a team, a project's
                 environments, or one environment be assigned an agent. Only the agent's owner
-                or a tenant admin may.
+                or an organization admin may.
             description: 'Scope: `agent:write`'
             operationId: AgentAPI_GrantAgentUse
             responses:
@@ -616,149 +616,6 @@ paths:
                     $ref: '#/definitions/ApiKeyAPIRevokeApiKeyBody'
             tags:
                 - ApiKeyAPI
-    /v1/applications:
-        get:
-            summary: |-
-                ListApplications returns a paginated list of applications within the
-                caller's tenant.
-            description: 'Scope: `app:read`'
-            operationId: ApplicationAPI_ListApplications
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1ListApplicationsResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: filter
-                  description: |-
-                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
-                    API documentation for the full operator and predicate reference).
-
-                    Filterable fields:
-                      - `name`: filter by application name.
-                      - `labels.key`: filter by label key.
-
-                    Example: `field['name'] = 'inventory-api' AND field['labels.team'] = 'logistics'`
-                  in: query
-                  required: false
-                  type: string
-                - name: page_size
-                  description: |-
-                    Maximum number of applications to return per page. Defaults to 50 when
-                    omitted or 0; must not exceed 100.
-                  in: query
-                  required: false
-                  type: integer
-                  format: int32
-                - name: page_token
-                  description: Opaque pagination token from a previous response.
-                  in: query
-                  required: false
-                  type: string
-            tags:
-                - ApplicationAPI
-        post:
-            summary: CreateApplication creates a new application within the caller's tenant.
-            description: 'Scope: `app:write`'
-            operationId: ApplicationAPI_CreateApplication
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1CreateApplicationResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: body
-                  description: CreateApplicationRequest creates an application in the caller's tenant.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1CreateApplicationRequest'
-            tags:
-                - ApplicationAPI
-    /v1/applications/{application.id}:
-        patch:
-            summary: |-
-                UpdateApplication updates an application's mutable fields.
-                Use the `update_mask` to specify which fields to update.
-            description: 'Scope: `app:write`'
-            operationId: ApplicationAPI_UpdateApplication
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1UpdateApplicationResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: application.id
-                  description: Unique identifier for the application.
-                  in: path
-                  required: true
-                  type: string
-                - name: body
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/ApplicationAPIUpdateApplicationBody'
-            tags:
-                - ApplicationAPI
-    /v1/applications/{application_id}:
-        get:
-            summary: GetApplication retrieves an application by ID.
-            description: 'Scope: `app:read`'
-            operationId: ApplicationAPI_GetApplication
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetApplicationResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: application_id
-                  description: The unique identifier of the application.
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - ApplicationAPI
-        delete:
-            summary: |-
-                DeleteApplication permanently deletes an application. Fails with
-                FAILED_PRECONDITION while the application has environments: delete them
-                first, each of which refuses while it manages anything. This action
-                cannot be undone.
-            description: 'Scope: `app:write`'
-            operationId: ApplicationAPI_DeleteApplication
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1DeleteApplicationResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: application_id
-                  description: The unique identifier of the application to delete.
-                  in: path
-                  required: true
-                  type: string
-            tags:
-                - ApplicationAPI
     /v1/changesets:
         get:
             summary: |-
@@ -1248,7 +1105,7 @@ paths:
     /v1/components/import:
         post:
             summary: |-
-                ImportComponent publishes an artifact the tenant does not own: a chart in
+                ImportComponent publishes an artifact the organization does not own: a chart in
                 an HTTP repository or an OCI registry, a module in a module registry, a
                 git repository at a ref, an archive. Admiral fetches it with the
                 credentials named, closes it over what it reaches, scans it, and
@@ -1596,7 +1453,7 @@ paths:
     /v1/credentials:
         get:
             summary: |-
-                ListCredentials pages through the caller's tenant's credentials.
+                ListCredentials pages through the caller's organization's credentials.
                 Secrets are never included.
             description: 'Scope: `credential:read`'
             operationId: CredentialAPI_ListCredentials
@@ -1635,7 +1492,7 @@ paths:
             tags:
                 - CredentialAPI
         post:
-            summary: CreateCredential registers a credential within the caller's tenant.
+            summary: CreateCredential registers a credential within the caller's organization.
             description: |-
                 The `type` and the populated `auth_config` variant must agree.
 
@@ -1652,7 +1509,7 @@ paths:
                         $ref: '#/definitions/googleRpcStatus'
             parameters:
                 - name: body
-                  description: CreateCredentialRequest registers a credential in the caller's tenant.
+                  description: CreateCredentialRequest registers a credential in the caller's organization.
                   in: body
                   required: true
                   schema:
@@ -1794,7 +1651,7 @@ paths:
         get:
             summary: |-
                 ListEnvironments returns a paginated list of environments, in one
-                application or across all of them. Use the filter to narrow by name or
+                project or across all of them. Use the filter to narrow by name or
                 labels.
             description: 'Scope: `env:read`'
             operationId: EnvironmentAPI_ListEnvironments
@@ -1808,10 +1665,10 @@ paths:
                     schema:
                         $ref: '#/definitions/googleRpcStatus'
             parameters:
-                - name: application_id
+                - name: project_id
                   description: |-
-                    The application to list environments of. Omitted lists every
-                    environment the caller can see, across applications.
+                    The project to list environments of. Omitted lists every
+                    environment the caller can see, across projects.
                   in: query
                   required: false
                   type: string
@@ -1844,7 +1701,7 @@ paths:
             tags:
                 - EnvironmentAPI
         post:
-            summary: CreateEnvironment creates a new environment for the specified application.
+            summary: CreateEnvironment creates a new environment for the specified project.
             description: 'Scope: `env:write`'
             operationId: EnvironmentAPI_CreateEnvironment
             responses:
@@ -1858,7 +1715,7 @@ paths:
                         $ref: '#/definitions/googleRpcStatus'
             parameters:
                 - name: body
-                  description: CreateEnvironmentRequest creates an environment under an application.
+                  description: CreateEnvironmentRequest creates an environment under a project.
                   in: body
                   required: true
                   schema:
@@ -2135,7 +1992,7 @@ paths:
     /v1/invitations:
         get:
             summary: |-
-                ListInvitations returns a page of the caller's tenant's invitations, every
+                ListInvitations returns a page of the caller's organization's invitations, every
                 status included, so an administrator can see what is outstanding, what
                 expired and what was withdrawn.
             description: 'Scope: `user:read`'
@@ -2180,7 +2037,7 @@ paths:
                 - InvitationAPI
         post:
             summary: |-
-                CreateInvitation invites an address into the caller's tenant for a role and
+                CreateInvitation invites an address into the caller's organization for a role and
                 sends the mail. Returns the invitation; the link is only ever in the mail.
             description: |-
                 A live invitation for the same address is retired and replaced, so a retry
@@ -2201,7 +2058,7 @@ paths:
                         $ref: '#/definitions/googleRpcStatus'
             parameters:
                 - name: body
-                  description: CreateInvitationRequest invites one address into the caller's tenant.
+                  description: CreateInvitationRequest invites one address into the caller's organization.
                   in: body
                   required: true
                   schema:
@@ -2505,6 +2362,192 @@ paths:
                   format: int32
             tags:
                 - JobAPI
+    /v1/organization:
+        get:
+            summary: GetOrganization returns the caller's own organization.
+            description: 'Scope: `organization:read`'
+            operationId: OrganizationAPI_GetOrganization
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetOrganizationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            tags:
+                - OrganizationAPI
+        patch:
+            summary: UpdateOrganization updates the caller's own organization's mutable settings.
+            description: |-
+                Only `display_name` is mutable. `slug` is part of the account's identity
+                and `status` is set by lifecycle operations, neither of which an organization
+                performs on itself. The logo is set in the console.
+
+                Scope: `organization:write`
+            operationId: OrganizationAPI_UpdateOrganization
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdateOrganizationResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  description: UpdateOrganizationRequest updates the caller's own organization, so it names no id.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1UpdateOrganizationRequest'
+            tags:
+                - OrganizationAPI
+    /v1/projects:
+        get:
+            summary: |-
+                ListProjects returns a paginated list of projects within the
+                caller's organization.
+            description: 'Scope: `project:read`'
+            operationId: ProjectAPI_ListProjects
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1ListProjectsResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: filter
+                  description: |-
+                    Filter expression to narrow results. Uses the Admiral filter DSL (see the
+                    API documentation for the full operator and predicate reference).
+
+                    Filterable fields:
+                      - `name`: filter by project name.
+                      - `labels.key`: filter by label key.
+
+                    Example: `field['name'] = 'inventory-api' AND field['labels.team'] = 'logistics'`
+                  in: query
+                  required: false
+                  type: string
+                - name: page_size
+                  description: |-
+                    Maximum number of projects to return per page. Defaults to 50 when
+                    omitted or 0; must not exceed 100.
+                  in: query
+                  required: false
+                  type: integer
+                  format: int32
+                - name: page_token
+                  description: Opaque pagination token from a previous response.
+                  in: query
+                  required: false
+                  type: string
+            tags:
+                - ProjectAPI
+        post:
+            summary: CreateProject creates a new project within the caller's organization.
+            description: 'Scope: `project:write`'
+            operationId: ProjectAPI_CreateProject
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1CreateProjectResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: body
+                  description: CreateProjectRequest creates a project in the caller's organization.
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/v1CreateProjectRequest'
+            tags:
+                - ProjectAPI
+    /v1/projects/{project.id}:
+        patch:
+            summary: |-
+                UpdateProject updates a project's mutable fields.
+                Use the `update_mask` to specify which fields to update.
+            description: 'Scope: `project:write`'
+            operationId: ProjectAPI_UpdateProject
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1UpdateProjectResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: project.id
+                  description: Unique identifier for the project.
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/ProjectAPIUpdateProjectBody'
+            tags:
+                - ProjectAPI
+    /v1/projects/{project_id}:
+        get:
+            summary: GetProject retrieves a project by ID.
+            description: 'Scope: `project:read`'
+            operationId: ProjectAPI_GetProject
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1GetProjectResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: project_id
+                  description: The unique identifier of the project.
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ProjectAPI
+        delete:
+            summary: |-
+                DeleteProject permanently deletes a project. Fails with
+                FAILED_PRECONDITION while the project has environments: delete them
+                first, each of which refuses while it manages anything. This action
+                cannot be undone.
+            description: 'Scope: `project:write`'
+            operationId: ProjectAPI_DeleteProject
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1DeleteProjectResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: project_id
+                  description: The unique identifier of the project to delete.
+                  in: path
+                  required: true
+                  type: string
+            tags:
+                - ProjectAPI
     /v1/runs:
         get:
             summary: |-
@@ -3115,49 +3158,6 @@ paths:
                   type: string
             tags:
                 - SourceAPI
-    /v1/tenant:
-        get:
-            summary: GetTenant returns the caller's own tenant.
-            description: 'Scope: `tenant:read`'
-            operationId: TenantAPI_GetTenant
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1GetTenantResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            tags:
-                - TenantAPI
-        patch:
-            summary: UpdateTenant updates the caller's own tenant's mutable settings.
-            description: |-
-                Only `display_name` is mutable. `slug` is part of the account's identity
-                and `status` is set by lifecycle operations, neither of which a tenant
-                performs on itself. The logo is set in the console.
-
-                Scope: `tenant:write`
-            operationId: TenantAPI_UpdateTenant
-            responses:
-                "200":
-                    description: A successful response.
-                    schema:
-                        $ref: '#/definitions/v1UpdateTenantResponse'
-                default:
-                    description: An unexpected error response.
-                    schema:
-                        $ref: '#/definitions/googleRpcStatus'
-            parameters:
-                - name: body
-                  description: UpdateTenantRequest updates the caller's own tenant, so it names no id.
-                  in: body
-                  required: true
-                  schema:
-                    $ref: '#/definitions/v1UpdateTenantRequest'
-            tags:
-                - TenantAPI
     /v1/user/me:
         get:
             summary: |-
@@ -3179,7 +3179,7 @@ paths:
     /v1/users:
         get:
             summary: |-
-                ListUsers returns a page of the caller's tenant's members: everyone who
+                ListUsers returns a page of the caller's organization's members: everyone who
                 has joined, whatever their role or status. People who have been invited but
                 have not joined are not users yet; they are listed by InvitationAPI.
             description: 'Scope: `user:read`'
@@ -3313,9 +3313,6 @@ definitions:
                 description: 'Supported fields: `name`, `settings`, `approval`, `allowed_component_ids`.'
         required:
             - agent
-    AgentGrantOrganization:
-        type: object
-        description: Organization marks a grant to every environment in the organization.
     AgentHealth:
         type: string
         enum:
@@ -3519,7 +3516,7 @@ definitions:
                         type: string
                         format: date-time
                         description: |-
-                            When the key expires. Unset never expires. Fixed at creation; tenant
+                            When the key expires. Unset never expires. Fixed at creation; organization
                             policy may cap it.
                     last_used_at:
                         type: string
@@ -3550,56 +3547,6 @@ definitions:
         description: UpdateApiKeyRequest updates one of the caller's keys.
         required:
             - api_key
-    ApplicationAPIUpdateApplicationBody:
-        type: object
-        properties:
-            application:
-                type: object
-                properties:
-                    name:
-                        type: string
-                        description: |-
-                            URL-safe, human-readable identifier (e.g., "inventory-api"). Unique within
-                            the tenant. Lowercase alphanumeric and hyphens only, must start with a
-                            letter and end with an alphanumeric character (1-63 chars).
-                    description:
-                        type: string
-                        description: |-
-                            Optional longer-form description of the application's purpose
-                            (e.g., "Core inventory service tracking warehouse stock and fulfillment").
-                    labels:
-                        type: object
-                        additionalProperties:
-                            type: string
-                        description: |-
-                            Arbitrary key-value labels for organizing and filtering applications
-                            (e.g., `{"team": "logistics", "tier": "critical"}`).
-                    created_by:
-                        $ref: '#/definitions/v1ActorRef'
-                        description: The user or agent who created this application (server-populated from token).
-                        readOnly: true
-                    created_at:
-                        type: string
-                        format: date-time
-                        description: When the application was created.
-                        readOnly: true
-                    updated_at:
-                        type: string
-                        format: date-time
-                        description: When the application was last updated.
-                        readOnly: true
-                description: |-
-                    The application with updated fields. Its `id` identifies the application;
-                    only fields named in `update_mask` are applied.
-            update_mask:
-                type: string
-                description: |-
-                    The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Pass `*` for full replacement. Supported fields: `name`,
-                    `description`, `labels`.
-        description: UpdateApplicationRequest contains the application fields to update.
-        required:
-            - application
     ApprovalRuleGroupApproval:
         type: object
         properties:
@@ -3660,7 +3607,7 @@ definitions:
             change_set:
                 type: object
                 properties:
-                    application_id:
+                    project_id:
                         type: string
                         readOnly: true
                     environment_id:
@@ -3734,7 +3681,7 @@ definitions:
                 properties:
                     name:
                         type: string
-                        description: Unique within the tenant.
+                        description: Unique within the organization.
                     description:
                         type: string
                     type:
@@ -3806,15 +3753,15 @@ definitions:
             environment:
                 type: object
                 properties:
-                    application_id:
+                    project_id:
                         type: string
-                        description: The application this environment belongs to.
+                        description: The project this environment belongs to.
                         readOnly: true
                     name:
                         type: string
                         description: |-
                             URL-safe, human-readable identifier (e.g., "prod", "staging-us-east").
-                            Unique within the application. Lowercase alphanumeric and hyphens only,
+                            Unique within the project. Lowercase alphanumeric and hyphens only,
                             must start with a letter and end with an alphanumeric character (1-63 chars).
                     description:
                         type: string
@@ -4098,7 +4045,7 @@ definitions:
             - version
     InvitationAPIRevokeInvitationBody:
         type: object
-        description: RevokeInvitationRequest names one invitation in the caller's tenant.
+        description: RevokeInvitationRequest names one invitation in the caller's organization.
     IssuerAPISetIssuerKeysBody:
         type: object
         properties:
@@ -4130,6 +4077,56 @@ definitions:
              - CLASS_INPUT: The change set's inputs cannot be rendered: asking again gives the
             same answer, so fix the change set.
              - CLASS_INTERNAL: Admiral failed (storage, the database): asking again can succeed.
+    ProjectAPIUpdateProjectBody:
+        type: object
+        properties:
+            project:
+                type: object
+                properties:
+                    name:
+                        type: string
+                        description: |-
+                            URL-safe, human-readable identifier (e.g., "inventory-api"). Unique within
+                            the organization. Lowercase alphanumeric and hyphens only, must start with a
+                            letter and end with an alphanumeric character (1-63 chars).
+                    description:
+                        type: string
+                        description: |-
+                            Optional longer-form description of the project's purpose
+                            (e.g., "Core inventory service tracking warehouse stock and fulfillment").
+                    labels:
+                        type: object
+                        additionalProperties:
+                            type: string
+                        description: |-
+                            Arbitrary key-value labels for organizing and filtering projects
+                            (e.g., `{"team": "logistics", "tier": "critical"}`).
+                    created_by:
+                        $ref: '#/definitions/v1ActorRef'
+                        description: The user or agent who created this project (server-populated from token).
+                        readOnly: true
+                    created_at:
+                        type: string
+                        format: date-time
+                        description: When the project was created.
+                        readOnly: true
+                    updated_at:
+                        type: string
+                        format: date-time
+                        description: When the project was last updated.
+                        readOnly: true
+                description: |-
+                    The project with updated fields. Its `id` identifies the project;
+                    only fields named in `update_mask` are applied.
+            update_mask:
+                type: string
+                description: |-
+                    The set of fields to update. Optional; if omitted, all populated fields
+                    are updated. Pass `*` for full replacement. Supported fields: `name`,
+                    `description`, `labels`.
+        description: UpdateProjectRequest contains the project fields to update.
+        required:
+            - project
     RegistryAPISetComponentStatusBody:
         type: object
         properties:
@@ -4178,7 +4175,7 @@ definitions:
                     name:
                         type: string
                         description: |-
-                            Unique within the tenant, never changed: `cloud-sql`. Team grouping,
+                            Unique within the organization, never changed: `cloud-sql`. Team grouping,
                             when it lands, is a `team/` segment of the name (`payments/cloud-sql`);
                             moving a component means publishing under the new name and deprecating
                             the old one with it as the successor.
@@ -4464,6 +4461,42 @@ definitions:
                 items:
                     type: object
                     $ref: '#/definitions/protobufAny'
+    organizationV1Organization:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier.
+                readOnly: true
+            slug:
+                type: string
+                description: URL-safe identifier, unique across Admiral. Fixed at creation.
+                readOnly: true
+            display_name:
+                type: string
+                description: Human-readable name.
+            status:
+                $ref: '#/definitions/v1OrganizationStatus'
+                description: Lifecycle state.
+                readOnly: true
+            avatar_url:
+                type: string
+                description: |-
+                    The organization's logo, shown on its sign-in page and in the console.
+                    Absent when none is set.
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                readOnly: true
+            updated_at:
+                type: string
+                format: date-time
+                readOnly: true
+        description: |-
+            Organization is the account as its own members see it: its identity, its lifecycle
+            state, and the settings they control. Operational detail about how the
+            account is run is not part of this view.
     protobufAny:
         type: object
         properties:
@@ -4748,7 +4781,7 @@ definitions:
                 type: string
                 description: |-
                     The agent. Its owner must have granted it to the organization, a team,
-                    this application or this environment.
+                    this project or this environment.
             id:
                 type: string
                 description: |-
@@ -4767,20 +4800,23 @@ definitions:
         type: object
         properties:
             organization:
-                $ref: '#/definitions/AgentGrantOrganization'
+                $ref: '#/definitions/v1AgentGrantOrganization'
                 description: Every environment in the organization.
             group_id:
                 type: string
                 description: |-
                     Any member of the group can assign the agent to an environment they
                     can edit.
-            application_id:
+            project_id:
                 type: string
             environment_id:
                 type: string
         description: |-
             AgentGrant lets environments be assigned an agent. Set exactly one target; an agent can hold several
             grants, one per target.
+    v1AgentGrantOrganization:
+        type: object
+        description: Organization marks a grant to every environment in the organization.
     v1AgentKind:
         type: string
         enum:
@@ -4888,7 +4924,7 @@ definitions:
                 type: string
                 format: date-time
                 description: |-
-                    When the key expires. Unset never expires. Fixed at creation; tenant
+                    When the key expires. Unset never expires. Fixed at creation; organization
                     policy may cap it.
             last_used_at:
                 type: string
@@ -4933,48 +4969,6 @@ definitions:
                 type: string
                 format: int64
                 description: Where the next chunk starts.
-    v1Application:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier for the application.
-                readOnly: true
-            name:
-                type: string
-                description: |-
-                    URL-safe, human-readable identifier (e.g., "inventory-api"). Unique within
-                    the tenant. Lowercase alphanumeric and hyphens only, must start with a
-                    letter and end with an alphanumeric character (1-63 chars).
-            description:
-                type: string
-                description: |-
-                    Optional longer-form description of the application's purpose
-                    (e.g., "Core inventory service tracking warehouse stock and fulfillment").
-            labels:
-                type: object
-                additionalProperties:
-                    type: string
-                description: |-
-                    Arbitrary key-value labels for organizing and filtering applications
-                    (e.g., `{"team": "logistics", "tier": "critical"}`).
-            created_by:
-                $ref: '#/definitions/v1ActorRef'
-                description: The user or agent who created this application (server-populated from token).
-                readOnly: true
-            created_at:
-                type: string
-                format: date-time
-                description: When the application was created.
-                readOnly: true
-            updated_at:
-                type: string
-                format: date-time
-                description: When the application was last updated.
-                readOnly: true
-        description: |-
-            Application represents a deployable unit within a tenant. An application
-            groups environments.
     v1ApplyPhase:
         type: object
         properties:
@@ -5133,7 +5127,7 @@ definitions:
                 type: string
                 description: '`cs-` and twelve lowercase base36 characters.'
                 readOnly: true
-            application_id:
+            project_id:
                 type: string
                 readOnly: true
             environment_id:
@@ -5253,7 +5247,7 @@ definitions:
             name:
                 type: string
                 description: |-
-                    Unique within the tenant, never changed: `cloud-sql`. Team grouping,
+                    Unique within the organization, never changed: `cloud-sql`. Team grouping,
                     when it lands, is a `team/` segment of the name (`payments/cloud-sql`);
                     moving a component means publishing under the new name and deprecating
                     the old one with it as the successor.
@@ -5663,22 +5657,6 @@ definitions:
                     `admp_<id suffix>_<secret>`: the key `key-8r3t6w1y4n9z` has a secret
                     starting `admp_8r3t6w1y4n9z_`, so a secret found anywhere names its key.
         description: CreateApiKeyResponse contains the newly created API key.
-    v1CreateApplicationRequest:
-        type: object
-        properties:
-            application:
-                $ref: '#/definitions/v1Application'
-                description: The application to create. Server-populated fields are ignored.
-        description: CreateApplicationRequest creates an application in the caller's tenant.
-        required:
-            - application
-    v1CreateApplicationResponse:
-        type: object
-        properties:
-            application:
-                $ref: '#/definitions/v1Application'
-                description: The created application.
-        description: CreateApplicationResponse contains the newly created application.
     v1CreateChangeSetRequest:
         type: object
         properties:
@@ -5722,7 +5700,7 @@ definitions:
                     The credential to create: `name`, `type`, `auth_config`, and optionally
                     `description`, `labels` and `allowed_hosts`. `type` and the populated
                     `auth_config` variant must agree.
-        description: CreateCredentialRequest registers a credential in the caller's tenant.
+        description: CreateCredentialRequest registers a credential in the caller's organization.
         required:
             - credential
     v1CreateCredentialResponse:
@@ -5738,15 +5716,15 @@ definitions:
     v1CreateEnvironmentRequest:
         type: object
         properties:
-            application_id:
+            project_id:
                 type: string
-                description: The application the environment belongs to.
+                description: The project the environment belongs to.
             environment:
                 $ref: '#/definitions/v1Environment'
                 description: The environment to create. Server-populated fields are ignored.
-        description: CreateEnvironmentRequest creates an environment under an application.
+        description: CreateEnvironmentRequest creates an environment under a project.
         required:
-            - application_id
+            - project_id
             - environment
     v1CreateEnvironmentResponse:
         type: object
@@ -5761,7 +5739,7 @@ definitions:
             invitation:
                 $ref: '#/definitions/v1Invitation'
                 description: 'The invitation to issue: `email` and `role`.'
-        description: CreateInvitationRequest invites one address into the caller's tenant.
+        description: CreateInvitationRequest invites one address into the caller's organization.
         required:
             - invitation
     v1CreateInvitationResponse:
@@ -5783,6 +5761,22 @@ definitions:
         properties:
             issuer:
                 $ref: '#/definitions/v1Issuer'
+    v1CreateProjectRequest:
+        type: object
+        properties:
+            project:
+                $ref: '#/definitions/v1Project'
+                description: The project to create. Server-populated fields are ignored.
+        description: CreateProjectRequest creates a project in the caller's organization.
+        required:
+            - project
+    v1CreateProjectResponse:
+        type: object
+        properties:
+            project:
+                $ref: '#/definitions/v1Project'
+                description: The created project.
+        description: CreateProjectResponse contains the newly created project.
     v1CreateRunRequest:
         type: object
         properties:
@@ -5838,7 +5832,7 @@ definitions:
                 readOnly: true
             name:
                 type: string
-                description: Unique within the tenant.
+                description: Unique within the organization.
             description:
                 type: string
             type:
@@ -5922,9 +5916,6 @@ definitions:
             planned.
     v1DeleteAgentResponse:
         type: object
-    v1DeleteApplicationResponse:
-        type: object
-        description: DeleteApplicationResponse is empty on success.
     v1DeleteComponentResponse:
         type: object
         description: DeleteComponentResponse is empty.
@@ -5937,6 +5928,9 @@ definitions:
         type: object
     v1DeleteIssuerResponse:
         type: object
+    v1DeleteProjectResponse:
+        type: object
+        description: DeleteProjectResponse is empty on success.
     v1DeleteServiceAccountResponse:
         type: object
     v1DeleteSourceResponse:
@@ -6180,15 +6174,15 @@ definitions:
                 type: string
                 description: Unique identifier for the environment.
                 readOnly: true
-            application_id:
+            project_id:
                 type: string
-                description: The application this environment belongs to.
+                description: The project this environment belongs to.
                 readOnly: true
             name:
                 type: string
                 description: |-
                     URL-safe, human-readable identifier (e.g., "prod", "staging-us-east").
-                    Unique within the application. Lowercase alphanumeric and hyphens only,
+                    Unique within the project. Lowercase alphanumeric and hyphens only,
                     must start with a letter and end with an alphanumeric character (1-63 chars).
             description:
                 type: string
@@ -6274,7 +6268,7 @@ definitions:
                     runs. Unset, the environment is pinned: a publish changes nothing here,
                     and it moves only by a change set someone writes.
         description: |-
-            Environment is a named place an application deploys to (dev, staging,
+            Environment is a named place a project deploys to (dev, staging,
             prod).
     v1EnvironmentComponent:
         type: object
@@ -6355,13 +6349,6 @@ definitions:
                 $ref: '#/definitions/v1ApiKey'
                 description: The key metadata. The key secret is never included.
         description: GetApiKeyResponse contains the requested API key metadata.
-    v1GetApplicationResponse:
-        type: object
-        properties:
-            application:
-                $ref: '#/definitions/v1Application'
-                description: The retrieved application.
-        description: GetApplicationResponse contains the application record.
     v1GetArtifactResponse:
         type: object
         properties:
@@ -6512,11 +6499,23 @@ definitions:
                 $ref: '#/definitions/v1User'
                 description: The user profile.
         description: GetMeResponse contains the authenticated user's profile.
+    v1GetOrganizationResponse:
+        type: object
+        properties:
+            organization:
+                $ref: '#/definitions/organizationV1Organization'
     v1GetPrepareResponse:
         type: object
         properties:
             prepare:
                 $ref: '#/definitions/v1Prepare'
+    v1GetProjectResponse:
+        type: object
+        properties:
+            project:
+                $ref: '#/definitions/v1Project'
+                description: The retrieved project.
+        description: GetProjectResponse contains the project record.
     v1GetRevisionResponse:
         type: object
         properties:
@@ -6542,11 +6541,6 @@ definitions:
         properties:
             source:
                 $ref: '#/definitions/sourceV1Source'
-    v1GetTenantResponse:
-        type: object
-        properties:
-            tenant:
-                $ref: '#/definitions/v1Tenant'
     v1GetUserResponse:
         type: object
         properties:
@@ -6982,7 +6976,7 @@ definitions:
                 $ref: '#/definitions/v1ActorRef'
                 description: |-
                     The member who issued it. Absent when it was issued by an operator from
-                    outside the tenant.
+                    outside the organization.
                 readOnly: true
             created_at:
                 type: string
@@ -7009,7 +7003,7 @@ definitions:
                 description: When it was withdrawn or retired. Only on REVOKED.
                 readOnly: true
         description: |-
-            Invitation is one person invited into the caller's tenant. Never carries
+            Invitation is one person invited into the caller's organization. Never carries
             the link or its token.
     v1InvitationStatus:
         type: string
@@ -7332,7 +7326,7 @@ definitions:
                 type: string
                 description: |-
                     The namespace a component renders into unless it names its own. Set to
-                    `<application>-<environment>` when the environment is created if left
+                    `<project>-<environment>` when the environment is created if left
                     empty; at most 63 characters.
             create_namespaces:
                 type: boolean
@@ -7398,19 +7392,6 @@ definitions:
                 type: string
                 description: Pagination token for the next page. Empty when there are no more results.
         description: ListApiKeysResponse contains a page of API key metadata.
-    v1ListApplicationsResponse:
-        type: object
-        properties:
-            applications:
-                type: array
-                items:
-                    type: object
-                    $ref: '#/definitions/v1Application'
-                description: The list of applications.
-            next_page_token:
-                type: string
-                description: Pagination token for the next page. Empty when there are no more results.
-        description: ListApplicationsResponse contains a page of applications.
     v1ListChangeSetsResponse:
         type: object
         properties:
@@ -7518,6 +7499,19 @@ definitions:
                     $ref: '#/definitions/v1Job'
             next_page_token:
                 type: string
+    v1ListProjectsResponse:
+        type: object
+        properties:
+            projects:
+                type: array
+                items:
+                    type: object
+                    $ref: '#/definitions/v1Project'
+                description: The list of projects.
+            next_page_token:
+                type: string
+                description: Pagination token for the next page. Empty when there are no more results.
+        description: ListProjectsResponse contains a page of projects.
     v1ListRevisionsResponse:
         type: object
         properties:
@@ -7642,6 +7636,20 @@ definitions:
                 type: integer
                 format: int32
         description: Offer is work claimed for an agent, not yet started.
+    v1OrganizationStatus:
+        type: string
+        enum:
+            - STATUS_UNSPECIFIED
+            - STATUS_ACTIVE
+            - STATUS_SUSPENDED
+        default: STATUS_UNSPECIFIED
+        description: |-
+            Status is the account's lifecycle state. A caller sees it but cannot
+            set it: suspension and reactivation are imposed, not requested.
+
+             - STATUS_UNSPECIFIED: Default value. Must not be used.
+             - STATUS_ACTIVE: Normal operation.
+             - STATUS_SUSPENDED: Access is withheld, typically for billing or abuse. Data is retained.
     v1OrphanComponent:
         type: object
         properties:
@@ -7889,6 +7897,48 @@ definitions:
                 format: int32
             current_component:
                 type: string
+    v1Project:
+        type: object
+        properties:
+            id:
+                type: string
+                description: Unique identifier for the project.
+                readOnly: true
+            name:
+                type: string
+                description: |-
+                    URL-safe, human-readable identifier (e.g., "inventory-api"). Unique within
+                    the organization. Lowercase alphanumeric and hyphens only, must start with a
+                    letter and end with an alphanumeric character (1-63 chars).
+            description:
+                type: string
+                description: |-
+                    Optional longer-form description of the project's purpose
+                    (e.g., "Core inventory service tracking warehouse stock and fulfillment").
+            labels:
+                type: object
+                additionalProperties:
+                    type: string
+                description: |-
+                    Arbitrary key-value labels for organizing and filtering projects
+                    (e.g., `{"team": "logistics", "tier": "critical"}`).
+            created_by:
+                $ref: '#/definitions/v1ActorRef'
+                description: The user or agent who created this project (server-populated from token).
+                readOnly: true
+            created_at:
+                type: string
+                format: date-time
+                description: When the project was created.
+                readOnly: true
+            updated_at:
+                type: string
+                format: date-time
+                description: When the project was last updated.
+                readOnly: true
+        description: |-
+            Project represents a deployable unit within an organization. A project
+            groups environments.
     v1Provenance:
         type: object
         properties:
@@ -7961,10 +8011,10 @@ definitions:
             Kind is the on-ramp a version arrived by: whose code it is and who
             triggered the publish, not which way the bytes travelled.
 
-             - KIND_PUSH: The tenant's own code, published because they pushed it. Today that is
+             - KIND_PUSH: The organization's own code, published because they pushed it. Today that is
             the CLI uploading a directory, from CI or a laptop; the repository,
             ref and commit are what the publisher reported.
-             - KIND_IMPORT: A copy of an artifact the tenant does not own (a chart, a registry
+             - KIND_IMPORT: A copy of an artifact the organization does not own (a chart, a registry
             module, a git tree, an archive), fetched by Admiral. The upstream
             identity is recorded; the bytes are frozen here.
     v1PublishComponentRequest:
@@ -8714,56 +8764,6 @@ definitions:
             path:
                 $ref: '#/definitions/v1DiffPath'
         description: TakenField is one field the apply takes from another field manager.
-    v1Tenant:
-        type: object
-        properties:
-            id:
-                type: string
-                description: Unique identifier.
-                readOnly: true
-            slug:
-                type: string
-                description: URL-safe identifier, unique across Admiral. Fixed at creation.
-                readOnly: true
-            display_name:
-                type: string
-                description: Human-readable name.
-            status:
-                $ref: '#/definitions/v1TenantStatus'
-                description: Lifecycle state.
-                readOnly: true
-            avatar_url:
-                type: string
-                description: |-
-                    The organization's logo, shown on its sign-in page and in the console.
-                    Absent when none is set.
-                readOnly: true
-            created_at:
-                type: string
-                format: date-time
-                readOnly: true
-            updated_at:
-                type: string
-                format: date-time
-                readOnly: true
-        description: |-
-            Tenant is the account as its own members see it: its identity, its lifecycle
-            state, and the settings they control. Operational detail about how the
-            account is run is not part of this view.
-    v1TenantStatus:
-        type: string
-        enum:
-            - STATUS_UNSPECIFIED
-            - STATUS_ACTIVE
-            - STATUS_SUSPENDED
-        default: STATUS_UNSPECIFIED
-        description: |-
-            Status is the account's lifecycle state. A caller sees it but cannot
-            set it: suspension and reactivation are imposed, not requested.
-
-             - STATUS_UNSPECIFIED: Default value. Must not be used.
-             - STATUS_ACTIVE: Normal operation.
-             - STATUS_SUSPENDED: Access is withheld, typically for billing or abuse. Data is retained.
     v1TerraformChange:
         type: object
         properties:
@@ -8870,13 +8870,6 @@ definitions:
                 $ref: '#/definitions/v1ApiKey'
                 description: The updated key metadata.
         description: UpdateApiKeyResponse contains the updated API key metadata.
-    v1UpdateApplicationResponse:
-        type: object
-        properties:
-            application:
-                $ref: '#/definitions/v1Application'
-                description: The updated application.
-        description: UpdateApplicationResponse contains the updated application.
     v1UpdateChangeSetResponse:
         type: object
         properties:
@@ -8900,32 +8893,39 @@ definitions:
                 $ref: '#/definitions/v1Environment'
                 description: The updated environment.
         description: UpdateEnvironmentResponse contains the updated environment.
-    v1UpdateSourceResponse:
+    v1UpdateOrganizationRequest:
         type: object
         properties:
-            source:
-                $ref: '#/definitions/sourceV1Source'
-    v1UpdateTenantRequest:
-        type: object
-        properties:
-            tenant:
-                $ref: '#/definitions/v1Tenant'
+            organization:
+                $ref: '#/definitions/organizationV1Organization'
                 description: |-
-                    The tenant with updated fields. Only fields named in `update_mask` are
+                    The organization with updated fields. Only fields named in `update_mask` are
                     applied.
             update_mask:
                 type: string
                 description: |-
                     The set of fields to update. Optional; if omitted, all populated fields
                     are updated. Supported fields: `display_name`.
-        description: UpdateTenantRequest updates the caller's own tenant, so it names no id.
+        description: UpdateOrganizationRequest updates the caller's own organization, so it names no id.
         required:
-            - tenant
-    v1UpdateTenantResponse:
+            - organization
+    v1UpdateOrganizationResponse:
         type: object
         properties:
-            tenant:
-                $ref: '#/definitions/v1Tenant'
+            organization:
+                $ref: '#/definitions/organizationV1Organization'
+    v1UpdateProjectResponse:
+        type: object
+        properties:
+            project:
+                $ref: '#/definitions/v1Project'
+                description: The updated project.
+        description: UpdateProjectResponse contains the updated project.
+    v1UpdateSourceResponse:
+        type: object
+        properties:
+            source:
+                $ref: '#/definitions/sourceV1Source'
     v1UploadJobPlanDiffResponse:
         type: object
         properties:
@@ -8979,7 +8979,7 @@ definitions:
                 readOnly: true
             role:
                 $ref: '#/definitions/v1UserRole'
-                description: The user's standing in the tenant.
+                description: The user's standing in the organization.
                 readOnly: true
             status:
                 $ref: '#/definitions/v1UserStatus'
@@ -8995,14 +8995,14 @@ definitions:
             - USER_ROLE_MEMBER
         default: USER_ROLE_UNSPECIFIED
         description: |-
-            UserRole is a member's standing in the tenant. The tiers imply one another
+            UserRole is a member's standing in the organization. The tiers imply one another
             downward: an owner can do everything an administrator can, an administrator
             everything a member can.
 
              - USER_ROLE_UNSPECIFIED: Default value. Must not be used.
-             - USER_ROLE_OWNER: Owns the tenant. Exactly one per tenant; ownership moves by transfer, never
+             - USER_ROLE_OWNER: Owns the organization. Exactly one per organization; ownership moves by transfer, never
             by invitation.
-             - USER_ROLE_ADMIN: Manages members and tenant settings.
+             - USER_ROLE_ADMIN: Manages members and organization settings.
              - USER_ROLE_MEMBER: Ordinary membership.
     v1UserStatus:
         type: string
@@ -9246,9 +9246,9 @@ components:
 security:
     - bearerAuth: []
 x-tagGroups:
-    - name: Applications
+    - name: Projects
       tags:
-        - Applications
+        - Projects
         - Environments
     - name: Deployments
       tags:
@@ -9264,7 +9264,7 @@ x-tagGroups:
         - Jobs
     - name: Identity & Access
       tags:
-        - Tenant
+        - Organization
         - User
         - Service Accounts
         - Issuers
