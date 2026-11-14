@@ -791,8 +791,9 @@ paths:
                  revision of the same change set, for the components named or every one it
                  touched. When every component is back, it reads REVERTED; when some are
                  kept, it reads APPLIED with what it kept. A change set that has closed is
-                 reverted whole by a new change set, which may apply only while the
-                 environment has not moved past it.
+                 reverted by a new change set, for the components named or every one it
+                 touched, which may apply only while the environment has not moved past
+                 it.
 
                  Scope: `changeset:write`
             operationId: ChangeSetAPI_RevertChangeSet
@@ -827,9 +828,11 @@ paths:
                                     maxItems: 256
                                     uniqueItems: true
                                     description: |-
-                                        The components to return, by name, for a change set that holds its
-                                         environment. Empty returns every component it touched. A change set that
-                                         has closed is reverted whole, so naming components is refused.
+                                        The components to return to their content from before the change set,
+                                         by name. Empty returns every component it touched. For a change set that
+                                         holds its environment the revert is a new revision of it; for one that
+                                         has closed it opens a new change set, refused once the environment has
+                                         moved past it.
                             title: RevertChangeSetRequest
                             additionalProperties: false
                 required: true
@@ -5511,9 +5514,25 @@ components:
                 message:
                     type: string
                     title: message
+                failure:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.agent.v1.Step.Failure'
+                    title: failure
+                    description: |
+                        Set only when status is FAILED. Only the Kubernetes agent sets
+                         UNHEALTHY.
+                        enum.defined_only = true
             title: Step
             additionalProperties: false
             description: Step is one component's part of a job.
+        admiral.api.agent.v1.Step.Failure:
+            type: string
+            title: Failure
+            enum:
+                - FAILURE_UNSPECIFIED
+                - FAILURE_APPLY
+                - FAILURE_UNHEALTHY
+            description: Failure is why a FAILED step failed.
         admiral.api.agent.v1.TakenField:
             type: object
             properties:
@@ -7169,9 +7188,11 @@ components:
                     maxItems: 256
                     uniqueItems: true
                     description: |-
-                        The components to return, by name, for a change set that holds its
-                         environment. Empty returns every component it touched. A change set that
-                         has closed is reverted whole, so naming components is refused.
+                        The components to return to their content from before the change set,
+                         by name. Empty returns every component it touched. For a change set that
+                         holds its environment the revert is a new revision of it; for one that
+                         has closed it opens a new change set, refused once the environment has
+                         moved past it.
             title: RevertChangeSetRequest
             required:
                 - change_set_id
@@ -8229,6 +8250,15 @@ components:
                         The newest published version the environment's tracking matches, when
                          it is not the one running. Absent when the environment is pinned or
                          runs the newest match: how far behind the component is.
+                unhealthy_reason:
+                    type: string
+                    title: unhealthy_reason
+                    description: |-
+                        Set when the apply that last changed it wrote every object and the
+                         component did not become healthy: the pod reasons and last log lines the
+                         agent reported. Nothing watches it afterwards, so a component that
+                         recovered on its own keeps this until its next apply.
+                    readOnly: true
             title: EnvironmentComponent
             additionalProperties: false
             description: |-
@@ -8332,6 +8362,13 @@ components:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: held_at
                     description: When the partial apply finished.
+                run_id:
+                    type: string
+                    title: run_id
+                    pattern: ^run-[0-9a-z]+$
+                    description: |-
+                        The run whose apply took the hold. Hints are built from this run, never
+                         from the change set's latest run.
             title: Hold
             additionalProperties: false
             description: Hold is the state a partial apply leaves an environment in.
@@ -8387,6 +8424,11 @@ components:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: applied_at
                     description: When the apply finished.
+                run_id:
+                    type: string
+                    title: run_id
+                    pattern: ^run-[0-9a-z]+$
+                    description: The run whose apply this was.
             title: LastApply
             additionalProperties: false
             description: |-
@@ -10986,6 +11028,7 @@ components:
                 - STATUS_FAILED
                 - STATUS_SKIPPED
                 - STATUS_UNKNOWN
+                - STATUS_UNHEALTHY
             description: Status is where one component's apply stands.
         admiral.api.run.v1.CreateRunRequest:
             type: object
@@ -11367,10 +11410,11 @@ components:
                 - STATUS_CLEAN
                 - STATUS_DRIFTED
                 - STATUS_UNKNOWN
+                - STATUS_UNHEALTHY
             description: |-
                 Status is where the run is. A change set run or a reapply ends APPLIED,
-                 PARTIAL, UNKNOWN, NO_CHANGES, SUPERSEDED, FAILED or CANCELLED; a drift
-                 check ends CLEAN, DRIFTED, FAILED or CANCELLED.
+                 UNHEALTHY, PARTIAL, UNKNOWN, NO_CHANGES, SUPERSEDED, FAILED or
+                 CANCELLED; a drift check ends CLEAN, DRIFTED, FAILED or CANCELLED.
         admiral.api.run.v1.Run.Trigger:
             type: string
             title: Trigger

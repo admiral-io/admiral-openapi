@@ -912,8 +912,9 @@ paths:
                 revision of the same change set, for the components named or every one it
                 touched. When every component is back, it reads REVERTED; when some are
                 kept, it reads APPLIED with what it kept. A change set that has closed is
-                reverted whole by a new change set, which may apply only while the
-                environment has not moved past it.
+                reverted by a new change set, for the components named or every one it
+                touched, which may apply only while the environment has not moved past
+                it.
 
                 Scope: `changeset:write`
             operationId: ChangeSetAPI_RevertChangeSet
@@ -3598,9 +3599,11 @@ definitions:
                 items:
                     type: string
                 description: |-
-                    The components to return, by name, for a change set that holds its
-                    environment. Empty returns every component it touched. A change set that
-                    has closed is reverted whole, so naming components is refused.
+                    The components to return to their content from before the change set,
+                    by name. Empty returns every component it touched. For a change set that
+                    holds its environment the revert is a new revision of it; for one that
+                    has closed it opens a new change set, refused once the environment has
+                    moved past it.
     ChangeSetAPIUpdateChangeSetBody:
         type: object
         properties:
@@ -4381,6 +4384,20 @@ definitions:
                     carries.
         required:
             - source
+    StepFailure:
+        type: string
+        enum:
+            - FAILURE_UNSPECIFIED
+            - FAILURE_APPLY
+            - FAILURE_UNHEALTHY
+        default: FAILURE_UNSPECIFIED
+        description: |-
+            Failure is why a FAILED step failed.
+
+             - FAILURE_UNSPECIFIED: Read as APPLY, so an agent that does not set it holds the environment.
+             - FAILURE_APPLY: Not every object was written, or the engine errored.
+             - FAILURE_UNHEALTHY: Every object was written and the component did not become healthy
+            before the wait ended, or the person stopped the wait.
     TrackingAfterMerge:
         type: string
         enum:
@@ -5319,6 +5336,7 @@ definitions:
             - STATUS_FAILED
             - STATUS_SKIPPED
             - STATUS_UNKNOWN
+            - STATUS_UNHEALTHY
         default: STATUS_UNSPECIFIED
         description: |-
             Status is where one component's apply stands.
@@ -5327,6 +5345,7 @@ definitions:
              - STATUS_SKIPPED: Not attempted: the apply stopped before reaching it.
              - STATUS_UNKNOWN: The apply ended without a report, so whether this component changed is
             not known.
+             - STATUS_UNHEALTHY: Every object was written, and it did not become healthy. It landed.
     v1ComponentDiff:
         type: object
         properties:
@@ -6308,6 +6327,14 @@ definitions:
                     The newest published version the environment's tracking matches, when
                     it is not the one running. Absent when the environment is pinned or
                     runs the newest match: how far behind the component is.
+            unhealthy_reason:
+                type: string
+                description: |-
+                    Set when the apply that last changed it wrote every object and the
+                    component did not become healthy: the pod reasons and last log lines the
+                    agent reported. Nothing watches it afterwards, so a component that
+                    recovered on its own keeps this until its next apply.
+                readOnly: true
         description: |-
             EnvironmentComponent is one component live in an environment: the version
             it runs and the apply that last changed it.
@@ -6699,6 +6726,11 @@ definitions:
                 type: string
                 format: date-time
                 description: When the partial apply finished.
+            run_id:
+                type: string
+                description: |-
+                    The run whose apply took the hold. Hints are built from this run, never
+                    from the change set's latest run.
         description: Hold is the state a partial apply leaves an environment in.
     v1HookFinding:
         type: object
@@ -7355,6 +7387,9 @@ definitions:
                 type: string
                 format: date-time
                 description: When the apply finished.
+            run_id:
+                type: string
+                description: The run whose apply this was.
         description: |-
             LastApply points at the apply that produced an environment's current
             generation.
@@ -8383,11 +8418,12 @@ definitions:
             - STATUS_CLEAN
             - STATUS_DRIFTED
             - STATUS_UNKNOWN
+            - STATUS_UNHEALTHY
         default: STATUS_UNSPECIFIED
         description: |-
             Status is where the run is. A change set run or a reapply ends APPLIED,
-            PARTIAL, UNKNOWN, NO_CHANGES, SUPERSEDED, FAILED or CANCELLED; a drift
-            check ends CLEAN, DRIFTED, FAILED or CANCELLED.
+            UNHEALTHY, PARTIAL, UNKNOWN, NO_CHANGES, SUPERSEDED, FAILED or
+            CANCELLED; a drift check ends CLEAN, DRIFTED, FAILED or CANCELLED.
 
              - STATUS_PREPARING: The revision is being rendered into its artifact.
              - STATUS_QUEUED: Waiting for an agent; `wait_reason` says why.
@@ -8402,6 +8438,9 @@ definitions:
              - STATUS_UNKNOWN: The apply started and its agent never reported, so what it changed is
             not known. The environment is held as for PARTIAL: plan to see what
             landed, then revert or accept.
+             - STATUS_UNHEALTHY: The apply wrote every object, and a component did not become healthy.
+            Nothing was left unwritten, so the environment is not held: fix forward
+            in a new change set, or revert.
     v1RunTrigger:
         type: string
         enum:
@@ -8728,6 +8767,11 @@ definitions:
                 $ref: '#/definitions/v1JobStatus'
             message:
                 type: string
+            failure:
+                $ref: '#/definitions/StepFailure'
+                description: |-
+                    Set only when status is FAILED. Only the Kubernetes agent sets
+                    UNHEALTHY.
         description: Step is one component's part of a job.
     v1Tag:
         type: object
