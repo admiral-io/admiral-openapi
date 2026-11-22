@@ -21,16 +21,16 @@ tags:
         RegistryAPI is the component registry: what an organization has published,
         addressed by digest.
 
-        A component here is a REGISTRY ENTRY -- the thing `admiral component
-        publish` creates and later publishes land under -- not an instance running
-        in an environment. Both are called component on purpose; the verbs and the
+        A component here is a registry entry (what `admiral component publish`
+        creates and later publishes land under), not an instance running in an
+        environment. Both are called component on purpose; the verbs and the
         address forms carry the distinction. Publish, tag and status changes act on
         the registry (this service); adding, moving to another version, setting
-        values and removing act inside a change set.
+        values and removing act inside a changeset.
         `cloud-sql:v1.2.0` is registry-speak, `my-api/prod/users-db` is
         environment-speak.
 
-        Three nouns. A Component is the name row. A Version is one published
+        Three nouns. A Component is the name. A Version is one published
         artifact, identified by the SHA-256 of its normalized bundle; the digest is
         the identity and the source repository is provenance. A Tag is a pointer
         from a name to a version, in the OCI sense: semver tags (v1.2.0) never move
@@ -98,12 +98,13 @@ tags:
         external systems at publish time: a git host, a Helm repository, an OCI
         registry, a module registry.
 
-        A credential is never selected for the caller. A pull-publish names the
-        credentials it may use, chosen by the user from those whose type its
-        protocols can present, and the platform presents each only where it fits.
-        A credential may carry `allowed_hosts`, a guard that restricts where it is
-        ever presented, whatever it is attached to. Credentials exist for publish
-        only; nothing on the deploy path reads one.
+        A credential is never selected for the caller, and no request names one
+        for a fetch. An organization admin binds a credential to a source, and
+        Admiral presents it only for that source's location. A credential may
+        carry `allowed_hosts`, a guard that restricts where it is ever presented.
+        Only an organization admin creates, changes or deletes a credential, the
+        guard included. Credentials exist for publish only; nothing on the deploy
+        path reads one.
 
         Secrets are write-only: accepted on create and update, encrypted at rest,
         decrypted only inside a publish, and never returned. Get and List return
@@ -157,9 +158,9 @@ tags:
         suspension, and deletion are administrative operations and are not part of
         this API.
 
-        No request names an organization. The caller's organization comes from their token, so
-        there is no id to pass and none to get wrong -- and no shape in which a caller
-        could name someone else's.
+        No request names an organization. The caller's organization comes from
+        their token, so there is no id to pass, none to get wrong, and no way to
+        name another organization.
     - name: ProjectAPI
       description: |-
         ProjectAPI manages projects within an organization.
@@ -182,26 +183,23 @@ tags:
         reached what was approved.
     - name: SourceAPI
       description: |-
-        SourceAPI is the system-of-record service for an organization's sources: one
-        upstream location each, with the standing grant that reaches it and the
-        bound on what may enter through it (admiral-knowledge, "a source is one
-        upstream location with a standing credential, and a push to a repository
-        publishes through it", and "a GitHub repository source is reached through
-        the integration or through a credential").
+        SourceAPI manages an organization's sources. A source is one upstream
+        location, such as a git repository, a Helm repository or a registry
+        namespace. It holds the grant that reaches the location, when the location
+        needs one, and `allows`, which bounds what may come in through it. Every
+        component Admiral copies from outside the organization comes in through a
+        source.
 
-        This is the PUBLISHED surface. The organization comes from the token, and
-        the edge forwards each call to the platform plane by field name.
+        The organization comes from the caller's token, so no request names it.
 
-        A source's trigger says who causes a version to exist. REQUEST: a person
-        imports through it, choosing a version, and nothing imports on its own.
-        PUSH: Admiral's GitHub App publishes what the repository's admiral.yaml
-        declares when the repository is pushed. The push itself arrives on the
-        App's webhook stream and is consumed by the platform, so there is no RPC
-        for it here; the import through a REQUEST source is the registry's
-        ImportComponent naming a source and a version.
+        A source's trigger says what causes a version to exist. With REQUEST, a
+        person imports a version through the source with the registry's
+        ImportComponent, and nothing imports on its own. With PUSH, Admiral's
+        GitHub App publishes what the repository's admiral.yaml declares when a
+        listed branch or tag is pushed. A push needs no call to this API.
 
         Nothing on this service returns a credential or a token. A member who
-        imports through a source causes the grant's effects and never sees it.
+        imports through a source uses its grant and never sees it.
 consumes:
     - application/json
 produces:
@@ -1106,15 +1104,47 @@ paths:
     /v1/components/import:
         post:
             summary: |-
-                ImportComponent publishes an artifact the organization does not own: a chart in
-                an HTTP repository or an OCI registry, a module in a module registry, a
-                git repository at a ref, an archive. Admiral fetches it with the
-                credentials named, closes it over what it reaches, scans it, and
-                records the version with provenance saying where it came from. The
-                bytes are a copy: upstream may move the tag and the version does not.
+                ImportComponent publishes an artifact the organization does not own,
+                through one of its sources. The source carries the grant and bounds what
+                may enter, so no request names a credential. Admiral fetches the
+                artifact at the version asked, copies in the remote modules and charts
+                it depends on, scans it, and records the version with IMPORT provenance
+                naming the source. The bytes are a copy: upstream may move the tag and
+                the version does not.
                 The same resolution under the same name is the same version, returned
                 with `unchanged` set.
-            description: 'Scope: `component:publish`'
+            description: |-
+                `name` is the component, always. The import that creates it needs
+                `source_id` and sets the component's origin to that source and
+                artifact. A later import under the same name is a bump: `source_id` and
+                `artifact` may be left empty, and the origin supplies them.
+
+                `version` is an exact version as ListSourceVersions spells it, the
+                keyword `latest`, or a semver range such as `^2`, `~2.39` or
+                `>=2.39 <3`. Admiral resolves a range or `latest` once, against a
+                fresh read of the upstream rather than the cached list
+                ListSourceVersions serves, and only over the versions the source's
+                `allows` permits. It stores the exact version. A range or a keyword
+                never reaches a changeset or an environment pin.
+
+                Any member who can read the source may import a new version of an
+                existing component through its origin, since the caller chooses only
+                which allowed version to take. Creating a component by import is bounded
+                by the source, not by the organization's `component_creation_policy`.
+
+                  - INVALID_ARGUMENT when the import would create the component and
+                    names no `source_id`.
+                  - FAILED_PRECONDITION when the component was published by hand, or
+                    when `source_id` or `artifact` differs from its origin. The message
+                    names SetComponentOrigin, which is how an admin moves the origin.
+                  - FAILED_PRECONDITION when the artifact or the resolved version is
+                    outside the source's `allows`, when the resolved version is
+                    revoked, or when no permitted version matches `version`.
+
+                An archive at a URL is not importable, since an archive has no
+                versions. A git source at a tag covers it.
+
+                Scope: `component:publish`
             operationId: RegistryAPI_ImportComponent
             responses:
                 "200":
@@ -1140,17 +1170,25 @@ paths:
                 the component on first use.
             description: |-
                 The bundle is a gzipped tar of the component root, carried inline and
-                capped at 64 MiB; a fully vendored tree that exceeds it will get a
-                resumable upload path of its own. The server normalizes the bytes
-                (strips `.git`, canonicalizes entry order and timestamps), digests them,
-                runs the publish gate, stores the blob and answers with the version. If
-                the digest already exists under the name, the existing version is
-                returned with `unchanged` set and nothing is written, which is what makes
-                a publish-everything CI recipe safe.
+                capped at 64 MiB. Admiral normalizes the bytes (strips `.git`,
+                canonicalizes entry order and timestamps), digests them, scans them,
+                stores them and answers with the version. If the digest already exists
+                under the name, the existing version is returned with `unchanged` set
+                and nothing is written, which is what makes a publish-everything CI
+                recipe safe.
 
                 Any tags named in the request are set on the resulting version.
                 Repointing a semver tag is refused with FAILED_PRECONDITION and the whole
                 publish fails; the bytes are not kept.
+
+                A publish that creates a component gives it the origin published by
+                hand, and needs the right the organization's
+                `component_creation_policy` names; PERMISSION_DENIED otherwise. A
+                publish to an existing component needs publish rights on it. On a
+                component whose origin is a source, the publish is refused with
+                FAILED_PRECONDITION naming the source: its versions arrive through that
+                source until an admin moves the origin with SetComponentOrigin. A hand
+                publish is checked the same way as an import.
 
                 Scope: `component:publish`
             operationId: RegistryAPI_PublishComponent
@@ -1205,8 +1243,8 @@ paths:
         delete:
             summary: |-
                 DeleteComponent removes a component. FAILED_PRECONDITION while any
-                environment runs one of its versions or an open change set uses it (the
-                message names them). The change sets and runs that used it still read
+                environment runs one of its versions or an open changeset uses it (the
+                message names them). The changesets and runs that used it still read
                 its versions. The name is then free: a later publish under it creates a
                 new component with a new id.
             description: 'Scope: `component:write`'
@@ -1225,6 +1263,41 @@ paths:
                   in: path
                   required: true
                   type: string
+            tags:
+                - RegistryAPI
+    /v1/components/{component_id}/set-origin:
+        post:
+            summary: |-
+                SetComponentOrigin moves where a component's new versions come from: to
+                a source and an artifact in it, or to published by hand. It needs an
+                organization admin; PERMISSION_DENIED otherwise. Every existing version
+                keeps its own provenance, and only the origin of new versions changes.
+                A source origin must name a source of this organization whose `allows`
+                permits the artifact; FAILED_PRECONDITION otherwise, naming which.
+                Admiral records each move with the old and the new origin.
+                Setting the origin the component already has succeeds and changes
+                nothing.
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_SetComponentOrigin
+            responses:
+                "200":
+                    description: A successful response.
+                    schema:
+                        $ref: '#/definitions/v1SetComponentOriginResponse'
+                default:
+                    description: An unexpected error response.
+                    schema:
+                        $ref: '#/definitions/googleRpcStatus'
+            parameters:
+                - name: component_id
+                  in: path
+                  required: true
+                  type: string
+                - name: body
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/RegistryAPISetComponentOriginBody'
             tags:
                 - RegistryAPI
     /v1/components/{component_id}/set-status:
@@ -1364,7 +1437,14 @@ paths:
             summary: |-
                 SetVersionStatus moves a version between PUBLISHED, DEPRECATED and
                 REVOKED, recording why. Any move is allowed, including back to PUBLISHED.
-            description: 'Scope: `component:write`'
+            description: |-
+                Revoking needs the component's owner or an organization admin;
+                PERMISSION_DENIED otherwise. Plan and apply refuse a changeset that
+                newly pins a revoked version, and check nothing else again. An
+                environment already running it keeps running, and a revert to it is
+                still allowed.
+
+                Scope: `component:write`
             operationId: RegistryAPI_SetVersionStatus
             responses:
                 "200":
@@ -1497,6 +1577,8 @@ paths:
             description: |-
                 The `type` and the populated `auth_config` variant must agree.
 
+                Needs an organization admin; PERMISSION_DENIED otherwise.
+
                 Scope: `credential:write`
             operationId: CredentialAPI_CreateCredential
             responses:
@@ -1524,7 +1606,10 @@ paths:
                 hosts, or secret. The name and type are immutable. A new secret
                 replaces the old one whole; a rotation is an update with `auth_config`
                 in the mask.
-            description: 'Scope: `credential:write`'
+            description: |-
+                Needs an organization admin; PERMISSION_DENIED otherwise.
+
+                Scope: `credential:write`
             operationId: CredentialAPI_UpdateCredential
             responses:
                 "200":
@@ -1572,11 +1657,14 @@ paths:
                 - CredentialAPI
         delete:
             summary: |-
-                DeleteCredential removes a credential and destroys its secret. Nothing
-                stores a reference to it: versions already published are unaffected,
-                their provenance keeps the credential's id and name as history, and the
-                next pull that names it fails naming the missing credential.
-            description: 'Scope: `credential:write`'
+                DeleteCredential removes a credential and destroys its secret. Versions
+                already published are unaffected, and their provenance keeps the
+                credential's id and name as history. A source that held it moves to
+                NEEDS_ATTENTION.
+            description: |-
+                Needs an organization admin; PERMISSION_DENIED otherwise.
+
+                Scope: `credential:write`
             operationId: CredentialAPI_DeleteCredential
             responses:
                 "200":
@@ -2382,9 +2470,11 @@ paths:
         patch:
             summary: UpdateOrganization updates the caller's own organization's mutable settings.
             description: |-
-                Only `display_name` is mutable. `slug` is part of the account's identity
-                and `status` is set by lifecycle operations, neither of which an organization
-                performs on itself. The logo is set in the console.
+                `display_name`, `source_creation_policy` and `component_creation_policy`
+                are mutable. `slug` is part of the account's identity and `status` is
+                set by lifecycle operations, neither of which an organization performs
+                on itself. The logo is set in the console. Changing either creation
+                policy needs an organization admin; PERMISSION_DENIED otherwise.
 
                 Scope: `organization:write`
             operationId: OrganizationAPI_UpdateOrganization
@@ -2960,12 +3050,23 @@ paths:
                 - SourceAPI
         post:
             summary: |-
-                CreateSource records a source. Creating one is the curated act: it is
-                where the location, the grant and `allows` are chosen, and no second
-                endorsement exists. The grant must reach the location, which the
-                platform checks differently per arm:
+                CreateSource records a source. Creating a source is the approval: it
+                chooses the location, the grant and `allows`, and nothing that comes in
+                through the source is approved a second time.
             description: |-
-                - An integration grant is checked here, with no network call. The
+                Creating a source needs the right the organization's
+                `source_creation_policy` names: admins by default, or every member.
+                Setting a grant (`credential_id` or `integration_id`) needs an
+                organization admin, whoever creates the source. PERMISSION_DENIED names
+                who can. A source on a public upstream needs no grant.
+
+                Every way a component comes in (creating a source, an import, a GitHub
+                push, a hand publish) is checked the same way, against the source's
+                `allows`, revoked versions and the organization's creation policies. A
+                grant, when set, must reach the location. Admiral checks that
+                differently for each kind of grant:
+
+                  - An integration grant is checked here, with no network call. The
                     integration must be a CONNECTED GitHub integration of this organization
                     and the location must be a repository its installation reaches:
                     under the installation's account, and in its repository list when
@@ -3000,14 +3101,20 @@ paths:
     /v1/sources/{source.id}:
         patch:
             summary: |-
-                UpdateSource changes what may change: the description, the grant, the
-                trigger, `allows` and the settings. The kind and the location are
-                immutable, because a component records the source and path it came
-                from, and moving a source would rewrite that lineage; make a new source
-                instead. A changed grant is checked as CreateSource checks it.
-                Tightening `allows` never touches a running environment, since applied
-                bytes are frozen; it blocks new imports and new revisions.
-            description: 'Scope: `source:write`'
+                UpdateSource changes the description, the grant, the trigger, `allows`
+                and the settings. The kind and the location are immutable: a component's
+                origin and every version's provenance name the source, so a source
+                always means one location. Another location is another source.
+            description: |-
+                Updating a source needs the right `source_creation_policy` names, and an
+                organization admin when the source holds a grant or the update sets one.
+                PERMISSION_DENIED names who can. A new grant is checked as CreateSource
+                checks it.
+
+                Tightening `allows` never touches a running environment, which runs its
+                own stored copy; it bounds new imports and new pushes only.
+
+                Scope: `source:write`
             operationId: SourceAPI_UpdateSource
             responses:
                 "200":
@@ -3053,9 +3160,10 @@ paths:
                 - SourceAPI
         delete:
             summary: |-
-                DeleteSource removes a source. Components that came through it keep
-                their versions and their provenance; they can no longer gain versions
-                through it. A PUSH source stops publishing at once.
+                DeleteSource removes a source. FAILED_PRECONDITION while any
+                component's origin names it, listing those components; move each with
+                SetComponentOrigin or delete it first. Versions that came through the
+                source keep their provenance. A PUSH source stops publishing at once.
             description: 'Scope: `source:write`'
             operationId: SourceAPI_DeleteSource
             responses:
@@ -3082,8 +3190,8 @@ paths:
                 registry's namespace. A container registry does not list, and a git
                 repository's artifacts are paths, so for KIND_OCI_REGISTRY and KIND_GIT
                 the answer is FAILED_PRECONDITION and the caller names the artifact.
-                The list is bounded by `allows`; what the upstream has beyond it is
-                not shown.
+                The list is bounded by the name patterns in `allows`; what the
+                upstream has beyond them is not shown.
             description: 'Scope: `source:read`'
             operationId: SourceAPI_ListSourceArtifacts
             responses:
@@ -3121,6 +3229,9 @@ paths:
                 is ordered when the protocol orders it, a tag or a registry version; a
                 branch is a moving head and carries the commit it points at.
             description: |-
+                Only the versions `allows` permits are listed: an entry with a version
+                range hides the artifact's versions outside it.
+
                 FAILED_PRECONDITION when the artifact is outside `allows` or the grant
                 no longer reaches the source.
 
@@ -3143,8 +3254,9 @@ paths:
                 - name: artifact
                   description: |-
                     The artifact whose versions to list, as `allows` names it: a chart
-                    name, `name/provider`, a name under the namespace. Empty for a git
-                    source, whose versions are the repository's tags and branches.
+                    name, `name/provider`, a name under the namespace, a path in a git
+                    repository. For a git source with no `tag_template`, every artifact's
+                    versions are the repository's tags and branches, so it may be empty.
                   in: query
                   required: false
                   type: string
@@ -3713,17 +3825,18 @@ definitions:
                         items:
                             type: string
                         description: |-
-                            Hosts this credential may be presented to, as a guard: empty means any
-                            host its type fits; set means the platform refuses to present it
-                            anywhere else, whatever it is attached to. Hostnames, optionally with
-                            a port: `github.acme.example`, `harbor.acme.example:8443`. No scheme,
-                            no path.
+                            Hosts this credential may be presented to, as a guard: set means
+                            Admiral refuses to present it anywhere else. Empty, on a credential a
+                            source holds, means that source's host and nothing more. It is checked
+                            on every fetch, redirects and transitive fetches included. Hostnames,
+                            optionally with a port: `github.acme.example`,
+                            `harbor.acme.example:8443`. No scheme, no path.
                     last_used_at:
                         type: string
                         format: date-time
                         description: |-
-                            When a publish last decrypted this credential to present to a host,
-                            whether or not the host accepted it. Updated at most every few minutes.
+                            When Admiral last presented this credential to a host, whether or not
+                            the host accepted it. Updated at most every few minutes.
                             Absent if it has never been used.
                         readOnly: true
                 description: |-
@@ -3925,7 +4038,7 @@ definitions:
             PullRequestComment is what the App's one comment on a pull request of
             this repository carries. The check run is posted whatever this says.
 
-             - PULL_REQUEST_COMMENT_UNSPECIFIED: SUMMARY.
+             - PULL_REQUEST_COMMENT_UNSPECIFIED: Unset, which means SUMMARY.
              - PULL_REQUEST_COMMENT_SUMMARY: Counts per component, with the resources listed only where a plan
             failed, destroys or replaces.
              - PULL_REQUEST_COMMENT_FULL: Every resource with its action.
@@ -3956,96 +4069,6 @@ definitions:
             - PHASE_POST_APPLY
         default: PHASE_UNSPECIFIED
         description: Phase is when in a Terraform job the hook ran.
-    ImportSourceArchive:
-        type: object
-        properties:
-            url:
-                type: string
-        description: An archive at a URL, unpacked by its extension.
-        required:
-            - url
-    ImportSourceFromSource:
-        type: object
-        properties:
-            source_id:
-                type: string
-            artifact:
-                type: string
-            version:
-                type: string
-        description: |-
-            FromSource is an artifact reached through one of the organization's
-            sources, under the source's own grant, and bounded by its `allows`. No
-            credential rides the request: picking the source is picking the
-            credential. The version is exact, spelled as ListSourceVersions returns
-            it, an ordered version or a branch name; no keyword, range or
-            constraint is accepted, so `latest` imports a tag literally named
-            latest, and the server fills the provenance from what the source
-            resolved. For a git source the artifact is a path in the repository,
-            empty for the root; for a Helm repository a chart name; for a registry
-            a name under the namespace.
-        required:
-            - source_id
-            - version
-    ImportSourceGitTree:
-        type: object
-        properties:
-            url:
-                type: string
-                description: '`https://github.com/acme/infra.git`, `ssh://git@github.com/acme/infra.git`.'
-            ref:
-                type: string
-                description: A branch, tag or commit. Empty is the default branch.
-            path:
-                type: string
-                description: A directory within the repository. Empty is the root.
-        description: A git repository at a ref, optionally a directory of it.
-        required:
-            - url
-    ImportSourceHelmChart:
-        type: object
-        properties:
-            repository:
-                type: string
-            chart:
-                type: string
-            version:
-                type: string
-        description: |-
-            A chart in an HTTP repository: the repository URL, the chart's name in
-            its index, and an exact version.
-        required:
-            - repository
-            - chart
-            - version
-    ImportSourceOCIChart:
-        type: object
-        properties:
-            reference:
-                type: string
-            version:
-                type: string
-        description: |-
-            A chart in an OCI registry: `oci://ghcr.io/argoproj/argo-helm/argo-cd`
-            at a version, which is its tag.
-        required:
-            - reference
-            - version
-    ImportSourceRegistryModule:
-        type: object
-        properties:
-            address:
-                type: string
-            version:
-                type: string
-        description: |-
-            A module in a module registry: the address as a module call would
-            write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
-            host-qualified, optionally `//subdir`) and an exact version. A range is
-            what a Source tracks, not what an import takes.
-        required:
-            - address
-            - version
     InvitationAPIRevokeInvitationBody:
         type: object
         description: RevokeInvitationRequest names one invitation in the caller's organization.
@@ -4130,6 +4153,16 @@ definitions:
         description: UpdateProjectRequest contains the project fields to update.
         required:
             - project
+    RegistryAPISetComponentOriginBody:
+        type: object
+        properties:
+            origin:
+                $ref: '#/definitions/v1ComponentOrigin'
+        description: |-
+            SetComponentOriginRequest names the component and where its new versions
+            come from.
+        required:
+            - origin
     RegistryAPISetComponentStatusBody:
         type: object
         properties:
@@ -4178,10 +4211,9 @@ definitions:
                     name:
                         type: string
                         description: |-
-                            Unique within the organization, never changed: `cloud-sql`. Team grouping,
-                            when it lands, is a `team/` segment of the name (`payments/cloud-sql`);
-                            moving a component means publishing under the new name and deprecating
-                            the old one with it as the successor.
+                            Unique within the organization, never changed: `cloud-sql`. Renaming a
+                            component means publishing under the new name and deprecating the old
+                            one with it as the successor.
                         readOnly: true
                     description:
                         type: string
@@ -4192,6 +4224,13 @@ definitions:
                         description: |-
                             Key-value metadata for filtering (e.g. `{"team": "payments",
                             "runtime": "terraform"}`), the same labels every Admiral resource carries.
+                    origin:
+                        $ref: '#/definitions/v1ComponentOrigin'
+                        description: |-
+                            Where the component's new versions come from. Set when the component
+                            is created, and every new version must come from it. Only
+                            SetComponentOrigin moves it.
+                        readOnly: true
                     tags:
                         type: array
                         items:
@@ -4333,7 +4372,11 @@ definitions:
                             The narrowest thing the protocol addresses: one repository, one Helm
                             repository URL, one registry namespace. Never a bare host, and never a
                             whole GitHub organization. Picking the source is picking the grant, so
-                            the location is what bounds the grant's reach.
+                            the location is what bounds the grant's reach: no source presents its
+                            grant outside its own location. When an artifact depends on another
+                            private location, Admiral fetches the dependency with the grant of the
+                            source whose location covers it, within that source's `allows`, and
+                            with no grant when no source covers it.
                     credential_id:
                         type: string
                     integration_id:
@@ -4345,17 +4388,31 @@ definitions:
                         items:
                             type: string
                         description: |-
-                            What may enter through the source: artifact names, exact or with a
-                            trailing `*`. For a git source an artifact is a path in the repository;
-                            for a Helm repository a chart name; for a registry a name under the
-                            namespace. Required and never empty; `*` alone is how a source says
-                            everything. An allow list, enforced on the server at import and at
-                            push, per artifact.
+                            What may enter through the source. Each entry is
+                            `<name pattern>[@<semver range>]`: `argo-rollouts`, `modules/*`, `*`,
+                            `argo-rollouts@>=2.39`, `cert-manager@~1.16`. The name is exact or ends
+                            in `*`. For a git source an artifact is a path in the repository; for a
+                            Helm repository a chart name; for a registry a name under the
+                            namespace.
+
+                            Names match by whole path segments, with `*` only as the last segment,
+                            so `modules/*` admits `modules/network` and never `modules-evil`. The
+                            most specific entry that matches a name decides its versions, so `*`
+                            beside `argo-rollouts@>=2.39` still bounds argo-rollouts to 2.39 and
+                            up. An entry with a range admits only ordered versions inside it, so a
+                            branch or a commit needs an entry with no range. A range excludes
+                            pre-releases unless it names one.
+
+                            Required and never empty; `*` alone means everything, so no empty list
+                            stands for it. The Admiral CLI sends `*` when it is left off. An allow
+                            list, enforced by Admiral at import and at push, per artifact and
+                            per version: a version outside an entry's range is refused as an
+                            artifact outside `allows` is. Plan and apply do not check it again.
                     settings:
                         $ref: '#/definitions/v1SourceSettings'
                         description: |-
-                            The block for `kind`, where the kind has one. Only git has settings
-                            today, and only a push source needs them.
+                            The block for `kind`, where the kind has one. Only git has settings, and
+                            only a push source needs them.
                     status:
                         $ref: '#/definitions/v1SourceStatus'
                         readOnly: true
@@ -4464,7 +4521,7 @@ definitions:
             path:
                 type: string
                 description: Where in the bundle, when it applies.
-        description: Finding is one thing the publish gate noticed.
+        description: Finding is one thing the checks at publish noticed.
     googleRpcStatus:
         type: object
         properties:
@@ -4492,6 +4549,22 @@ definitions:
             display_name:
                 type: string
                 description: Human-readable name.
+            source_creation_policy:
+                $ref: '#/definitions/v1CreationPolicy'
+                description: |-
+                    Who may create a source. It gates CreateSource. A read returns the
+                    effective value, ADMINS unless an admin chose MEMBERS, and never
+                    UNSPECIFIED; UNSPECIFIED is accepted on input only and means ADMINS.
+                    Changing it needs an organization admin.
+            component_creation_policy:
+                $ref: '#/definitions/v1CreationPolicy'
+                description: |-
+                    Who may create a component by publishing a new name by hand. It gates a
+                    PublishComponent that creates a component, and not an import, which a
+                    source already bounds. A read returns the effective value, MEMBERS
+                    unless an admin chose ADMINS, and never UNSPECIFIED; UNSPECIFIED is
+                    accepted on input only and means MEMBERS. Changing it needs an
+                    organization admin.
             status:
                 $ref: '#/definitions/v1OrganizationStatus'
                 description: Lifecycle state.
@@ -4668,7 +4741,11 @@ definitions:
                     The narrowest thing the protocol addresses: one repository, one Helm
                     repository URL, one registry namespace. Never a bare host, and never a
                     whole GitHub organization. Picking the source is picking the grant, so
-                    the location is what bounds the grant's reach.
+                    the location is what bounds the grant's reach: no source presents its
+                    grant outside its own location. When an artifact depends on another
+                    private location, Admiral fetches the dependency with the grant of the
+                    source whose location covers it, within that source's `allows`, and
+                    with no grant when no source covers it.
             credential_id:
                 type: string
             integration_id:
@@ -4680,17 +4757,31 @@ definitions:
                 items:
                     type: string
                 description: |-
-                    What may enter through the source: artifact names, exact or with a
-                    trailing `*`. For a git source an artifact is a path in the repository;
-                    for a Helm repository a chart name; for a registry a name under the
-                    namespace. Required and never empty; `*` alone is how a source says
-                    everything. An allow list, enforced on the server at import and at
-                    push, per artifact.
+                    What may enter through the source. Each entry is
+                    `<name pattern>[@<semver range>]`: `argo-rollouts`, `modules/*`, `*`,
+                    `argo-rollouts@>=2.39`, `cert-manager@~1.16`. The name is exact or ends
+                    in `*`. For a git source an artifact is a path in the repository; for a
+                    Helm repository a chart name; for a registry a name under the
+                    namespace.
+
+                    Names match by whole path segments, with `*` only as the last segment,
+                    so `modules/*` admits `modules/network` and never `modules-evil`. The
+                    most specific entry that matches a name decides its versions, so `*`
+                    beside `argo-rollouts@>=2.39` still bounds argo-rollouts to 2.39 and
+                    up. An entry with a range admits only ordered versions inside it, so a
+                    branch or a commit needs an entry with no range. A range excludes
+                    pre-releases unless it names one.
+
+                    Required and never empty; `*` alone means everything, so no empty list
+                    stands for it. The Admiral CLI sends `*` when it is left off. An allow
+                    list, enforced by Admiral at import and at push, per artifact and
+                    per version: a version outside an entry's range is refused as an
+                    artifact outside `allows` is. Plan and apply do not check it again.
             settings:
                 $ref: '#/definitions/v1SourceSettings'
                 description: |-
-                    The block for `kind`, where the kind has one. Only git has settings
-                    today, and only a push source needs them.
+                    The block for `kind`, where the kind has one. Only git has settings, and
+                    only a push source needs them.
             status:
                 $ref: '#/definitions/v1SourceStatus'
                 readOnly: true
@@ -5264,10 +5355,9 @@ definitions:
             name:
                 type: string
                 description: |-
-                    Unique within the organization, never changed: `cloud-sql`. Team grouping,
-                    when it lands, is a `team/` segment of the name (`payments/cloud-sql`);
-                    moving a component means publishing under the new name and deprecating
-                    the old one with it as the successor.
+                    Unique within the organization, never changed: `cloud-sql`. Renaming a
+                    component means publishing under the new name and deprecating the old
+                    one with it as the successor.
                 readOnly: true
             description:
                 type: string
@@ -5278,6 +5368,13 @@ definitions:
                 description: |-
                     Key-value metadata for filtering (e.g. `{"team": "payments",
                     "runtime": "terraform"}`), the same labels every Admiral resource carries.
+            origin:
+                $ref: '#/definitions/v1ComponentOrigin'
+                description: |-
+                    Where the component's new versions come from. Set when the component
+                    is created, and every new version must come from it. Only
+                    SetComponentOrigin moves it.
+                readOnly: true
             tags:
                 type: array
                 items:
@@ -5394,6 +5491,18 @@ definitions:
             ComponentKind is what a version's bundle is, detected by inspection at
             publish: a Chart.yaml means HELM, .tf files mean TERRAFORM, anything else
             that is Kubernetes YAML means MANIFESTS.
+    v1ComponentOrigin:
+        type: object
+        properties:
+            source:
+                $ref: '#/definitions/v1SourceOrigin'
+            published:
+                $ref: '#/definitions/v1PublishedOrigin'
+        description: |-
+            ComponentOrigin is where a component's new versions come from. The
+            publish or import that creates the component sets it, and an organization
+            admin moves it with SetComponentOrigin. Each version keeps its own
+            provenance whatever the origin later becomes.
     v1ComponentOutput:
         type: object
         properties:
@@ -5551,9 +5660,8 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1ContractOutput'
         description: |-
-            Contract is what a bundle takes and gives. The shape here is what static
-            inspection can produce from any Terraform module or Helm chart; the curated
-            format adds to it without removing anything.
+            Contract is what a bundle takes and gives, as static inspection reads it
+            from a Terraform module or a Helm chart.
     v1ContractInput:
         type: object
         properties:
@@ -5622,7 +5730,7 @@ definitions:
         description: |-
             ContractValidation is one validation block on a Terraform variable, as
             written. Evaluating the condition needs the Terraform language runtime,
-            which the registry does not run.
+            which Admiral does not run at publish.
     v1CreateAgentRequest:
         type: object
         properties:
@@ -5834,8 +5942,9 @@ definitions:
             source:
                 $ref: '#/definitions/sourceV1Source'
                 description: |-
-                    The source to create: `name`, `kind`, `location`, one grant, `trigger`,
-                    `allows`, and `settings` where the kind and trigger need them.
+                    The source to create: `name`, `kind`, `location`, at most one grant,
+                    `trigger`, `allows`, and `settings` where the kind and trigger need
+                    them.
         required:
             - source
     v1CreateSourceResponse:
@@ -5843,6 +5952,20 @@ definitions:
         properties:
             source:
                 $ref: '#/definitions/sourceV1Source'
+    v1CreationPolicy:
+        type: string
+        enum:
+            - CREATION_POLICY_UNSPECIFIED
+            - CREATION_POLICY_ADMINS
+            - CREATION_POLICY_MEMBERS
+        default: CREATION_POLICY_UNSPECIFIED
+        description: |-
+            CreationPolicy is who in an organization may create a kind of resource.
+
+             - CREATION_POLICY_UNSPECIFIED: Accepted on input only, meaning the default of the field that holds
+            it. Never returned.
+             - CREATION_POLICY_ADMINS: Organization admins only.
+             - CREATION_POLICY_MEMBERS: Every member.
     v1Credential:
         type: object
         properties:
@@ -5880,17 +6003,18 @@ definitions:
                 items:
                     type: string
                 description: |-
-                    Hosts this credential may be presented to, as a guard: empty means any
-                    host its type fits; set means the platform refuses to present it
-                    anywhere else, whatever it is attached to. Hostnames, optionally with
-                    a port: `github.acme.example`, `harbor.acme.example:8443`. No scheme,
-                    no path.
+                    Hosts this credential may be presented to, as a guard: set means
+                    Admiral refuses to present it anywhere else. Empty, on a credential a
+                    source holds, means that source's host and nothing more. It is checked
+                    on every fetch, redirects and transitive fetches included. Hostnames,
+                    optionally with a port: `github.acme.example`,
+                    `harbor.acme.example:8443`. No scheme, no path.
             last_used_at:
                 type: string
                 format: date-time
                 description: |-
-                    When a publish last decrypted this credential to present to a host,
-                    whether or not the host accepted it. Updated at most every few minutes.
+                    When Admiral last presented this credential to a host, whether or not
+                    the host accepted it. Updated at most every few minutes.
                     Absent if it has never been used.
                 readOnly: true
         description: |-
@@ -5907,18 +6031,18 @@ definitions:
         default: TYPE_UNSPECIFIED
         description: |-
             Type is the protocol family a credential is presented as. Each
-            fetch takes the families its protocol speaks: a module registry, an
-            archive and an OCI token take a bearer token; git over https, a Helm
-            repository and an OCI login take basic auth; git over ssh takes a key.
+            fetch takes the families its protocol speaks: a module registry and an
+            OCI token take a bearer token; git over https, a Helm repository and an
+            OCI login take basic auth; git over ssh takes a key.
 
              - TYPE_SSH_KEY: An SSH private key, for git over ssh.
              - TYPE_BASIC_AUTH: A username and password: git over https, a Helm repository, an OCI
-            registry, an authenticated archive.
+            registry.
              - TYPE_BEARER_TOKEN: One token. Presented as `Authorization: Bearer` to a module registry,
-            a Helm repository, an OCI registry or an archive host, and as the
-            basic-auth password with the `x-access-token` username to git over
-            https, which is how GitHub and GitLab take a token.
-             - TYPE_GITHUB_APP: A GitHub App installation. Not a secret that is presented: the platform
+            a Helm repository or an OCI registry, and as the basic-auth password
+            with the `x-access-token` username to git over https, which is how
+            GitHub and GitLab take a token.
+             - TYPE_GITHUB_APP: A GitHub App installation. Not a secret that is presented: Admiral
             mints a short-lived installation token from the app's private key at
             fetch time and presents that as a bearer token. Works for github.com,
             GitHub Enterprise Cloud and GitHub Enterprise Server.
@@ -5970,8 +6094,8 @@ definitions:
                 type: string
                 description: 'What it resolved to: an exact version or commit.'
         description: |-
-            Dependency is one remote module or chart the closure step resolved and
-            copied into the bundle.
+            Dependency is one remote module or chart Admiral resolved and copied into
+            the bundle.
     v1Desired:
         type: object
         properties:
@@ -6358,7 +6482,7 @@ definitions:
             - FINDING_SEVERITY_HIGH
             - FINDING_SEVERITY_CRITICAL
         default: FINDING_SEVERITY_UNSPECIFIED
-        description: FindingSeverity ranks what the publish gate found.
+        description: FindingSeverity ranks what the checks at publish found.
     v1FinishJobResponse:
         type: object
         properties:
@@ -6602,7 +6726,7 @@ definitions:
                     `https://github.acme.example/api/v3`. Empty is `https://api.github.com`.
         description: |-
             GitHubAppAuth identifies a GitHub App installation and holds the app's
-            private key, from which the platform mints installation tokens.
+            private key, from which Admiral mints installation tokens.
     v1GitHubInstallCallback:
         type: object
         properties:
@@ -6666,17 +6790,47 @@ definitions:
                     type: string
                 description: |-
                     Branches whose pushes publish, exact or with a trailing `*`; `*` alone
-                    is every branch. Required on a push source and ignored on a request
-                    source. Every publish tags the version with the branch name, floating,
-                    and `sha-<short>`.
+                    is every branch. Ignored on a request source. Every publish tags the
+                    version with the branch name, floating, and `sha-<short>`.
+            tags:
+                type: array
+                items:
+                    type: string
+                description: |-
+                    Tags whose pushes publish, exact or with a trailing `*`, such as `v*`.
+                    A push of a matching tag publishes what admiral.yaml declares at the
+                    tagged commit, tags the version `sha-<short>`, floating, and records
+                    the full git tag in the version's provenance `ref`. Without a
+                    `tag_template`, the git tag's own name is also the registry tag when it
+                    is a semver name the registry can hold, such as `v1.4.0`, and then it
+                    is immutable and a range or `latest` can match it. Any other name still
+                    publishes, carrying only `sha-<short>`. With a template, the registry
+                    tag is the version the template extracts. A tag that matches nothing
+                    here is ignored, and empty means no tag push publishes. When the source
+                    also names branches, a tag publishes only if its commit is reachable
+                    from a branch listed there. Ignored on a request source.
+            tag_template:
+                type: string
+                description: |-
+                    How a tag names an artifact's version in a repository holding several,
+                    such as `{artifact}/v{version}` or `{name}-v{version}`. With it, an
+                    artifact's versions are the tags that fit, with the template stripped,
+                    and a tag push publishes only the component the tag names. The version
+                    is tagged with what the template extracts, `1.4.0` from
+                    `modules/network/v1.4.0` under `{artifact}/v{version}`, which makes it
+                    a semver tag and immutable; the full git tag stays in the version's
+                    provenance `ref`. Empty means every tag of the repository is a version
+                    of every artifact in it.
             pull_request_comment:
                 $ref: '#/definitions/GitSourceSettingsPullRequestComment'
                 description: |-
                     What the comment on a pull request carries; unset is SUMMARY. Read on
                     a push source only.
         description: |-
-            GitSourceSettings is what a git source adds. Today that is only which
-            branches a push source listens to.
+            GitSourceSettings is what a git source adds: which branches and tags a
+            push source publishes on, how a tag names an artifact's version, and what
+            the App comments on a pull request. A push source names at least one
+            branch or tag.
     v1GrantAgentUseResponse:
         type: object
     v1HeartbeatRequest:
@@ -6775,19 +6929,30 @@ definitions:
         properties:
             name:
                 type: string
+                description: The component to create or bump. Required on every import.
+            source_id:
+                type: string
                 description: |-
-                    Empty means the artifact's own name: the chart's, the module's, the
-                    repository's or directory's.
-            source:
-                $ref: '#/definitions/v1ImportSource'
-            credential_ids:
-                type: array
-                items:
-                    type: string
+                    The source to import through, `src-`. Required when the import creates
+                    the component. Optional on a bump, where the component's origin names
+                    the source; when set it must match the origin.
+            artifact:
+                type: string
                 description: |-
-                    The credentials this import may present, chosen by the caller. Each is
-                    presented only where its type fits and its `allowed_hosts` permit. A
-                    fetch that reaches a host none of them covers fails naming the host.
+                    The artifact in the source: a chart name, `name/provider`, a name under
+                    an OCI namespace, or a path in a git repository. Optional. On a bump the
+                    component's origin names it. On a create, empty means `name` for a Helm
+                    repository, an OCI registry or a Terraform registry, and the repository
+                    root for a git source.
+            version:
+                type: string
+                description: |-
+                    The version to import: an exact version as ListSourceVersions spells
+                    it (`2.39.4`, `v1.16.2`, `main`), the keyword `latest` (the highest
+                    ordered version `allows` permits, pre-releases excluded), or a semver
+                    range (`^2`, `~2.39`, `>=2.39 <3`). A range or `latest` resolves once,
+                    against a fresh read of the upstream, never the discovery cache; the
+                    version records the exact result.
             tags:
                 type: array
                 items:
@@ -6809,10 +6974,12 @@ definitions:
                     laid over the artifact's own defaults (a chart's values.yaml, a module's
                     variable defaults) before any environment's values. Stored with the
                     artifact as one version under one digest, so changing them is a new
-                    version, which environments move to like any other. Empty means the
-                    artifact's own defaults.
+                    version, which environments move to like any other. On a create, empty
+                    means the artifact's own defaults. On a bump, empty carries the previous
+                    version's baseline forward, and a value replaces it.
         required:
-            - source
+            - name
+            - version
     v1ImportComponentResponse:
         type: object
         properties:
@@ -6823,26 +6990,12 @@ definitions:
             unchanged:
                 type: boolean
                 description: The resolution was already published under this name; nothing was written.
-    v1ImportSource:
-        type: object
-        properties:
-            oci_chart:
-                $ref: '#/definitions/ImportSourceOCIChart'
-            helm_chart:
-                $ref: '#/definitions/ImportSourceHelmChart'
-            registry_module:
-                $ref: '#/definitions/ImportSourceRegistryModule'
-            git_tree:
-                $ref: '#/definitions/ImportSourceGitTree'
-            archive:
-                $ref: '#/definitions/ImportSourceArchive'
-            from_source:
-                $ref: '#/definitions/ImportSourceFromSource'
-        description: |-
-            ImportSource names an artifact to import. One variant. The kind of the
-            resulting component follows from it: a chart from OCI or a Helm
-            repository, a module from a module registry, whatever inspection finds in
-            a git tree or an archive.
+            resolved_from:
+                type: string
+                description: |-
+                    The version as the request asked for it, set only when it was `latest`
+                    or a range. The exact version it resolved to is the version's
+                    provenance `ref`.
     v1InfraAgentSettings:
         type: object
         properties:
@@ -7987,7 +8140,9 @@ definitions:
                     reported it; empty when it named no remote.
             ref:
                 type: string
-                description: The ref that was asked for (tag, branch, chart version), when any.
+                description: |-
+                    The ref imported (tag, branch, chart version), when any. For an import
+                    that asked for `latest` or a range, the exact version it resolved to.
             commit:
                 type: string
                 description: 'What the ref resolved to: a commit SHA, or the exact chart version.'
@@ -8002,17 +8157,18 @@ definitions:
                     type: object
                     $ref: '#/definitions/v1Dependency'
                 description: |-
-                    Every remote module or chart the closure step copied into the bundle,
-                    at what it resolved to.
+                    Every remote module or chart Admiral copied into the bundle, at what it
+                    resolved to.
             credentials:
                 type: array
                 items:
                     type: object
                     $ref: '#/definitions/v1PresentedCredential'
                 description: |-
-                    The credentials the platform presented while fetching, for IMPORT: which
-                    secret reached which hosts. Lineage, not a grant; a later import attaches
-                    its own. Set by the server; ignored on a publish request.
+                    The credentials Admiral presented while fetching, for IMPORT: which
+                    secret reached which hosts. A record, not a grant; a later import
+                    presents what its source holds then. Set by Admiral; ignored on a
+                    publish request.
                 readOnly: true
             commit_message:
                 type: string
@@ -8028,9 +8184,9 @@ definitions:
             source_id:
                 type: string
                 description: |-
-                    The source the version came through, set by the server on an import
-                    through a source and on a push. Empty for a CLI publish or an import by
-                    raw coordinates.
+                    The source the version came through, set by Admiral on an import and
+                    on a push through a GitHub push source. Empty only for a version
+                    published by hand.
                 readOnly: true
         description: |-
             Provenance is where a version's bytes came from: the audit trail behind
@@ -8043,15 +8199,16 @@ definitions:
             - KIND_IMPORT
         default: KIND_UNSPECIFIED
         description: |-
-            Kind is the on-ramp a version arrived by: whose code it is and who
-            triggered the publish, not which way the bytes travelled.
+            Kind is how a version arrived: whose code it is and who triggered the
+            publish, not which way the bytes travelled.
 
-             - KIND_PUSH: The organization's own code, published because they pushed it. Today that is
-            the CLI uploading a directory, from CI or a laptop; the repository,
+             - KIND_PUSH: The organization's own code, published because they pushed it: the
+            CLI uploading a directory, from CI or a laptop, or a push to a
+            repository through a push source. For a CLI upload, the repository,
             ref and commit are what the publisher reported.
              - KIND_IMPORT: A copy of an artifact the organization does not own (a chart, a registry
-            module, a git tree, an archive), fetched by Admiral. The upstream
-            identity is recorded; the bytes are frozen here.
+            module, a git tree), fetched by Admiral through a source. The upstream
+            identity is recorded, and Admiral keeps its own copy of the bytes.
     v1PublishComponentRequest:
         type: object
         properties:
@@ -8081,7 +8238,7 @@ definitions:
             provenance:
                 $ref: '#/definitions/v1Provenance'
                 description: |-
-                    What the caller knows about where the bytes came from. The server
+                    What the caller knows about where the bytes came from. Admiral
                     records the kind as PUSH whatever is claimed here; the uri, ref,
                     commit and path are kept as the caller's assertion.
             bundle:
@@ -8105,6 +8262,12 @@ definitions:
                     True when the digest was already published under this name and nothing
                     was written. Tags in the request were still applied.
         description: PublishComponentResponse is the recorded version.
+    v1PublishedOrigin:
+        type: object
+        description: |-
+            PublishedOrigin is a component published by hand: the CLI uploading a
+            directory, from CI or a laptop. ImportComponent is refused on it with
+            FAILED_PRECONDITION. SetComponentOrigin moves it.
     v1RebaseChangeSetResponse:
         type: object
         properties:
@@ -8527,6 +8690,12 @@ definitions:
             it signs in with a token from that issuer carrying that subject, matched
             exactly; the exact match is what secures a shared issuer, which anyone can
             get a token from.
+    v1SetComponentOriginResponse:
+        type: object
+        properties:
+            component:
+                $ref: '#/definitions/v1Component'
+        description: SetComponentOriginResponse contains the component with its new origin.
     v1SetComponentStatusResponse:
         type: object
         properties:
@@ -8663,6 +8832,25 @@ definitions:
             the host and namespace; artifacts are the names under it.
              - KIND_TERRAFORM_REGISTRY: One namespace in a Terraform registry. The location is the host and
             namespace; artifacts are `name/provider`.
+    v1SourceOrigin:
+        type: object
+        properties:
+            source_id:
+                type: string
+            artifact:
+                type: string
+                description: |-
+                    The artifact in the source: a chart name, `name/provider`, a name under
+                    an OCI namespace, or a path in a git repository. Empty is the
+                    repository root.
+        description: |-
+            SourceOrigin is a component whose versions arrive through one source and
+            one artifact in it: an import, or a push to a GitHub repository through a
+            push source. PublishComponent is refused on it with FAILED_PRECONDITION,
+            naming the source. ImportComponent is refused with FAILED_PRECONDITION
+            when it names a different source or artifact. SetComponentOrigin moves it.
+        required:
+            - source_id
     v1SourceSettings:
         type: object
         properties:
@@ -8677,11 +8865,11 @@ definitions:
             - STATUS_NEEDS_ATTENTION
         default: STATUS_UNSPECIFIED
         description: |4-
-             - STATUS_READY: The grant reaches the location as far as the platform knows.
+             - STATUS_READY: The grant reaches the location as far as Admiral knows.
              - STATUS_NEEDS_ATTENTION: The grant no longer reaches the location: the integration is not
             connected or its installation lost the repository, or the credential
             was deleted. `status_reason` says which. The source stays so what
-            came through it keeps its lineage.
+            came through it keeps its provenance.
     v1SourceTrigger:
         type: string
         enum:
@@ -8695,8 +8883,9 @@ definitions:
              - TRIGGER_REQUEST: A person imports through the source, choosing a version. Nothing
             imports on its own.
              - TRIGGER_PUSH: Admiral's GitHub App publishes what the repository's admiral.yaml
-            declares when the repository is pushed. KIND_GIT through an
-            integration only.
+            declares when a branch or a tag the git settings name is pushed. Each
+            push is checked as an import is. KIND_GIT through an integration
+            only.
     v1SourceVersion:
         type: object
         properties:
@@ -8949,7 +9138,8 @@ definitions:
                 type: string
                 description: |-
                     The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Supported fields: `display_name`.
+                    are updated. Supported fields: `display_name`,
+                    `source_creation_policy`, `component_creation_policy`.
         description: UpdateOrganizationRequest updates the caller's own organization, so it names no id.
         required:
             - organization
@@ -9109,7 +9299,7 @@ definitions:
             id:
                 type: string
                 description: |-
-                    `ver-` and twelve base36 characters. A change set holds it beside the
+                    `ver-` and twelve base36 characters. A changeset holds it beside the
                     digest, which is the identity of the bytes.
                 readOnly: true
             component_id:
@@ -9131,8 +9321,8 @@ definitions:
             contract:
                 $ref: '#/definitions/v1Contract'
                 description: |-
-                    The inputs and outputs the bundle exposes. Inferred from the bundle at
-                    publish; curated by a publisher once the contract format lands.
+                    The inputs and outputs the bundle exposes, inferred from the bundle at
+                    publish.
                 readOnly: true
             provenance:
                 $ref: '#/definitions/v1Provenance'
@@ -9144,9 +9334,9 @@ definitions:
                     type: object
                     $ref: '#/definitions/apiRegistryV1Finding'
                 description: |-
-                    What the publish gate found. Informational findings do not block a
-                    publish; a version with findings is published with them attached, and
-                    the findings delta between two versions is what an upgrade review reads.
+                    What the checks at publish found. Informational findings do not block a
+                    publish; a version with findings is published with them attached, so
+                    two versions' findings can be compared before moving between them.
                 readOnly: true
             status:
                 $ref: '#/definitions/v1VersionStatus'
@@ -9230,7 +9420,7 @@ definitions:
         description: |-
             Status is a version's lifecycle. There is no deleted state.
 
-             - STATUS_PUBLISHED: Adoptable: a change set may set it.
+             - STATUS_PUBLISHED: Adoptable: a changeset may set it.
              - STATUS_DEPRECATED: Still adoptable, with a warning; what already runs it warns too.
              - STATUS_REVOKED: Refuses new adoption; what already runs it keeps running with a warning.
     v1Violation:

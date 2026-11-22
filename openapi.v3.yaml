@@ -1028,7 +1028,38 @@ paths:
             tags:
                 - Components
             summary: Import an artifact from a registry, repository or URL
-            description: 'Scope: `component:publish`'
+            description: |-
+                `name` is the component, always. The import that creates it needs
+                 `source_id` and sets the component's origin to that source and
+                 artifact. A later import under the same name is a bump: `source_id` and
+                 `artifact` may be left empty, and the origin supplies them.
+
+                 `version` is an exact version as ListSourceVersions spells it, the
+                 keyword `latest`, or a semver range such as `^2`, `~2.39` or
+                 `>=2.39 <3`. Admiral resolves a range or `latest` once, against a
+                 fresh read of the upstream rather than the cached list
+                 ListSourceVersions serves, and only over the versions the source's
+                 `allows` permits. It stores the exact version. A range or a keyword
+                 never reaches a changeset or an environment pin.
+
+                 Any member who can read the source may import a new version of an
+                 existing component through its origin, since the caller chooses only
+                 which allowed version to take. Creating a component by import is bounded
+                 by the source, not by the organization's `component_creation_policy`.
+
+                   - INVALID_ARGUMENT when the import would create the component and
+                     names no `source_id`.
+                   - FAILED_PRECONDITION when the component was published by hand, or
+                     when `source_id` or `artifact` differs from its origin. The message
+                     names SetComponentOrigin, which is how an admin moves the origin.
+                   - FAILED_PRECONDITION when the artifact or the resolved version is
+                     outside the source's `allows`, when the resolved version is
+                     revoked, or when no permitted version matches `version`.
+
+                 An archive at a URL is not importable, since an archive has no
+                 versions. A git source at a tag covers it.
+
+                 Scope: `component:publish`
             operationId: RegistryAPI_ImportComponent
             requestBody:
                 content:
@@ -1050,17 +1081,25 @@ paths:
             summary: Publish a component version
             description: |-
                 The bundle is a gzipped tar of the component root, carried inline and
-                 capped at 64 MiB; a fully vendored tree that exceeds it will get a
-                 resumable upload path of its own. The server normalizes the bytes
-                 (strips `.git`, canonicalizes entry order and timestamps), digests them,
-                 runs the publish gate, stores the blob and answers with the version. If
-                 the digest already exists under the name, the existing version is
-                 returned with `unchanged` set and nothing is written, which is what makes
-                 a publish-everything CI recipe safe.
+                 capped at 64 MiB. Admiral normalizes the bytes (strips `.git`,
+                 canonicalizes entry order and timestamps), digests them, scans them,
+                 stores them and answers with the version. If the digest already exists
+                 under the name, the existing version is returned with `unchanged` set
+                 and nothing is written, which is what makes a publish-everything CI
+                 recipe safe.
 
                  Any tags named in the request are set on the resulting version.
                  Repointing a semver tag is refused with FAILED_PRECONDITION and the whole
                  publish fails; the bytes are not kept.
+
+                 A publish that creates a component gives it the origin published by
+                 hand, and needs the right the organization's
+                 `component_creation_policy` names; PERMISSION_DENIED otherwise. A
+                 publish to an existing component needs publish rights on it. On a
+                 component whose origin is a source, the publish is refused with
+                 FAILED_PRECONDITION naming the source: its versions arrive through that
+                 source until an admin moves the origin with SetComponentOrigin. A hand
+                 publish is checked the same way as an import.
 
                  Scope: `component:publish`
             operationId: RegistryAPI_PublishComponent
@@ -1143,6 +1182,47 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/admiral.api.registry.v1.DeleteComponentResponse'
+    /v1/components/{component_id}/set-origin:
+        post:
+            tags:
+                - Components
+            summary: Set a component's origin
+            description: 'Scope: `component:write`'
+            operationId: RegistryAPI_SetComponentOrigin
+            parameters:
+                - name: component_id
+                  in: path
+                  description: The component_id path parameter.
+                  required: true
+                  schema:
+                    type: string
+                    title: component_id
+                    pattern: ^cmp-[0-9a-z]+$
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                origin:
+                                    allOf:
+                                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentOrigin'
+                                    title: origin
+                            title: SetComponentOriginRequest
+                            required:
+                                - origin
+                            additionalProperties: false
+                            description: |-
+                                SetComponentOriginRequest names the component and where its new versions
+                                 come from.
+                required: true
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/admiral.api.registry.v1.SetComponentOriginResponse'
     /v1/components/{component_id}/set-status:
         post:
             tags:
@@ -1340,7 +1420,14 @@ paths:
             tags:
                 - Components
             summary: Set a version's status
-            description: 'Scope: `component:write`'
+            description: |-
+                Revoking needs the component's owner or an organization admin;
+                 PERMISSION_DENIED otherwise. Plan and apply refuse a changeset that
+                 newly pins a revoked version, and check nothing else again. An
+                 environment already running it keeps running, and a revert to it is
+                 still allowed.
+
+                 Scope: `component:write`
             operationId: RegistryAPI_SetVersionStatus
             parameters:
                 - name: component_id
@@ -1514,6 +1601,8 @@ paths:
             description: |-
                 The `type` and the populated `auth_config` variant must agree.
 
+                 Needs an organization admin; PERMISSION_DENIED otherwise.
+
                  Scope: `credential:write`
             operationId: CredentialAPI_CreateCredential
             requestBody:
@@ -1534,7 +1623,10 @@ paths:
             tags:
                 - Credentials
             summary: Update a credential
-            description: 'Scope: `credential:write`'
+            description: |-
+                Needs an organization admin; PERMISSION_DENIED otherwise.
+
+                 Scope: `credential:write`
             operationId: CredentialAPI_UpdateCredential
             parameters:
                 - name: credential.id
@@ -1596,7 +1688,10 @@ paths:
             tags:
                 - Credentials
             summary: Delete a credential
-            description: 'Scope: `credential:write`'
+            description: |-
+                Needs an organization admin; PERMISSION_DENIED otherwise.
+
+                 Scope: `credential:write`
             operationId: CredentialAPI_DeleteCredential
             parameters:
                 - name: credential_id
@@ -2452,9 +2547,11 @@ paths:
                 - Organization
             summary: Update the current organization
             description: |-
-                Only `display_name` is mutable. `slug` is part of the account's identity
-                 and `status` is set by lifecycle operations, neither of which an organization
-                 performs on itself. The logo is set in the console.
+                `display_name`, `source_creation_policy` and `component_creation_policy`
+                 are mutable. `slug` is part of the account's identity and `status` is
+                 set by lifecycle operations, neither of which an organization performs
+                 on itself. The logo is set in the console. Changing either creation
+                 policy needs an organization admin; PERMISSION_DENIED otherwise.
 
                  Scope: `organization:write`
             operationId: OrganizationAPI_UpdateOrganization
@@ -3056,7 +3153,19 @@ paths:
                 - Sources
             summary: Create a source
             description: |-
-                - An integration grant is checked here, with no network call. The
+                Creating a source needs the right the organization's
+                 `source_creation_policy` names: admins by default, or every member.
+                 Setting a grant (`credential_id` or `integration_id`) needs an
+                 organization admin, whoever creates the source. PERMISSION_DENIED names
+                 who can. A source on a public upstream needs no grant.
+
+                 Every way a component comes in (creating a source, an import, a GitHub
+                 push, a hand publish) is checked the same way, against the source's
+                 `allows`, revoked versions and the organization's creation policies. A
+                 grant, when set, must reach the location. Admiral checks that
+                 differently for each kind of grant:
+
+                   - An integration grant is checked here, with no network call. The
                      integration must be a CONNECTED GitHub integration of this organization
                      and the location must be a repository its installation reaches:
                      under the installation's account, and in its repository list when
@@ -3089,7 +3198,16 @@ paths:
             tags:
                 - Sources
             summary: Update a source
-            description: 'Scope: `source:write`'
+            description: |-
+                Updating a source needs the right `source_creation_policy` names, and an
+                 organization admin when the source holds a grant or the update sets one.
+                 PERMISSION_DENIED names who can. A new grant is checked as CreateSource
+                 checks it.
+
+                 Tightening `allows` never touches a running environment, which runs its
+                 own stored copy; it bounds new imports and new pushes only.
+
+                 Scope: `source:write`
             operationId: SourceAPI_UpdateSource
             parameters:
                 - name: source.id
@@ -3214,7 +3332,10 @@ paths:
                 - Sources
             summary: Discover versions of an artifact in a source
             description: |-
-                FAILED_PRECONDITION when the artifact is outside `allows` or the grant
+                Only the versions `allows` permits are listed: an entry with a version
+                 range hides the artifact's versions outside it.
+
+                 FAILED_PRECONDITION when the artifact is outside `allows` or the grant
                  no longer reaches the source.
 
                  Scope: `source:read`
@@ -3232,8 +3353,9 @@ paths:
                   in: query
                   description: |-
                     The artifact whose versions to list, as `allows` names it: a chart
-                     name, `name/provider`, a name under the namespace. Empty for a git
-                     source, whose versions are the repository's tags and branches.
+                     name, `name/provider`, a name under the namespace, a path in a git
+                     repository. For a git source with no `tag_template`, every artifact's
+                     versions are the repository's tags and branches, so it may be empty.
                   schema:
                     type: string
                     title: artifact
@@ -7719,18 +7841,19 @@ components:
                     maxItems: 32
                     uniqueItems: true
                     description: |-
-                        Hosts this credential may be presented to, as a guard: empty means any
-                         host its type fits; set means the platform refuses to present it
-                         anywhere else, whatever it is attached to. Hostnames, optionally with
-                         a port: `github.acme.example`, `harbor.acme.example:8443`. No scheme,
-                         no path.
+                        Hosts this credential may be presented to, as a guard: set means
+                         Admiral refuses to present it anywhere else. Empty, on a credential a
+                         source holds, means that source's host and nothing more. It is checked
+                         on every fetch, redirects and transitive fetches included. Hostnames,
+                         optionally with a port: `github.acme.example`,
+                         `harbor.acme.example:8443`. No scheme, no path.
                 last_used_at:
                     allOf:
                         - $ref: '#/components/schemas/google.protobuf.Timestamp'
                     title: last_used_at
                     description: |-
-                        When a publish last decrypted this credential to present to a host,
-                         whether or not the host accepted it. Updated at most every few minutes.
+                        When Admiral last presented this credential to a host, whether or not
+                         the host accepted it. Updated at most every few minutes.
                          Absent if it has never been used.
                     readOnly: true
             title: Credential
@@ -7749,9 +7872,9 @@ components:
                 - TYPE_GITHUB_APP
             description: |-
                 Type is the protocol family a credential is presented as. Each
-                 fetch takes the families its protocol speaks: a module registry, an
-                 archive and an OCI token take a bearer token; git over https, a Helm
-                 repository and an OCI login take basic auth; git over ssh takes a key.
+                 fetch takes the families its protocol speaks: a module registry and an
+                 OCI token take a bearer token; git over https, a Helm repository and an
+                 OCI login take basic auth; git over ssh takes a key.
         admiral.api.credential.v1.DeleteCredentialRequest:
             type: object
             properties:
@@ -7820,7 +7943,7 @@ components:
             additionalProperties: false
             description: |-
                 GitHubAppAuth identifies a GitHub App installation and holds the app's
-                 private key, from which the platform mints installation tokens.
+                 private key, from which Admiral mints installation tokens.
         admiral.api.credential.v1.ListCredentialsRequest:
             type: object
             properties:
@@ -9156,6 +9279,14 @@ components:
             title: RevokeInvitationResponse
             additionalProperties: false
             description: RevokeInvitationResponse carries the invitation as it now stands.
+        admiral.api.organization.v1.CreationPolicy:
+            type: string
+            title: CreationPolicy
+            enum:
+                - CREATION_POLICY_UNSPECIFIED
+                - CREATION_POLICY_ADMINS
+                - CREATION_POLICY_MEMBERS
+            description: CreationPolicy is who in an organization may create a kind of resource.
         admiral.api.organization.v1.GetOrganizationRequest:
             type: object
             title: GetOrganizationRequest
@@ -9189,6 +9320,28 @@ components:
                     title: display_name
                     maxLength: 256
                     description: Human-readable name.
+                source_creation_policy:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.organization.v1.CreationPolicy'
+                    title: source_creation_policy
+                    description: |
+                        Who may create a source. It gates CreateSource. A read returns the
+                         effective value, ADMINS unless an admin chose MEMBERS, and never
+                         UNSPECIFIED; UNSPECIFIED is accepted on input only and means ADMINS.
+                         Changing it needs an organization admin.
+                        enum.defined_only = true
+                component_creation_policy:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.organization.v1.CreationPolicy'
+                    title: component_creation_policy
+                    description: |
+                        Who may create a component by publishing a new name by hand. It gates a
+                         PublishComponent that creates a component, and not an import, which a
+                         source already bounds. A read returns the effective value, MEMBERS
+                         unless an admin chose ADMINS, and never UNSPECIFIED; UNSPECIFIED is
+                         accepted on input only and means MEMBERS. Changing it needs an
+                         organization admin.
+                        enum.defined_only = true
                 status:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.organization.v1.Organization.Status'
@@ -9246,7 +9399,8 @@ components:
                     title: update_mask
                     description: |-
                         The set of fields to update. Optional; if omitted, all populated fields
-                         are updated. Supported fields: `display_name`.
+                         are updated. Supported fields: `display_name`,
+                         `source_creation_policy`, `component_creation_policy`.
             title: UpdateOrganizationRequest
             required:
                 - organization
@@ -9495,10 +9649,9 @@ components:
                     type: string
                     title: name
                     description: |-
-                        Unique within the organization, never changed: `cloud-sql`. Team grouping,
-                         when it lands, is a `team/` segment of the name (`payments/cloud-sql`);
-                         moving a component means publishing under the new name and deprecating
-                         the old one with it as the successor.
+                        Unique within the organization, never changed: `cloud-sql`. Renaming a
+                         component means publishing under the new name and deprecating the old
+                         one with it as the successor.
                     readOnly: true
                 description:
                     type: string
@@ -9515,6 +9668,15 @@ components:
                     description: |-
                         Key-value metadata for filtering (e.g. `{"team": "payments",
                          "runtime": "terraform"}`), the same labels every Admiral resource carries.
+                origin:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentOrigin'
+                    title: origin
+                    description: |-
+                        Where the component's new versions come from. Set when the component
+                         is created, and every new version must come from it. Only
+                         SetComponentOrigin moves it.
+                    readOnly: true
                 tags:
                     type: array
                     items:
@@ -9586,6 +9748,49 @@ components:
                 ComponentKind is what a version's bundle is, detected by inspection at
                  publish: a Chart.yaml means HELM, .tf files mean TERRAFORM, anything else
                  that is Kubernetes YAML means MANIFESTS.
+        admiral.api.registry.v1.ComponentOrigin:
+            type: object
+            allOf:
+                - oneOf:
+                    - required:
+                        - source
+                    - required:
+                        - published
+            anyOf:
+                - type: object
+                  properties:
+                    published:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.PublishedOrigin'
+                        title: published
+                  title: published
+                - type: object
+                  properties:
+                    source:
+                        allOf:
+                            - $ref: '#/components/schemas/admiral.api.registry.v1.SourceOrigin'
+                        title: source
+                  title: source
+            unevaluatedProperties: false
+            not:
+                allOf:
+                    - anyOf:
+                        - required:
+                            - published
+                        - required:
+                            - source
+                    - not:
+                        oneOf:
+                            - required:
+                                - published
+                            - required:
+                                - source
+            title: ComponentOrigin
+            description: |-
+                ComponentOrigin is where a component's new versions come from. The
+                 publish or import that creates the component sets it, and an organization
+                 admin moves it with SetComponentOrigin. Each version keeps its own
+                 provenance whatever the origin later becomes.
         admiral.api.registry.v1.Contract:
             type: object
             properties:
@@ -9602,9 +9807,8 @@ components:
             title: Contract
             additionalProperties: false
             description: |-
-                Contract is what a bundle takes and gives. The shape here is what static
-                 inspection can produce from any Terraform module or Helm chart; the curated
-                 format adds to it without removing anything.
+                Contract is what a bundle takes and gives, as static inspection reads it
+                 from a Terraform module or a Helm chart.
         admiral.api.registry.v1.ContractInput:
             type: object
             properties:
@@ -9699,7 +9903,7 @@ components:
             description: |-
                 ContractValidation is one validation block on a Terraform variable, as
                  written. Evaluating the condition needs the Terraform language runtime,
-                 which the registry does not run.
+                 which Admiral does not run at publish.
         admiral.api.registry.v1.DeleteComponentRequest:
             type: object
             properties:
@@ -9759,8 +9963,8 @@ components:
             title: Dependency
             additionalProperties: false
             description: |-
-                Dependency is one remote module or chart the closure step resolved and
-                 copied into the bundle.
+                Dependency is one remote module or chart Admiral resolved and copied into
+                 the bundle.
         admiral.api.registry.v1.Finding:
             type: object
             properties:
@@ -9787,7 +9991,7 @@ components:
                     description: Where in the bundle, when it applies.
             title: Finding
             additionalProperties: false
-            description: Finding is one thing the publish gate noticed.
+            description: Finding is one thing the checks at publish noticed.
         admiral.api.registry.v1.FindingSeverity:
             type: string
             title: FindingSeverity
@@ -9798,7 +10002,7 @@ components:
                 - FINDING_SEVERITY_MEDIUM
                 - FINDING_SEVERITY_HIGH
                 - FINDING_SEVERITY_CRITICAL
-            description: FindingSeverity ranks what the publish gate found.
+            description: FindingSeverity ranks what the checks at publish found.
         admiral.api.registry.v1.GetComponentRequest:
             type: object
             properties:
@@ -9864,26 +10068,40 @@ components:
                     type: string
                     title: name
                     maxLength: 63
-                    pattern: ^([a-z]([a-z0-9-]{0,61}[a-z0-9])?)?$
+                    minLength: 1
+                    pattern: ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$
+                    description: The component to create or bump. Required on every import.
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
                     description: |-
-                        Empty means the artifact's own name: the chart's, the module's, the
-                         repository's or directory's.
-                source:
-                    allOf:
-                        - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource'
-                    title: source
-                credential_ids:
-                    type: array
-                    items:
-                        type: string
-                        pattern: ^cred-[0-9a-z]+$
-                    title: credential_ids
-                    maxItems: 16
-                    uniqueItems: true
+                        The source to import through, `src-`. Required when the import creates
+                         the component. Optional on a bump, where the component's origin names
+                         the source; when set it must match the origin.
+                artifact:
+                    type: string
+                    title: artifact
+                    maxLength: 256
+                    description: |
+                        The artifact in the source: a chart name, `name/provider`, a name under
+                         an OCI namespace, or a path in a git repository. Optional. On a bump the
+                         component's origin names it. On a create, empty means `name` for a Helm
+                         repository, an OCI registry or a Terraform registry, and the repository
+                         root for a git source.
+                        string.not_contains = ".."
+                version:
+                    type: string
+                    title: version
+                    maxLength: 128
+                    pattern: ^[A-Za-z0-9^~<>=*][A-Za-z0-9._/+^~<>=*,| -]{0,127}$
                     description: |-
-                        The credentials this import may present, chosen by the caller. Each is
-                         presented only where its type fits and its `allowed_hosts` permit. A
-                         fetch that reaches a host none of them covers fails naming the host.
+                        The version to import: an exact version as ListSourceVersions spells
+                         it (`2.39.4`, `v1.16.2`, `main`), the keyword `latest` (the highest
+                         ordered version `allows` permits, pre-releases excluded), or a semver
+                         range (`^2`, `~2.39`, `>=2.39 <3`). A range or `latest` resolves once,
+                         against a fresh read of the upstream, never the discovery cache; the
+                         version records the exact result.
                 tags:
                     type: array
                     items:
@@ -9916,15 +10134,16 @@ components:
                          laid over the artifact's own defaults (a chart's values.yaml, a module's
                          variable defaults) before any environment's values. Stored with the
                          artifact as one version under one digest, so changing them is a new
-                         version, which environments move to like any other. Empty means the
-                         artifact's own defaults.
+                         version, which environments move to like any other. On a create, empty
+                         means the artifact's own defaults. On a bump, empty carries the previous
+                         version's baseline forward, and a value replaces it.
             title: ImportComponentRequest
             required:
-                - source
+                - name
+                - version
             additionalProperties: false
             description: |
                 import_component.name_not_an_id // a component name cannot start with cmp-, which marks an id
-                import_component.source_carries_the_grant // an import through a source names no credentials; the source carries the grant
                 import_component.tags.tag_not_an_id // a tag cannot start with ver-, which marks a version id
         admiral.api.registry.v1.ImportComponentResponse:
             type: object
@@ -9941,229 +10160,15 @@ components:
                     type: boolean
                     title: unchanged
                     description: The resolution was already published under this name; nothing was written.
+                resolved_from:
+                    type: string
+                    title: resolved_from
+                    description: |-
+                        The version as the request asked for it, set only when it was `latest`
+                         or a range. The exact version it resolved to is the version's
+                         provenance `ref`.
             title: ImportComponentResponse
             additionalProperties: false
-        admiral.api.registry.v1.ImportSource:
-            type: object
-            anyOf:
-                - type: object
-                  properties:
-                    archive:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.Archive'
-                        title: archive
-                  title: archive
-                - type: object
-                  properties:
-                    from_source:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.FromSource'
-                        title: from_source
-                  title: from_source
-                - type: object
-                  properties:
-                    git_tree:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.GitTree'
-                        title: git_tree
-                  title: git_tree
-                - type: object
-                  properties:
-                    helm_chart:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.HelmChart'
-                        title: helm_chart
-                  title: helm_chart
-                - type: object
-                  properties:
-                    oci_chart:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.OCIChart'
-                        title: oci_chart
-                  title: oci_chart
-                - type: object
-                  properties:
-                    registry_module:
-                        allOf:
-                            - $ref: '#/components/schemas/admiral.api.registry.v1.ImportSource.RegistryModule'
-                        title: registry_module
-                  title: registry_module
-            unevaluatedProperties: false
-            not:
-                allOf:
-                    - anyOf:
-                        - required:
-                            - archive
-                        - required:
-                            - from_source
-                        - required:
-                            - git_tree
-                        - required:
-                            - helm_chart
-                        - required:
-                            - oci_chart
-                        - required:
-                            - registry_module
-                    - not:
-                        oneOf:
-                            - required:
-                                - archive
-                            - required:
-                                - from_source
-                            - required:
-                                - git_tree
-                            - required:
-                                - helm_chart
-                            - required:
-                                - oci_chart
-                            - required:
-                                - registry_module
-            title: ImportSource
-            description: |-
-                ImportSource names an artifact to import. One variant. The kind of the
-                 resulting component follows from it: a chart from OCI or a Helm
-                 repository, a module from a module registry, whatever inspection finds in
-                 a git tree or an archive.
-        admiral.api.registry.v1.ImportSource.Archive:
-            type: object
-            properties:
-                url:
-                    type: string
-                    title: url
-                    maxLength: 512
-                    format: uri
-            title: Archive
-            required:
-                - url
-            additionalProperties: false
-            description: An archive at a URL, unpacked by its extension.
-        admiral.api.registry.v1.ImportSource.FromSource:
-            type: object
-            properties:
-                source_id:
-                    type: string
-                    title: source_id
-                    pattern: ^src-[0-9a-z]+$
-                artifact:
-                    type: string
-                    title: artifact
-                    maxLength: 256
-                version:
-                    type: string
-                    title: version
-                    pattern: ^[A-Za-z0-9][A-Za-z0-9._/+-]{0,127}$
-            title: FromSource
-            required:
-                - source_id
-                - version
-            additionalProperties: false
-            description: |-
-                FromSource is an artifact reached through one of the organization's
-                 sources, under the source's own grant, and bounded by its `allows`. No
-                 credential rides the request: picking the source is picking the
-                 credential. The version is exact, spelled as ListSourceVersions returns
-                 it, an ordered version or a branch name; no keyword, range or
-                 constraint is accepted, so `latest` imports a tag literally named
-                 latest, and the server fills the provenance from what the source
-                 resolved. For a git source the artifact is a path in the repository,
-                 empty for the root; for a Helm repository a chart name; for a registry
-                 a name under the namespace.
-        admiral.api.registry.v1.ImportSource.GitTree:
-            type: object
-            properties:
-                url:
-                    type: string
-                    title: url
-                    maxLength: 512
-                    format: uri
-                    description: '`https://github.com/acme/infra.git`, `ssh://git@github.com/acme/infra.git`.'
-                ref:
-                    type: string
-                    title: ref
-                    maxLength: 256
-                    description: A branch, tag or commit. Empty is the default branch.
-                path:
-                    type: string
-                    title: path
-                    maxLength: 512
-                    description: |
-                        A directory within the repository. Empty is the root.
-                        string.not_contains = ".."
-            title: GitTree
-            required:
-                - url
-            additionalProperties: false
-            description: A git repository at a ref, optionally a directory of it.
-        admiral.api.registry.v1.ImportSource.HelmChart:
-            type: object
-            properties:
-                repository:
-                    type: string
-                    title: repository
-                    maxLength: 512
-                    format: uri
-                chart:
-                    type: string
-                    title: chart
-                    maxLength: 63
-                    pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
-                version:
-                    type: string
-                    title: version
-                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
-            title: HelmChart
-            required:
-                - repository
-                - chart
-                - version
-            additionalProperties: false
-            description: |-
-                A chart in an HTTP repository: the repository URL, the chart's name in
-                 its index, and an exact version.
-        admiral.api.registry.v1.ImportSource.OCIChart:
-            type: object
-            properties:
-                reference:
-                    type: string
-                    title: reference
-                    maxLength: 512
-                    minLength: 7
-                    description: |
-                        string.prefix = "oci://"
-                version:
-                    type: string
-                    title: version
-                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
-            title: OCIChart
-            required:
-                - reference
-                - version
-            additionalProperties: false
-            description: |-
-                A chart in an OCI registry: `oci://ghcr.io/argoproj/argo-helm/argo-cd`
-                 at a version, which is its tag.
-        admiral.api.registry.v1.ImportSource.RegistryModule:
-            type: object
-            properties:
-                address:
-                    type: string
-                    title: address
-                    maxLength: 512
-                    minLength: 5
-                version:
-                    type: string
-                    title: version
-                    pattern: ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$
-            title: RegistryModule
-            required:
-                - address
-                - version
-            additionalProperties: false
-            description: |-
-                A module in a module registry: the address as a module call would
-                 write it (`GoogleCloudPlatform/cloud-armor/google`, optionally
-                 host-qualified, optionally `//subdir`) and an exact version. A range is
-                 what a Source tracks, not what an import takes.
         admiral.api.registry.v1.InfraEngine:
             type: string
             title: InfraEngine
@@ -10327,7 +10332,9 @@ components:
                 ref:
                     type: string
                     title: ref
-                    description: The ref that was asked for (tag, branch, chart version), when any.
+                    description: |-
+                        The ref imported (tag, branch, chart version), when any. For an import
+                         that asked for `latest` or a range, the exact version it resolved to.
                 commit:
                     type: string
                     title: commit
@@ -10344,17 +10351,18 @@ components:
                         $ref: '#/components/schemas/admiral.api.registry.v1.Dependency'
                     title: dependencies
                     description: |-
-                        Every remote module or chart the closure step copied into the bundle,
-                         at what it resolved to.
+                        Every remote module or chart Admiral copied into the bundle, at what it
+                         resolved to.
                 credentials:
                     type: array
                     items:
                         $ref: '#/components/schemas/admiral.api.registry.v1.PresentedCredential'
                     title: credentials
                     description: |-
-                        The credentials the platform presented while fetching, for IMPORT: which
-                         secret reached which hosts. Lineage, not a grant; a later import attaches
-                         its own. Set by the server; ignored on a publish request.
+                        The credentials Admiral presented while fetching, for IMPORT: which
+                         secret reached which hosts. A record, not a grant; a later import
+                         presents what its source holds then. Set by Admiral; ignored on a
+                         publish request.
                     readOnly: true
                 commit_message:
                     type: string
@@ -10376,9 +10384,9 @@ components:
                     title: source_id
                     pattern: ^src-[0-9a-z]+$
                     description: |-
-                        The source the version came through, set by the server on an import
-                         through a source and on a push. Empty for a CLI publish or an import by
-                         raw coordinates.
+                        The source the version came through, set by Admiral on an import and
+                         on a push through a GitHub push source. Empty only for a version
+                         published by hand.
                     readOnly: true
             title: Provenance
             additionalProperties: false
@@ -10393,8 +10401,8 @@ components:
                 - KIND_PUSH
                 - KIND_IMPORT
             description: |-
-                Kind is the on-ramp a version arrived by: whose code it is and who
-                 triggered the publish, not which way the bytes travelled.
+                Kind is how a version arrived: whose code it is and who triggered the
+                 publish, not which way the bytes travelled.
         admiral.api.registry.v1.PublishComponentRequest:
             type: object
             properties:
@@ -10441,7 +10449,7 @@ components:
                         - $ref: '#/components/schemas/admiral.api.registry.v1.Provenance'
                     title: provenance
                     description: |-
-                        What the caller knows about where the bytes came from. The server
+                        What the caller knows about where the bytes came from. Admiral
                          records the kind as PUSH whatever is claimed here; the uri, ref,
                          commit and path are kept as the caller's assertion.
                 bundle:
@@ -10480,6 +10488,43 @@ components:
             title: PublishComponentResponse
             additionalProperties: false
             description: PublishComponentResponse is the recorded version.
+        admiral.api.registry.v1.PublishedOrigin:
+            type: object
+            title: PublishedOrigin
+            additionalProperties: false
+            description: |-
+                PublishedOrigin is a component published by hand: the CLI uploading a
+                 directory, from CI or a laptop. ImportComponent is refused on it with
+                 FAILED_PRECONDITION. SetComponentOrigin moves it.
+        admiral.api.registry.v1.SetComponentOriginRequest:
+            type: object
+            properties:
+                component_id:
+                    type: string
+                    title: component_id
+                    pattern: ^cmp-[0-9a-z]+$
+                origin:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.ComponentOrigin'
+                    title: origin
+            title: SetComponentOriginRequest
+            required:
+                - component_id
+                - origin
+            additionalProperties: false
+            description: |-
+                SetComponentOriginRequest names the component and where its new versions
+                 come from.
+        admiral.api.registry.v1.SetComponentOriginResponse:
+            type: object
+            properties:
+                component:
+                    allOf:
+                        - $ref: '#/components/schemas/admiral.api.registry.v1.Component'
+                    title: component
+            title: SetComponentOriginResponse
+            additionalProperties: false
+            description: SetComponentOriginResponse contains the component with its new origin.
         admiral.api.registry.v1.SetComponentStatusRequest:
             type: object
             properties:
@@ -10614,6 +10659,32 @@ components:
             title: SetVersionStatusResponse
             additionalProperties: false
             description: SetVersionStatusResponse contains the version with its new status.
+        admiral.api.registry.v1.SourceOrigin:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    title: source_id
+                    pattern: ^src-[0-9a-z]+$
+                artifact:
+                    type: string
+                    title: artifact
+                    maxLength: 256
+                    description: |
+                        The artifact in the source: a chart name, `name/provider`, a name under
+                         an OCI namespace, or a path in a git repository. Empty is the
+                         repository root.
+                        string.not_contains = ".."
+            title: SourceOrigin
+            required:
+                - source_id
+            additionalProperties: false
+            description: |-
+                SourceOrigin is a component whose versions arrive through one source and
+                 one artifact in it: an import, or a push to a GitHub repository through a
+                 push source. PublishComponent is refused on it with FAILED_PRECONDITION,
+                 naming the source. ImportComponent is refused with FAILED_PRECONDITION
+                 when it names a different source or artifact. SetComponentOrigin moves it.
         admiral.api.registry.v1.Tag:
             type: object
             properties:
@@ -10689,7 +10760,7 @@ components:
                     title: id
                     pattern: ^ver-[0-9a-z]+$
                     description: |-
-                        `ver-` and twelve base36 characters. A change set holds it beside the
+                        `ver-` and twelve base36 characters. A changeset holds it beside the
                          digest, which is the identity of the bytes.
                     readOnly: true
                 component_id:
@@ -10718,8 +10789,8 @@ components:
                         - $ref: '#/components/schemas/admiral.api.registry.v1.Contract'
                     title: contract
                     description: |-
-                        The inputs and outputs the bundle exposes. Inferred from the bundle at
-                         publish; curated by a publisher once the contract format lands.
+                        The inputs and outputs the bundle exposes, inferred from the bundle at
+                         publish.
                     readOnly: true
                 provenance:
                     allOf:
@@ -10733,9 +10804,9 @@ components:
                         $ref: '#/components/schemas/admiral.api.registry.v1.Finding'
                     title: findings
                     description: |-
-                        What the publish gate found. Informational findings do not block a
-                         publish; a version with findings is published with them attached, and
-                         the findings delta between two versions is what an upgrade review reads.
+                        What the checks at publish found. Informational findings do not block a
+                         publish; a version with findings is published with them attached, so
+                         two versions' findings can be compared before moving between them.
                     readOnly: true
                 status:
                     allOf:
@@ -11933,8 +12004,9 @@ components:
                         - $ref: '#/components/schemas/admiral.api.source.v1.Source'
                     title: source
                     description: |-
-                        The source to create: `name`, `kind`, `location`, one grant, `trigger`,
-                         `allows`, and `settings` where the kind and trigger need them.
+                        The source to create: `name`, `kind`, `location`, at most one grant,
+                         `trigger`, `allows`, and `settings` where the kind and trigger need
+                         them.
             title: CreateSourceRequest
             required:
                 - source
@@ -11997,9 +12069,45 @@ components:
                     uniqueItems: true
                     description: |-
                         Branches whose pushes publish, exact or with a trailing `*`; `*` alone
-                         is every branch. Required on a push source and ignored on a request
-                         source. Every publish tags the version with the branch name, floating,
-                         and `sha-<short>`.
+                         is every branch. Ignored on a request source. Every publish tags the
+                         version with the branch name, floating, and `sha-<short>`.
+                tags:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 256
+                        pattern: ^(\*|[A-Za-z0-9._-][A-Za-z0-9._/-]*\*?)$
+                    title: tags
+                    maxItems: 32
+                    uniqueItems: true
+                    description: |-
+                        Tags whose pushes publish, exact or with a trailing `*`, such as `v*`.
+                         A push of a matching tag publishes what admiral.yaml declares at the
+                         tagged commit, tags the version `sha-<short>`, floating, and records
+                         the full git tag in the version's provenance `ref`. Without a
+                         `tag_template`, the git tag's own name is also the registry tag when it
+                         is a semver name the registry can hold, such as `v1.4.0`, and then it
+                         is immutable and a range or `latest` can match it. Any other name still
+                         publishes, carrying only `sha-<short>`. With a template, the registry
+                         tag is the version the template extracts. A tag that matches nothing
+                         here is ignored, and empty means no tag push publishes. When the source
+                         also names branches, a tag publishes only if its commit is reachable
+                         from a branch listed there. Ignored on a request source.
+                tag_template:
+                    type: string
+                    title: tag_template
+                    maxLength: 256
+                    description: |
+                        How a tag names an artifact's version in a repository holding several,
+                         such as `{artifact}/v{version}` or `{name}-v{version}`. With it, an
+                         artifact's versions are the tags that fit, with the template stripped,
+                         and a tag push publishes only the component the tag names. The version
+                         is tagged with what the template extracts, `1.4.0` from
+                         `modules/network/v1.4.0` under `{artifact}/v{version}`, which makes it
+                         a semver tag and immutable; the full git tag stays in the version's
+                         provenance `ref`. Empty means every tag of the repository is a version
+                         of every artifact in it.
+                        string.contains = "{version}"
                 pull_request_comment:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.source.v1.GitSourceSettings.PullRequestComment'
@@ -12011,8 +12119,10 @@ components:
             title: GitSourceSettings
             additionalProperties: false
             description: |-
-                GitSourceSettings is what a git source adds. Today that is only which
-                 branches a push source listens to.
+                GitSourceSettings is what a git source adds: which branches and tags a
+                 push source publishes on, how a tag names an artifact's version, and what
+                 the App comments on a pull request. A push source names at least one
+                 branch or tag.
         admiral.api.source.v1.GitSourceSettings.PullRequestComment:
             type: string
             title: PullRequestComment
@@ -12081,8 +12191,9 @@ components:
                     maxLength: 256
                     description: |-
                         The artifact whose versions to list, as `allows` names it: a chart
-                         name, `name/provider`, a name under the namespace. Empty for a git
-                         source, whose versions are the repository's tags and branches.
+                         name, `name/provider`, a name under the namespace, a path in a git
+                         repository. For a git source with no `tag_template`, every artifact's
+                         versions are the repository's tags and branches, so it may be empty.
                 page_size:
                     type: integer
                     title: page_size
@@ -12232,7 +12343,11 @@ components:
                         (IMMUTABLE) The narrowest thing the protocol addresses: one repository, one Helm
                          repository URL, one registry namespace. Never a bare host, and never a
                          whole GitHub organization. Picking the source is picking the grant, so
-                         the location is what bounds the grant's reach.
+                         the location is what bounds the grant's reach: no source presents its
+                         grant outside its own location. When an artifact depends on another
+                         private location, Admiral fetches the dependency with the grant of the
+                         source whose location covers it, within that source's `allows`, and
+                         with no grant when no source covers it.
                 trigger:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.source.v1.Source.Trigger'
@@ -12247,25 +12362,39 @@ components:
                     items:
                         type: string
                         maxLength: 256
-                        pattern: ^(\*|[A-Za-z0-9._-][A-Za-z0-9._/-]*\*?)$
+                        pattern: ^(\*|[A-Za-z0-9._-][A-Za-z0-9._/-]*\*?)(@[A-Za-z0-9._+^~<>=*,| -]{1,128})?$
                     title: allows
                     maxItems: 64
                     minItems: 1
                     uniqueItems: true
                     description: |-
-                        What may enter through the source: artifact names, exact or with a
-                         trailing `*`. For a git source an artifact is a path in the repository;
-                         for a Helm repository a chart name; for a registry a name under the
-                         namespace. Required and never empty; `*` alone is how a source says
-                         everything. An allow list, enforced on the server at import and at
-                         push, per artifact.
+                        What may enter through the source. Each entry is
+                         `<name pattern>[@<semver range>]`: `argo-rollouts`, `modules/*`, `*`,
+                         `argo-rollouts@>=2.39`, `cert-manager@~1.16`. The name is exact or ends
+                         in `*`. For a git source an artifact is a path in the repository; for a
+                         Helm repository a chart name; for a registry a name under the
+                         namespace.
+
+                         Names match by whole path segments, with `*` only as the last segment,
+                         so `modules/*` admits `modules/network` and never `modules-evil`. The
+                         most specific entry that matches a name decides its versions, so `*`
+                         beside `argo-rollouts@>=2.39` still bounds argo-rollouts to 2.39 and
+                         up. An entry with a range admits only ordered versions inside it, so a
+                         branch or a commit needs an entry with no range. A range excludes
+                         pre-releases unless it names one.
+
+                         Required and never empty; `*` alone means everything, so no empty list
+                         stands for it. The Admiral CLI sends `*` when it is left off. An allow
+                         list, enforced by Admiral at import and at push, per artifact and
+                         per version: a version outside an entry's range is refused as an
+                         artifact outside `allows` is. Plan and apply do not check it again.
                 settings:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.source.v1.SourceSettings'
                     title: settings
                     description: |-
-                        The block for `kind`, where the kind has one. Only git has settings
-                         today, and only a push source needs them.
+                        The block for `kind`, where the kind has one. Only git has settings, and
+                         only a push source needs them.
                 status:
                     allOf:
                         - $ref: '#/components/schemas/admiral.api.source.v1.Source.Status'
@@ -12293,9 +12422,9 @@ components:
                     readOnly: true
             title: Source
             description: |
-                source.grant_present // a source carries exactly one grant, a credential or an integration
+                source.grant_present // a source carries at most one grant, a credential or an integration
                 source.integration_is_git // an integration reaches a git repository
-                source.push_names_branches // a push source names the branches whose pushes publish
+                source.push_names_branches // a push source names the branches or tags whose pushes publish
                 source.push_needs_integration // a push source is reached through the GitHub integration
                 source.settings_match_kind // git settings belong to a git source
         admiral.api.source.v1.Source.Kind:
