@@ -98,13 +98,13 @@ tags:
         external systems at publish time: a git host, a Helm repository, an OCI
         registry, a module registry.
 
-        A credential is never selected for the caller, and no request names one
-        for a fetch. An organization admin binds a credential to a source, and
-        Admiral presents it only for that source's location. A credential may
-        carry `allowed_hosts`, a guard that restricts where it is ever presented.
-        Only an organization admin creates, changes or deletes a credential, the
-        guard included. Credentials exist for publish only; nothing on the deploy
-        path reads one.
+        A credential is never selected for the caller, and no request names one for a
+        fetch. A credential is bound to a source by whoever may grant sources, and
+        Admiral presents it only for that source's location. A credential may carry
+        `allowed_hosts`, a guard that restricts where it is ever presented. Creating,
+        changing or deleting a credential, the guard included, needs permission to
+        manage credentials, which organization admins hold by default. Credentials
+        exist for publish only; nothing on the deploy path reads one.
 
         Secrets are write-only: accepted on create and update, encrypted at rest,
         decrypted only inside a publish, and never returned. Get and List return
@@ -1127,16 +1127,16 @@ paths:
                 `allows` permits. It stores the exact version. A range or a keyword
                 never reaches a changeset or an environment pin.
 
-                Any member who can read the source may import a new version of an
-                existing component through its origin, since the caller chooses only
-                which allowed version to take. Creating a component by import is bounded
-                by the source, not by the organization's `component_creation_policy`.
+                Any member who can read the source may import a new version of an existing
+                component through its origin, since the caller chooses only which allowed
+                version to take. Creating a component by import needs no permission to
+                create components, since the source already bounds it.
 
                   - INVALID_ARGUMENT when the import would create the component and
                     names no `source_id`.
                   - FAILED_PRECONDITION when the component was published by hand, or
                     when `source_id` or `artifact` differs from its origin. The message
-                    names SetComponentOrigin, which is how an admin moves the origin.
+                    names SetComponentOrigin, which moves the origin.
                   - FAILED_PRECONDITION when the artifact or the resolved version is
                     outside the source's `allows`, when the resolved version is
                     revoked, or when no permitted version matches `version`.
@@ -1181,14 +1181,14 @@ paths:
                 Repointing a semver tag is refused with FAILED_PRECONDITION and the whole
                 publish fails; the bytes are not kept.
 
-                A publish that creates a component gives it the origin published by
-                hand, and needs the right the organization's
-                `component_creation_policy` names; PERMISSION_DENIED otherwise. A
-                publish to an existing component needs publish rights on it. On a
-                component whose origin is a source, the publish is refused with
+                A publish that creates a component gives it the origin published by hand,
+                and needs permission to create components, which organization admins hold
+                by default and which may be granted to every member; PERMISSION_DENIED
+                otherwise. A publish to an existing component needs publish rights on it.
+                On a component whose origin is a source, the publish is refused with
                 FAILED_PRECONDITION naming the source: its versions arrive through that
-                source until an admin moves the origin with SetComponentOrigin. A hand
-                publish is checked the same way as an import.
+                source until its origin is moved with SetComponentOrigin. A hand publish is
+                checked the same way as an import.
 
                 Scope: `component:publish`
             operationId: RegistryAPI_PublishComponent
@@ -1268,15 +1268,15 @@ paths:
     /v1/components/{component_id}/set-origin:
         post:
             summary: |-
-                SetComponentOrigin moves where a component's new versions come from: to
-                a source and an artifact in it, or to published by hand. It needs an
-                organization admin; PERMISSION_DENIED otherwise. Every existing version
-                keeps its own provenance, and only the origin of new versions changes.
-                A source origin must name a source of this organization whose `allows`
-                permits the artifact; FAILED_PRECONDITION otherwise, naming which.
-                Admiral records each move with the old and the new origin.
-                Setting the origin the component already has succeeds and changes
-                nothing.
+                SetComponentOrigin moves where a component's new versions come from: to a
+                source and an artifact in it, or to published by hand. It needs permission
+                to move a component's origin, which organization admins hold by default;
+                PERMISSION_DENIED otherwise. Every existing version keeps its own
+                provenance, and only the origin of new versions changes. A source origin
+                must name a source of this organization whose `allows` permits the
+                artifact; FAILED_PRECONDITION otherwise, naming which. Admiral records each
+                move with the old and the new origin. Setting the origin the component
+                already has succeeds and changes nothing.
             description: 'Scope: `component:write`'
             operationId: RegistryAPI_SetComponentOrigin
             responses:
@@ -1438,11 +1438,11 @@ paths:
                 SetVersionStatus moves a version between PUBLISHED, DEPRECATED and
                 REVOKED, recording why. Any move is allowed, including back to PUBLISHED.
             description: |-
-                Revoking needs the component's owner or an organization admin;
-                PERMISSION_DENIED otherwise. Plan and apply refuse a changeset that
-                newly pins a revoked version, and check nothing else again. An
-                environment already running it keeps running, and a revert to it is
-                still allowed.
+                Revoking needs permission to revoke the component's versions, which the
+                component's owner and organization admins hold by default;
+                PERMISSION_DENIED otherwise. Plan and apply refuse a changeset that newly
+                pins a revoked version, and check nothing else again. An environment
+                already running it keeps running, and a revert to it is still allowed.
 
                 Scope: `component:write`
             operationId: RegistryAPI_SetVersionStatus
@@ -1577,7 +1577,8 @@ paths:
             description: |-
                 The `type` and the populated `auth_config` variant must agree.
 
-                Needs an organization admin; PERMISSION_DENIED otherwise.
+                Needs permission to manage credentials, which organization admins hold by
+                default; PERMISSION_DENIED otherwise.
 
                 Scope: `credential:write`
             operationId: CredentialAPI_CreateCredential
@@ -1607,7 +1608,8 @@ paths:
                 replaces the old one whole; a rotation is an update with `auth_config`
                 in the mask.
             description: |-
-                Needs an organization admin; PERMISSION_DENIED otherwise.
+                Needs permission to manage credentials, which organization admins hold by
+                default; PERMISSION_DENIED otherwise.
 
                 Scope: `credential:write`
             operationId: CredentialAPI_UpdateCredential
@@ -1662,7 +1664,8 @@ paths:
                 credential's id and name as history. A source that held it moves to
                 NEEDS_ATTENTION.
             description: |-
-                Needs an organization admin; PERMISSION_DENIED otherwise.
+                Needs permission to manage credentials, which organization admins hold by
+                default; PERMISSION_DENIED otherwise.
 
                 Scope: `credential:write`
             operationId: CredentialAPI_DeleteCredential
@@ -2470,11 +2473,9 @@ paths:
         patch:
             summary: UpdateOrganization updates the caller's own organization's mutable settings.
             description: |-
-                `display_name`, `source_creation_policy` and `component_creation_policy`
-                are mutable. `slug` is part of the account's identity and `status` is
-                set by lifecycle operations, neither of which an organization performs
-                on itself. The logo is set in the console. Changing either creation
-                policy needs an organization admin; PERMISSION_DENIED otherwise.
+                Only `display_name` is mutable. `slug` is part of the account's identity
+                and `status` is set by lifecycle operations, neither of which an
+                organization performs on itself. The logo is set in the console.
 
                 Scope: `organization:write`
             operationId: OrganizationAPI_UpdateOrganization
@@ -3054,17 +3055,18 @@ paths:
                 chooses the location, the grant and `allows`, and nothing that comes in
                 through the source is approved a second time.
             description: |-
-                Creating a source needs the right the organization's
-                `source_creation_policy` names: admins by default, or every member.
-                Setting a grant (`credential_id` or `integration_id`) needs an
-                organization admin, whoever creates the source. PERMISSION_DENIED names
-                who can. A source on a public upstream needs no grant.
+                Creating a source needs permission to create sources in the organization,
+                which organization admins hold unless it is granted further. Setting a
+                grant (`credential_id` or `integration_id`) needs permission to grant
+                sources, which organization admins hold, whoever creates the source.
+                PERMISSION_DENIED otherwise, naming the permission. A source on a public
+                upstream needs no grant.
 
                 Every way a component comes in (creating a source, an import, a GitHub
                 push, a hand publish) is checked the same way, against the source's
-                `allows`, revoked versions and the organization's creation policies. A
-                grant, when set, must reach the location. Admiral checks that
-                differently for each kind of grant:
+                `allows`, revoked versions and the caller's permissions. A grant, when set,
+                must reach the location. Admiral checks that differently for each kind of
+                grant:
 
                   - An integration grant is checked here, with no network call. The
                     integration must be a CONNECTED GitHub integration of this organization
@@ -3106,10 +3108,10 @@ paths:
                 origin and every version's provenance name the source, so a source
                 always means one location. Another location is another source.
             description: |-
-                Updating a source needs the right `source_creation_policy` names, and an
-                organization admin when the source holds a grant or the update sets one.
-                PERMISSION_DENIED names who can. A new grant is checked as CreateSource
-                checks it.
+                Updating a source needs permission to create sources, and permission to
+                grant sources when the source holds a grant or the update sets one.
+                PERMISSION_DENIED otherwise, naming the permission. A new grant is checked
+                as CreateSource checks it.
 
                 Tightening `allows` never touches a running environment, which runs its
                 own stored copy; it bounds new imports and new pushes only.
@@ -4549,22 +4551,6 @@ definitions:
             display_name:
                 type: string
                 description: Human-readable name.
-            source_creation_policy:
-                $ref: '#/definitions/v1CreationPolicy'
-                description: |-
-                    Who may create a source. It gates CreateSource. A read returns the
-                    effective value, ADMINS unless an admin chose MEMBERS, and never
-                    UNSPECIFIED; UNSPECIFIED is accepted on input only and means ADMINS.
-                    Changing it needs an organization admin.
-            component_creation_policy:
-                $ref: '#/definitions/v1CreationPolicy'
-                description: |-
-                    Who may create a component by publishing a new name by hand. It gates a
-                    PublishComponent that creates a component, and not an import, which a
-                    source already bounds. A read returns the effective value, MEMBERS
-                    unless an admin chose ADMINS, and never UNSPECIFIED; UNSPECIFIED is
-                    accepted on input only and means MEMBERS. Changing it needs an
-                    organization admin.
             status:
                 $ref: '#/definitions/v1OrganizationStatus'
                 description: Lifecycle state.
@@ -5499,10 +5485,9 @@ definitions:
             published:
                 $ref: '#/definitions/v1PublishedOrigin'
         description: |-
-            ComponentOrigin is where a component's new versions come from. The
-            publish or import that creates the component sets it, and an organization
-            admin moves it with SetComponentOrigin. Each version keeps its own
-            provenance whatever the origin later becomes.
+            ComponentOrigin is where a component's new versions come from. The publish or
+            import that creates the component sets it, and SetComponentOrigin moves it.
+            Each version keeps its own provenance whatever the origin later becomes.
     v1ComponentOutput:
         type: object
         properties:
@@ -5952,20 +5937,6 @@ definitions:
         properties:
             source:
                 $ref: '#/definitions/sourceV1Source'
-    v1CreationPolicy:
-        type: string
-        enum:
-            - CREATION_POLICY_UNSPECIFIED
-            - CREATION_POLICY_ADMINS
-            - CREATION_POLICY_MEMBERS
-        default: CREATION_POLICY_UNSPECIFIED
-        description: |-
-            CreationPolicy is who in an organization may create a kind of resource.
-
-             - CREATION_POLICY_UNSPECIFIED: Accepted on input only, meaning the default of the field that holds
-            it. Never returned.
-             - CREATION_POLICY_ADMINS: Organization admins only.
-             - CREATION_POLICY_MEMBERS: Every member.
     v1Credential:
         type: object
         properties:
@@ -9138,8 +9109,7 @@ definitions:
                 type: string
                 description: |-
                     The set of fields to update. Optional; if omitted, all populated fields
-                    are updated. Supported fields: `display_name`,
-                    `source_creation_policy`, `component_creation_policy`.
+                    are updated. Supported fields: `display_name`.
         description: UpdateOrganizationRequest updates the caller's own organization, so it names no id.
         required:
             - organization
