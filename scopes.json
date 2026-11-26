@@ -177,12 +177,19 @@
       ]
     },
     {
+      "name": "run:apply",
+      "description": "Apply runs, and accept a run that stopped partway.",
+      "implies": [
+        "run:read"
+      ]
+    },
+    {
       "name": "run:read",
       "description": "Read runs, their plans, applies and approvals."
     },
     {
       "name": "run:write",
-      "description": "Start, approve, apply, accept and cancel runs.",
+      "description": "Start, approve and cancel runs.",
       "implies": [
         "run:read"
       ]

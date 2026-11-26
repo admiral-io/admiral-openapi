@@ -2742,7 +2742,7 @@ paths:
                 AcceptRun takes a PARTIAL run's apply as the environment's new state and
                 releases the hold. It is recorded with its reason, and a change set run's
                 change set becomes APPLIED.
-            description: 'Scope: `run:write`'
+            description: 'Scope: `run:apply`'
             operationId: RunAPI_AcceptRun
             responses:
                 "200":
@@ -2778,7 +2778,7 @@ paths:
                 `required_approval` is missing, the change set is behind, the environment is held, or the run is a
                 drift check.
 
-                Scope: `run:write`
+                Scope: `run:apply`
             operationId: RunAPI_ApplyRun
             responses:
                 "200":

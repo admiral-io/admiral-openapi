@@ -2821,7 +2821,7 @@ paths:
             tags:
                 - Runs
             summary: Accept a partial apply
-            description: 'Scope: `run:write`'
+            description: 'Scope: `run:apply`'
             operationId: RunAPI_AcceptRun
             parameters:
                 - name: run_id
@@ -2865,7 +2865,7 @@ paths:
                  `required_approval` is missing, the change set is behind, the environment is held, or the run is a
                  drift check.
 
-                 Scope: `run:write`
+                 Scope: `run:apply`
             operationId: RunAPI_ApplyRun
             parameters:
                 - name: run_id
